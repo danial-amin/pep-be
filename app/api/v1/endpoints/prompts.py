@@ -26,7 +26,7 @@ async def complete_prompt(
     """
     try:
         # Query vector database for relevant documents
-        query_results = vector_db.query_documents(
+        query_results = await vector_db.query_documents(
             query_texts=[request.prompt],
             n_results=5
         )

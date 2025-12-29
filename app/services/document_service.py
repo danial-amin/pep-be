@@ -31,8 +31,16 @@ class DocumentService:
         processed_content = str(processed_data)
         
         # Create embeddings and store in vector DB
-        # Split content into chunks for better embedding
-        chunks = DocumentService._chunk_text(content, chunk_size=1000)
+        # Use token-aware chunking for better embeddings
+        from app.utils.token_utils import chunk_text_by_tokens
+        
+        # Chunk by tokens (better for embeddings) - use smaller chunks for embeddings
+        # ChromaDB will automatically create embeddings using the configured embedding function
+        chunks = chunk_text_by_tokens(
+            content,
+            max_tokens=8000,  # Smaller chunks for embeddings (embedding models handle this well)
+            overlap_tokens=200
+        )
         
         metadatas = [
             {
@@ -43,7 +51,8 @@ class DocumentService:
             for i in range(len(chunks))
         ]
         
-        vector_ids = vector_db.add_documents(
+        # Store in vector DB (Pinecone or ChromaDB will create embeddings)
+        vector_ids = await vector_db.add_documents(
             documents=chunks,
             metadatas=metadatas
         )
@@ -60,6 +69,11 @@ class DocumentService:
         session.add(document)
         await session.flush()
         await session.refresh(document)
+        
+        # Update vector DB metadata with document ID for better tracking
+        # Note: This would require updating ChromaDB metadata, which may need
+        # the document IDs. For now, we store the first vector_id as reference.
+        # In a production system, you might want to update metadata after document creation.
         
         return document
     

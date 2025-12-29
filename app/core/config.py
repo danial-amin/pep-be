@@ -2,7 +2,7 @@
 Application configuration settings.
 """
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -14,7 +14,13 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "pep_password"
     POSTGRES_DB: str = "pep_db"
     
-    # Vector Database
+    # Vector Database - Pinecone (recommended)
+    PINECONE_API_KEY: Optional[str] = None
+    PINECONE_ENVIRONMENT: Optional[str] = None  # e.g., "us-east-1-aws" or "gcp-starter"
+    PINECONE_INDEX_NAME: str = "pep-documents"
+    
+    # Vector Database - ChromaDB (optional, for local development)
+    VECTOR_DB_TYPE: str = "pinecone"  # "pinecone" or "chroma"
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8000
     
@@ -34,6 +40,11 @@ class Settings(BaseSettings):
     # File Upload
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt", ".md"]
+    
+    # Document Processing
+    MAX_TOKENS_PER_CHUNK: int = 20000  # Max tokens per processing chunk (leaving room for prompt)
+    CHUNK_OVERLAP_TOKENS: int = 500  # Overlap between chunks
+    PROCESSING_DELAY_SECONDS: float = 2.0  # Delay between chunk processing to avoid rate limits
     
     class Config:
         env_file = ".env"

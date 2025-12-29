@@ -1,0 +1,236 @@
+"""
+Pinecone vector database client.
+"""
+from pinecone import Pinecone, ServerlessSpec
+from app.core.config import settings
+from app.core.llm_service import llm_service
+from typing import List, Optional, Dict, Any
+import uuid
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class PineconeVectorDB:
+    """Pinecone vector database client wrapper."""
+    
+    def __init__(self):
+        self._client = None
+        self._index = None
+        self._initialized = False
+    
+    def _get_client(self):
+        """Lazy initialization of Pinecone client."""
+        if self._client is None:
+            if not settings.PINECONE_API_KEY:
+                raise ValueError("PINECONE_API_KEY is required when using Pinecone")
+            
+            try:
+                self._client = Pinecone(api_key=settings.PINECONE_API_KEY)
+                self._initialized = True
+                logger.info("Pinecone client initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize Pinecone client: {e}")
+                raise
+        return self._client
+    
+    @property
+    def client(self):
+        """Get Pinecone client (lazy initialization)."""
+        return self._get_client()
+    
+    def _get_index(self):
+        """Get or create Pinecone index."""
+        if self._index is None:
+            index_name = settings.PINECONE_INDEX_NAME
+            
+            # List existing indexes
+            existing_indexes = [idx.name for idx in self.client.list_indexes()]
+            
+            if index_name not in existing_indexes:
+                # Create index if it doesn't exist
+                # Free tier: 768 dimensions (text-embedding-3-large), pod-based or serverless
+                logger.info(f"Creating Pinecone index: {index_name}")
+                
+                # Determine spec based on environment
+                # Free tier uses serverless
+                # PINECONE_ENVIRONMENT format: "us-east-1-aws" or "us-west1-gcp" or "gcp-starter"
+                if settings.PINECONE_ENVIRONMENT:
+                    # Parse environment to get cloud and region
+                    if "gcp" in settings.PINECONE_ENVIRONMENT.lower():
+                        if "starter" in settings.PINECONE_ENVIRONMENT.lower():
+                            # Free tier GCP starter
+                            spec = ServerlessSpec(cloud="gcp", region="us-central1")
+                        else:
+                            # Extract region from format like "us-west1-gcp"
+                            region = settings.PINECONE_ENVIRONMENT.split("-")[0] + "-" + settings.PINECONE_ENVIRONMENT.split("-")[1]
+                            spec = ServerlessSpec(cloud="gcp", region=region)
+                    elif "aws" in settings.PINECONE_ENVIRONMENT.lower():
+                        # Extract region from format like "us-east-1-aws"
+                        region = "-".join(settings.PINECONE_ENVIRONMENT.split("-")[:-1])
+                        spec = ServerlessSpec(cloud="aws", region=region)
+                    else:
+                        # Default to AWS us-east-1
+                        spec = ServerlessSpec(cloud="aws", region="us-east-1")
+                else:
+                    # Default to serverless AWS (free tier compatible)
+                    spec = ServerlessSpec(cloud="aws", region="us-east-1")
+                
+                self.client.create_index(
+                    name=index_name,
+                    dimension=3072,  # text-embedding-3-large dimension
+                    metric="cosine",
+                    spec=spec
+                )
+                logger.info(f"Index {index_name} created successfully")
+            
+            # Connect to index
+            self._index = self.client.Index(index_name)
+            logger.info(f"Connected to Pinecone index: {index_name}")
+        
+        return self._index
+    
+    @property
+    def index(self):
+        """Get Pinecone index (lazy initialization)."""
+        return self._get_index()
+    
+    async def add_documents(
+        self,
+        documents: List[str],
+        metadatas: Optional[List[dict]] = None,
+        ids: Optional[List[str]] = None,
+        collection_name: str = "persona_documents"
+    ) -> List[str]:
+        """
+        Add documents to Pinecone.
+        
+        Args:
+            documents: List of document texts
+            metadatas: List of metadata dicts
+            ids: Optional list of IDs (generated if not provided)
+            collection_name: Not used for Pinecone (kept for API compatibility)
+        
+        Returns:
+            List of document IDs
+        """
+        if not documents:
+            return []
+        
+        # Generate embeddings (async)
+        logger.info(f"Creating embeddings for {len(documents)} documents")
+        embeddings = await llm_service.embeddings.aembed_documents(documents)
+        
+        # Generate IDs if not provided
+        if ids is None:
+            ids = [str(uuid.uuid4()) for _ in documents]
+        
+        # Prepare metadata (Pinecone requires text to be in metadata if you want to retrieve it)
+        if metadatas is None:
+            metadatas = [{}] * len(documents)
+        
+        # Add text to metadata for retrieval
+        vectors_to_upsert = []
+        for i, (embedding, doc_text, metadata, doc_id) in enumerate(zip(embeddings, documents, metadatas, ids)):
+            # Pinecone metadata can store text (up to 40KB per vector)
+            # Store text in metadata for retrieval
+            metadata_with_text = {
+                **metadata,
+                "text": doc_text[:40000]  # Limit to 40KB
+            }
+            
+            vectors_to_upsert.append({
+                "id": doc_id,
+                "values": embedding,
+                "metadata": metadata_with_text
+            })
+        
+        # Upsert in batches (Pinecone recommends batches of 100)
+        batch_size = 100
+        for i in range(0, len(vectors_to_upsert), batch_size):
+            batch = vectors_to_upsert[i:i + batch_size]
+            self.index.upsert(vectors=batch)
+            logger.info(f"Upserted batch {i//batch_size + 1} ({len(batch)} vectors)")
+        
+        return ids
+    
+    async def query_documents(
+        self,
+        query_texts: List[str],
+        n_results: int = 5,
+        collection_name: str = "persona_documents",
+        filter_metadata: Optional[dict] = None
+    ) -> Dict[str, Any]:
+        """
+        Query similar documents from Pinecone.
+        
+        Args:
+            query_texts: List of query texts
+            n_results: Number of results to return
+            collection_name: Not used (kept for API compatibility)
+            filter_metadata: Metadata filter (Pinecone filter format)
+        
+        Returns:
+            Dictionary with 'documents' and 'metadatas' keys
+        """
+        if not query_texts:
+            return {"documents": [], "metadatas": []}
+        
+        # Generate query embedding (async)
+        query_embedding = await llm_service.embeddings.aembed_query(query_texts[0])
+        
+        # Build filter if provided
+        filter_dict = None
+        if filter_metadata:
+            # Convert simple filter to Pinecone format
+            filter_dict = {}
+            for key, value in filter_metadata.items():
+                filter_dict[key] = {"$eq": value}
+        
+        # Query Pinecone
+        query_response = self.index.query(
+            vector=query_embedding,
+            top_k=n_results,
+            include_metadata=True,
+            filter=filter_dict
+        )
+        
+        # Format response to match ChromaDB format
+        documents = []
+        metadatas = []
+        distances = []
+        ids = []
+        
+        for match in query_response.matches:
+            # Extract text from metadata
+            text = match.metadata.get("text", "")
+            documents.append(text)
+            
+            # Remove text from metadata for response (keep original metadata)
+            metadata = {k: v for k, v in match.metadata.items() if k != "text"}
+            metadatas.append(metadata)
+            
+            distances.append(match.score)
+            ids.append(match.id)
+        
+        return {
+            "documents": [documents],  # ChromaDB format: list of lists
+            "metadatas": [metadatas],
+            "distances": [distances],
+            "ids": [ids]
+        }
+    
+    def delete_collection(self, collection_name: str) -> bool:
+        """Delete Pinecone index (collection)."""
+        try:
+            self.client.delete_index(settings.PINECONE_INDEX_NAME)
+            self._index = None
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting index: {e}")
+            return False
+
+
+# Global Pinecone instance
+pinecone_vector_db = PineconeVectorDB()
+

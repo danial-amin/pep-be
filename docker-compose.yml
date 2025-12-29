@@ -19,21 +19,19 @@ services:
       retries: 5
       start_period: 10s
 
-  # ChromaDB Vector Database
-  # Using version 0.4.22 to match client version and ensure API compatibility
-  chromadb:
-    image: chromadb/chroma:0.4.22
-    container_name: pep_chromadb
-    ports:
-      - "8000:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-    environment:
-      - IS_PERSISTENT=TRUE
-      - PERSIST_DIRECTORY=/chroma/chroma
-      - ANONYMIZED_TELEMETRY=FALSE
-    # Healthcheck removed - will be checked on first connection
-    # The API service will handle connection retries
+  # ChromaDB Vector Database (Optional - only needed if VECTOR_DB_TYPE=chroma)
+  # Comment out if using Pinecone (recommended - free tier available)
+  # chromadb:
+  #   image: chromadb/chroma:0.4.22
+  #   container_name: pep_chromadb
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - chroma_data:/chroma/chroma
+  #   environment:
+  #     - IS_PERSISTENT=TRUE
+  #     - PERSIST_DIRECTORY=/chroma/chroma
+  #     - ANONYMIZED_TELEMETRY=FALSE
 
   # FastAPI Backend
   api:
@@ -45,8 +43,12 @@ services:
       - "8080:8080"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-pep_user}:${POSTGRES_PASSWORD:-pep_password}@postgres:5432/${POSTGRES_DB:-pep_db}
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
+      - VECTOR_DB_TYPE=${VECTOR_DB_TYPE:-pinecone}
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - PINECONE_ENVIRONMENT=${PINECONE_ENVIRONMENT}
+      - PINECONE_INDEX_NAME=${PINECONE_INDEX_NAME:-pep-documents}
+      - CHROMA_HOST=${CHROMA_HOST:-chromadb}
+      - CHROMA_PORT=${CHROMA_PORT:-8000}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}
     volumes:
@@ -55,8 +57,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      chromadb:
-        condition: service_started
+      # chromadb:  # Uncomment if using ChromaDB
+      #   condition: service_started
     command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 
   # React Frontend
@@ -68,7 +70,7 @@ services:
         - VITE_API_URL=${VITE_API_URL:-http://localhost:8080/api/v1}
     container_name: pep_frontend
     ports:
-      - "3000:80"
+      - "3002:80"
     depends_on:
       - api
     # For development, you can use Dockerfile.dev and mount volumes

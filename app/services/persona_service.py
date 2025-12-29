@@ -8,7 +8,11 @@ from typing import List, Optional, Dict, Any
 from app.models.persona import PersonaSet, Persona
 from app.models.document import Document, DocumentType
 from app.core.llm_service import llm_service
+from app.core.vector_db import vector_db
 from app.schemas.persona import PersonaBasic
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PersonaService:
@@ -19,26 +23,66 @@ class PersonaService:
         session: AsyncSession,
         num_personas: int = 3
     ) -> PersonaSet:
-        """Generate initial persona set with basic demographics."""
-        # Get interview and context documents
+        """
+        Generate initial persona set with basic demographics using RAG.
+        
+        Uses vector database to retrieve relevant document chunks instead of
+        loading all documents, making it more efficient and scalable.
+        """
+        # Check if we have any interview documents
         interview_result = await session.execute(
             select(Document).where(Document.document_type == DocumentType.INTERVIEW)
         )
         interviews = list(interview_result.scalars().all())
         
-        context_result = await session.execute(
-            select(Document).where(Document.document_type == DocumentType.CONTEXT)
-        )
-        contexts = list(context_result.scalars().all())
-        
         if not interviews:
             raise ValueError("No interview documents found. Please process interview documents first.")
         
-        # Extract content
-        interview_texts = [interview.content for interview in interviews]
-        context_texts = [context.content for context in contexts]
+        # Use RAG to retrieve relevant chunks for persona generation
+        # Query for interview-related content
+        interview_query = "user interviews, user research, interview transcripts, user feedback, user needs"
+        interview_results = await vector_db.query_documents(
+            query_texts=[interview_query],
+            n_results=10,  # Get top 10 relevant chunks
+            filter_metadata={"document_type": "interview"}
+        )
         
-        # Generate persona set using LLM
+        # Query for context-related content
+        context_query = "research context, background information, market research, user behavior, demographics"
+        context_results = await vector_db.query_documents(
+            query_texts=[context_query],
+            n_results=10,  # Get top 10 relevant chunks
+            filter_metadata={"document_type": "context"}
+        )
+        
+        # Extract document texts from vector DB results
+        interview_texts = []
+        if interview_results.get("documents") and len(interview_results["documents"]) > 0:
+            # Flatten the results (ChromaDB returns lists of lists)
+            for doc_list in interview_results["documents"]:
+                interview_texts.extend(doc_list)
+        
+        context_texts = []
+        if context_results.get("documents") and len(context_results["documents"]) > 0:
+            for doc_list in context_results["documents"]:
+                context_texts.extend(doc_list)
+        
+        # If no results from vector DB, fall back to full documents (for backward compatibility)
+        if not interview_texts:
+            logger.warning("No interview chunks found in vector DB, falling back to full documents")
+            interview_texts = [interview.content for interview in interviews]
+        
+        if not context_texts:
+            logger.warning("No context chunks found in vector DB, falling back to full documents")
+            context_result = await session.execute(
+                select(Document).where(Document.document_type == DocumentType.CONTEXT)
+            )
+            contexts = list(context_result.scalars().all())
+            context_texts = [context.content for context in contexts]
+        
+        logger.info(f"Using {len(interview_texts)} interview chunks and {len(context_texts)} context chunks for persona generation")
+        
+        # Generate persona set using LLM with retrieved chunks
         persona_set_data = await llm_service.generate_persona_set(
             interview_documents=interview_texts,
             context_documents=context_texts,
@@ -73,7 +117,12 @@ class PersonaService:
         session: AsyncSession,
         persona_id: int
     ) -> Persona:
-        """Expand a basic persona into a full-fledged persona."""
+        """
+        Expand a basic persona into a full-fledged persona using RAG.
+        
+        Uses vector database to retrieve relevant context chunks based on
+        the persona's characteristics, making it more targeted and efficient.
+        """
         result = await session.execute(
             select(Persona).where(Persona.id == persona_id)
         )
@@ -82,14 +131,39 @@ class PersonaService:
         if not persona:
             raise ValueError(f"Persona with ID {persona_id} not found")
         
-        # Get context documents
-        context_result = await session.execute(
-            select(Document).where(Document.document_type == DocumentType.CONTEXT)
-        )
-        contexts = list(context_result.scalars().all())
-        context_texts = [context.content for context in contexts]
+        # Build a query based on persona characteristics for better retrieval
+        persona_name = persona.persona_data.get("name", "")
+        persona_occupation = persona.persona_data.get("occupation", "")
+        persona_description = persona.persona_data.get("basic_description", "")
         
-        # Expand persona using LLM
+        # Create a semantic query from persona characteristics
+        query = f"{persona_name} {persona_occupation} {persona_description} demographics psychographics behaviors goals challenges"
+        
+        # Use RAG to retrieve relevant context chunks
+        context_results = await vector_db.query_documents(
+            query_texts=[query],
+            n_results=8,  # Get top 8 relevant chunks
+            filter_metadata={"document_type": "context"}
+        )
+        
+        # Extract document texts from vector DB results
+        context_texts = []
+        if context_results.get("documents") and len(context_results["documents"]) > 0:
+            for doc_list in context_results["documents"]:
+                context_texts.extend(doc_list)
+        
+        # Fall back to full documents if no chunks found
+        if not context_texts:
+            logger.warning("No context chunks found in vector DB, falling back to full documents")
+            context_result = await session.execute(
+                select(Document).where(Document.document_type == DocumentType.CONTEXT)
+            )
+            contexts = list(context_result.scalars().all())
+            context_texts = [context.content for context in contexts]
+        
+        logger.info(f"Using {len(context_texts)} context chunks for persona expansion")
+        
+        # Expand persona using LLM with retrieved chunks
         expanded_data = await llm_service.expand_persona(
             persona_basic=persona.persona_data,
             context_documents=context_texts

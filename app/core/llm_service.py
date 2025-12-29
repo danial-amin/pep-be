@@ -4,8 +4,14 @@ LLM service for processing documents and generating personas.
 from openai import AsyncOpenAI
 from langchain_openai import OpenAIEmbeddings
 from app.core.config import settings
+from app.utils.token_utils import chunk_text_by_tokens, estimate_tokens
 from typing import List, Dict, Any, Optional
 import json
+import asyncio
+import logging
+from openai import RateLimitError, APIError
+
+logger = logging.getLogger(__name__)
 
 
 class LLMService:
@@ -23,11 +29,71 @@ class LLMService:
         return await self.embeddings.aembed_documents(texts)
     
     async def process_document(self, document_text: str, document_type: str) -> Dict[str, Any]:
-        """Process a document and extract relevant information."""
-        prompt = f"""Analyze the following {document_type} document and extract key information.
+        """
+        Process a document and extract relevant information.
+        Handles large documents by processing in chunks.
+        """
+        # Estimate tokens
+        estimated_tokens = estimate_tokens(document_text)
+        logger.info(f"Processing document with estimated {estimated_tokens} tokens")
+        
+        # If document is small enough, process directly
+        if estimated_tokens <= settings.MAX_TOKENS_PER_CHUNK:
+            return await self._process_document_chunk(document_text, document_type)
+        
+        # Otherwise, process in chunks
+        chunks = chunk_text_by_tokens(
+            document_text,
+            max_tokens=settings.MAX_TOKENS_PER_CHUNK,
+            overlap_tokens=settings.CHUNK_OVERLAP_TOKENS
+        )
+        
+        logger.info(f"Processing document in {len(chunks)} chunks")
+        
+        # Process chunks sequentially with delays to avoid rate limits
+        chunk_results = []
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Processing chunk {i+1}/{len(chunks)}")
+            try:
+                chunk_result = await self._process_document_chunk(chunk, document_type, chunk_index=i+1, total_chunks=len(chunks))
+                chunk_results.append(chunk_result)
+                
+                # Add delay between chunks to avoid rate limits (except for last chunk)
+                if i < len(chunks) - 1:
+                    await asyncio.sleep(settings.PROCESSING_DELAY_SECONDS)
+            except Exception as e:
+                logger.error(f"Error processing chunk {i+1}: {e}")
+                # Continue with other chunks even if one fails
+                continue
+        
+        # Combine results from all chunks
+        return self._combine_chunk_results(chunk_results, document_type)
+    
+    async def _process_document_chunk(
+        self,
+        chunk_text: str,
+        document_type: str,
+        chunk_index: int = 1,
+        total_chunks: int = 1
+    ) -> Dict[str, Any]:
+        """Process a single chunk of a document with retry logic for rate limits."""
+        if total_chunks > 1:
+            prompt = f"""Analyze the following section (part {chunk_index} of {total_chunks}) from a {document_type} document and extract key information.
+        
+Document Section:
+{chunk_text}
+
+Provide a structured summary with:
+1. Key themes and topics in this section
+2. Important details and facts
+3. Relevant context for persona generation
+
+Return as JSON format."""
+        else:
+            prompt = f"""Analyze the following {document_type} document and extract key information.
         
 Document:
-{document_text}
+{chunk_text}
 
 Provide a structured summary with:
 1. Key themes and topics
@@ -36,17 +102,94 @@ Provide a structured summary with:
 
 Return as JSON format."""
         
-        response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert at analyzing documents and extracting relevant information for persona generation."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3
-        )
+        max_retries = 3
+        retry_delay = 60  # Wait 60 seconds on rate limit
         
-        return json.loads(response.choices[0].message.content)
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=settings.OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are an expert at analyzing documents and extracting relevant information for persona generation."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.3
+                )
+                
+                return json.loads(response.choices[0].message.content)
+            
+            except RateLimitError as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Rate limit hit on chunk {chunk_index}, waiting {retry_delay} seconds before retry {attempt + 1}/{max_retries}")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"Rate limit error after {max_retries} attempts on chunk {chunk_index}")
+                    raise Exception(f"Rate limit exceeded after {max_retries} retries. Please try again later.")
+            
+            except APIError as e:
+                logger.error(f"API error processing chunk {chunk_index}: {e}")
+                raise
+    
+    def _combine_chunk_results(
+        self,
+        chunk_results: List[Dict[str, Any]],
+        document_type: str
+    ) -> Dict[str, Any]:
+        """Combine results from multiple document chunks into a single summary."""
+        if not chunk_results:
+            return {
+                "key_themes": [],
+                "important_details": [],
+                "relevant_context": "No content extracted from document."
+            }
+        
+        # If only one chunk, return it directly
+        if len(chunk_results) == 1:
+            return chunk_results[0]
+        
+        # Combine themes and details from all chunks
+        combined = {
+            "key_themes": [],
+            "important_details": [],
+            "relevant_context": ""
+        }
+        
+        # Collect unique themes
+        themes_set = set()
+        for result in chunk_results:
+            if isinstance(result.get("key_themes"), list):
+                themes_set.update(result["key_themes"])
+            elif isinstance(result.get("themes"), list):
+                themes_set.update(result["themes"])
+            elif isinstance(result.get("Key themes and topics"), list):
+                themes_set.update(result["Key themes and topics"])
+        
+        combined["key_themes"] = list(themes_set)
+        
+        # Collect all details
+        details_list = []
+        for result in chunk_results:
+            if isinstance(result.get("important_details"), list):
+                details_list.extend(result["important_details"])
+            elif isinstance(result.get("details"), list):
+                details_list.extend(result["details"])
+            elif isinstance(result.get("Important details and facts"), list):
+                details_list.extend(result["Important details and facts"])
+        
+        combined["important_details"] = details_list
+        
+        # Combine context
+        context_parts = []
+        for result in chunk_results:
+            context = result.get("relevant_context") or result.get("context") or result.get("Relevant context for persona generation") or ""
+            if context:
+                context_parts.append(context)
+        
+        combined["relevant_context"] = "\n\n".join(context_parts) if context_parts else "Document processed successfully."
+        
+        return combined
     
     async def complete_prompt(
         self,
@@ -55,7 +198,24 @@ Return as JSON format."""
         max_tokens: int = 1000
     ) -> str:
         """Complete a prompt using context from documents."""
-        context = "\n\n".join([f"Context {i+1}:\n{doc}" for i, doc in enumerate(context_documents)])
+        # Limit context size to avoid token limits
+        context_parts = []
+        total_tokens = estimate_tokens(user_prompt)
+        
+        for doc in context_documents:
+            doc_tokens = estimate_tokens(doc)
+            if total_tokens + doc_tokens > settings.MAX_TOKENS_PER_CHUNK:
+                # If adding this doc would exceed limit, stop
+                break
+            context_parts.append(doc)
+            total_tokens += doc_tokens
+        
+        if not context_parts:
+            # If even one document is too large, summarize it
+            if context_documents:
+                context_parts = [await self._summarize_text(context_documents[0])]
+        
+        context = "\n\n".join([f"Context {i+1}:\n{doc}" for i, doc in enumerate(context_parts)])
         
         full_prompt = f"""Based on the following context information, complete the user's prompt.
 
@@ -67,17 +227,24 @@ User Prompt:
 
 Provide a comprehensive and accurate response based on the context provided."""
         
-        response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that provides accurate information based on the provided context."},
-                {"role": "user", "content": full_prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=0.7
-        )
-        
-        return response.choices[0].message.content
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that provides accurate information based on the provided context."},
+                    {"role": "user", "content": full_prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content
+        except RateLimitError as e:
+            logger.error(f"Rate limit error completing prompt: {e}")
+            raise Exception("Rate limit exceeded. Please try again in a moment.")
+        except APIError as e:
+            logger.error(f"API error completing prompt: {e}")
+            raise
     
     async def generate_persona_set(
         self,
@@ -86,8 +253,36 @@ Provide a comprehensive and accurate response based on the context provided."""
         num_personas: int = 3
     ) -> Dict[str, Any]:
         """Generate initial persona set with demographics."""
+        # Combine documents and check size
         context = "\n\n".join(context_documents)
         interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(interview_documents)])
+        
+        full_text = f"Context Information:\n{context}\n\nInterview Data:\n{interviews}"
+        estimated_tokens = estimate_tokens(full_text)
+        
+        # If too large, summarize context first
+        if estimated_tokens > settings.MAX_TOKENS_PER_CHUNK:
+            logger.info(f"Input too large ({estimated_tokens} tokens), summarizing context first")
+            # Summarize context documents
+            summarized_contexts = []
+            for doc in context_documents:
+                if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
+                    # Summarize large context documents
+                    summary = await self._summarize_text(doc)
+                    summarized_contexts.append(summary)
+                else:
+                    summarized_contexts.append(doc)
+            context = "\n\n".join(summarized_contexts)
+            
+            # Summarize interview documents if needed
+            summarized_interviews = []
+            for doc in interview_documents:
+                if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
+                    summary = await self._summarize_text(doc)
+                    summarized_interviews.append(summary)
+                else:
+                    summarized_interviews.append(doc)
+            interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(summarized_interviews)])
         
         prompt = f"""Based on the following context and interview data, generate {num_personas} distinct personas with basic demographics.
 
@@ -108,22 +303,42 @@ Generate {num_personas} personas, each with:
 
 Return as JSON with a 'personas' array."""
         
-        response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert at creating realistic personas based on research data and interviews."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.8
-        )
-        
-        return json.loads(response.choices[0].message.content)
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating realistic personas based on research data and interviews."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.8
+            )
+            
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            logger.error(f"Error generating persona set: {e}")
+            raise
     
     async def expand_persona(self, persona_basic: Dict[str, Any], context_documents: List[str]) -> Dict[str, Any]:
         """Expand a basic persona into a full-fledged persona."""
+        # Combine context and check size
         context = "\n\n".join(context_documents)
         persona_str = json.dumps(persona_basic, indent=2)
+        
+        full_text = f"Context Information:\n{context}\n\nBasic Persona:\n{persona_str}"
+        estimated_tokens = estimate_tokens(full_text)
+        
+        # If too large, summarize context first
+        if estimated_tokens > settings.MAX_TOKENS_PER_CHUNK:
+            logger.info(f"Input too large ({estimated_tokens} tokens), summarizing context")
+            summarized_contexts = []
+            for doc in context_documents:
+                if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
+                    summary = await self._summarize_text(doc)
+                    summarized_contexts.append(summary)
+                else:
+                    summarized_contexts.append(doc)
+            context = "\n\n".join(summarized_contexts)
         
         prompt = f"""Expand the following basic persona into a comprehensive, detailed persona profile.
 
@@ -145,17 +360,21 @@ Create a full persona with:
 
 Return as a complete JSON persona object."""
         
-        response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert at creating detailed, realistic persona profiles."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.7
-        )
-        
-        return json.loads(response.choices[0].message.content)
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating detailed, realistic persona profiles."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            )
+            
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            logger.error(f"Error expanding persona: {e}")
+            raise
     
     async def generate_persona_image_prompt(self, persona: Dict[str, Any]) -> str:
         """Generate an image prompt for a persona."""
@@ -193,6 +412,62 @@ Return only the image prompt text, no JSON."""
         )
         
         return response.data[0].url
+    
+    async def _summarize_text(self, text: str) -> str:
+        """Summarize a large text to reduce token usage."""
+        chunks = chunk_text_by_tokens(
+            text,
+            max_tokens=settings.MAX_TOKENS_PER_CHUNK,
+            overlap_tokens=settings.CHUNK_OVERLAP_TOKENS
+        )
+        
+        if len(chunks) == 1:
+            # Single chunk, summarize directly
+            prompt = f"""Summarize the following text, focusing on key points relevant for persona generation:
+
+{chunks[0]}
+
+Provide a concise summary."""
+        else:
+            # Multiple chunks, summarize each then combine
+            summaries = []
+            for i, chunk in enumerate(chunks):
+                prompt = f"""Summarize the following section (part {i+1} of {len(chunks)}), focusing on key points:
+
+{chunk}
+
+Provide a concise summary."""
+                
+                response = await self.client.chat.completions.create(
+                    model=settings.OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are an expert at summarizing documents."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=1000
+                )
+                summaries.append(response.choices[0].message.content)
+                
+                # Add delay between summaries
+                if i < len(chunks) - 1:
+                    await asyncio.sleep(settings.PROCESSING_DELAY_SECONDS)
+            
+            # Combine summaries
+            combined = "\n\n".join(summaries)
+            return combined
+        
+        response = await self.client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": "You are an expert at summarizing documents."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=2000
+        )
+        
+        return response.choices[0].message.content
 
 
 # Global LLM service instance

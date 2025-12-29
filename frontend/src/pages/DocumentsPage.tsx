@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, FileText, X } from 'lucide-react';
+import { Upload, FileText } from 'lucide-react';
 import { documentsApi } from '../services/api';
 import { Document, DocumentType } from '../types';
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Users, Plus, Sparkles, Image as ImageIcon, Save, Eye } from 'lucide-react';
+import { Plus, Sparkles, Image as ImageIcon, Eye } from 'lucide-react';
 import { personasApi } from '../services/api';
-import { PersonaSet, PersonaSetGenerateResponse, Persona } from '../types';
+import { PersonaSet, PersonaSetGenerateResponse } from '../types';
 
 export default function PersonasPage() {
   const [personaSets, setPersonaSets] = useState<PersonaSet[]>([]);
@@ -74,16 +74,6 @@ export default function PersonasPage() {
       alert(`Failed to generate images: ${error.response?.data?.detail || error.message}`);
     } finally {
       setGeneratingImages(null);
-    }
-  };
-
-  const handleSaveSet = async (personaSetId: number, name: string, description?: string) => {
-    try {
-      await personasApi.saveSet(personaSetId, name, description);
-      await loadPersonaSets();
-      alert('Persona set saved successfully!');
-    } catch (error: any) {
-      alert(`Failed to save persona set: ${error.response?.data?.detail || error.message}`);
     }
   };
 
