@@ -38,9 +38,21 @@ export const documentsApi = {
 
 // Personas API
 export const personasApi = {
-  generateSet: async (numPersonas: number = 3) => {
+  generateSet: async (
+    numPersonas: number = 3,
+    contextDetails?: string,
+    interviewTopic?: string,
+    userStudyDesign?: string,
+    includeEthicalGuardrails: boolean = true,
+    outputFormat: string = 'json'
+  ) => {
     const response = await api.post('/personas/generate-set', {
       num_personas: numPersonas,
+      context_details: contextDetails,
+      interview_topic: interviewTopic,
+      user_study_design: userStudyDesign,
+      include_ethical_guardrails: includeEthicalGuardrails,
+      output_format: outputFormat,
     });
     return response.data;
   },
@@ -78,6 +90,38 @@ export const personasApi = {
 
   getPersona: async (personaId: number) => {
     const response = await api.get(`/personas/${personaId}`);
+    return response.data;
+  },
+
+  measureDiversity: async (personaSetId: number) => {
+    const response = await api.post(`/personas/${personaSetId}/measure-diversity`);
+    return response.data;
+  },
+
+  validate: async (personaSetId: number) => {
+    const response = await api.post(`/personas/${personaSetId}/validate`);
+    return response.data;
+  },
+
+  getAnalytics: async (personaSetId: number) => {
+    const response = await api.get(`/personas/${personaSetId}/analytics`);
+    return response.data;
+  },
+
+  downloadJson: async (personaSetId: number) => {
+    const response = await api.get(`/personas/${personaSetId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  loadDefaultPersonas: async () => {
+    const response = await api.post('/personas/load-default-personas');
+    return response.data;
+  },
+
+  generateImage: async (personaId: number) => {
+    const response = await api.post(`/personas/persona/${personaId}/generate-image`);
     return response.data;
   },
 };

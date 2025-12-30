@@ -16,8 +16,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY ./app /app/app
 
-# Create uploads directory
-RUN mkdir -p /app/uploads
+# Copy default personas JSON file
+COPY default_personas.json /app/default_personas.json
+
+# Copy Alembic configuration and migrations
+COPY alembic.ini /app/alembic.ini
+COPY alembic /app/alembic
+
+# Create uploads and static directories
+RUN mkdir -p /app/uploads /app/static/images/personas
 
 # Expose port
 EXPOSE 8080

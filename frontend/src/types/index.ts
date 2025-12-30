@@ -54,6 +54,15 @@ export interface Persona {
   persona_data: PersonaData;
   image_url?: string;
   image_prompt?: string;
+  similarity_score?: {
+    average: number;
+    max: number;
+    min: number;
+    scores: number[];
+    num_matches: number;
+    dummy?: boolean;
+  };
+  validation_status?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -63,6 +72,26 @@ export interface PersonaSet {
   name: string;
   description?: string;
   personas: Persona[];
+  rqe_scores?: Array<{ cycle: number; rqe_score: number; average_similarity: number; timestamp?: string }>;
+  diversity_score?: {
+    rqe_score: number;
+    average_similarity: number;
+    min_similarity: number;
+    max_similarity: number;
+    std_similarity: number;
+    num_personas: number;
+  };
+  validation_scores?: Array<{
+    persona_id: number;
+    persona_name: string;
+    average_similarity: number;
+    max_similarity: number;
+    min_similarity: number;
+    validation_status: string;
+    dummy?: boolean;
+  }>;
+  generation_cycle?: number;
+  status?: string;
   created_at: string;
   updated_at?: string;
 }

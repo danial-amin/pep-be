@@ -29,33 +29,36 @@ export default function PromptsPage() {
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Prompt Completion</h2>
-        <p className="text-gray-600">
-          Ask questions or complete prompts using context from your processed documents
+        <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Q&A Prompts</h2>
+        <p className="text-white/80 text-lg">
+          Ask questions about your documents - Get AI-powered answers using RAG (Retrieval Augmented Generation)
+        </p>
+        <p className="text-white/60 text-sm mt-2">
+          💡 Different from Personas: This page lets you ask questions and get answers from your documents, while the Personas page generates structured user personas.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Section */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Your Prompt</h3>
+        <div className="glass-card rounded-2xl overflow-hidden pastel-blue">
+          <div className="px-6 py-4 border-b border-white/20">
+            <h3 className="text-lg font-semibold text-white">Your Question</h3>
           </div>
           <form onSubmit={handleSubmit} className="p-6">
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-white/90 mb-2">
                 Enter your prompt or question
               </label>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={8}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
                 placeholder="e.g., What are the main pain points mentioned in the interviews?"
               />
             </div>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-white/90 mb-2">
                 Max Tokens: {maxTokens}
               </label>
               <input
@@ -65,13 +68,13 @@ export default function PromptsPage() {
                 step="100"
                 value={maxTokens}
                 onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-                className="w-full"
+                className="w-full accent-purple-400"
               />
             </div>
             <button
               type="submit"
               disabled={loading || !prompt.trim()}
-              className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
             >
               {loading ? (
                 <>
@@ -81,7 +84,7 @@ export default function PromptsPage() {
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Complete Prompt
+                  Get Answer
                 </>
               )}
             </button>
@@ -89,12 +92,12 @@ export default function PromptsPage() {
         </div>
 
         {/* Output Section */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
+        <div className="glass-card rounded-2xl overflow-hidden pastel-green">
+          <div className="px-6 py-4 border-b border-white/20">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium text-gray-900">Completed Response</h3>
+              <h3 className="text-lg font-semibold text-white">AI Response</h3>
               {contextUsed > 0 && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-white/70 bg-white/20 px-2 py-1 rounded-lg">
                   Used {contextUsed} context document{contextUsed !== 1 ? 's' : ''}
                 </span>
               )}
@@ -103,16 +106,16 @@ export default function PromptsPage() {
           <div className="p-6">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader className="h-8 w-8 animate-spin text-blue-600" />
+                <Loader className="h-8 w-8 animate-spin text-white" />
               </div>
             ) : completedText ? (
               <div className="prose max-w-none">
-                <p className="whitespace-pre-wrap text-gray-700">{completedText}</p>
+                <p className="whitespace-pre-wrap text-white/90 leading-relaxed">{completedText}</p>
               </div>
             ) : (
-              <div className="text-center text-gray-500 py-12">
-                <MessageSquare className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                <p>Enter a prompt and click "Complete Prompt" to get started</p>
+              <div className="text-center text-white/80 py-12">
+                <MessageSquare className="mx-auto h-12 w-12 text-white/60 mb-4" />
+                <p>Enter a question and click "Get Answer" to get started</p>
               </div>
             )}
           </div>

@@ -15,6 +15,7 @@ from app.schemas.persona import (
     PersonaResponse
 )
 from app.services.persona_service import PersonaService
+from app.services.analytics_service import AnalyticsService
 
 router = APIRouter()
 
@@ -33,7 +34,12 @@ async def generate_persona_set(
     try:
         persona_set = await PersonaService.generate_persona_set(
             session=db,
-            num_personas=request.num_personas
+            num_personas=request.num_personas,
+            context_details=request.context_details,
+            interview_topic=request.interview_topic,
+            user_study_design=request.user_study_design,
+            include_ethical_guardrails=request.include_ethical_guardrails,
+            output_format=request.output_format.value
         )
         
         # Convert to response format
@@ -149,6 +155,38 @@ async def generate_persona_images(
         )
 
 
+@router.post("/persona/{persona_id}/generate-image", response_model=PersonaImageResponse)
+async def generate_single_persona_image(
+    persona_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate an image for a single persona.
+    
+    Creates an AI-generated image for the specified persona based on their characteristics.
+    """
+    try:
+        updated = await PersonaService.generate_persona_image(db, persona_id)
+        
+        return PersonaImageResponse(
+            persona_id=updated.id,
+            image_url=updated.image_url,
+            image_prompt=updated.image_prompt,
+            status="image_generated"
+        )
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating image: {str(e)}"
+        )
+
+
 @router.post("/{persona_set_id}/save", response_model=PersonaSetResponse)
 async def save_persona_set(
     persona_set_id: int,
@@ -228,4 +266,186 @@ async def get_persona(
         )
     
     return PersonaResponse.model_validate(persona)
+
+
+@router.post("/load-default-personas", response_model=PersonaSetResponse)
+async def load_default_personas(
+    db: AsyncSession = Depends(get_db)
+):
+    """Load default personas from JSON file into a new persona set."""
+    from app.utils.load_default_personas import load_default_personas, convert_persona_to_db_format
+    from app.models.persona import PersonaSet, Persona
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    
+    try:
+        # Check if default persona set already exists (handle multiple results)
+        result = await db.execute(
+            select(PersonaSet)
+            .where(PersonaSet.name == "Default Persona Set")
+            .limit(1)
+            .options(selectinload(PersonaSet.personas))
+        )
+        existing_set = result.scalar_one_or_none()
+        
+        if existing_set:
+            # Return existing set with relationships already loaded
+            return PersonaSetResponse.model_validate(existing_set)
+        
+        # Load personas from JSON
+        default_data = load_default_personas()
+        personas_data = default_data.get("personas", [])
+        
+        if not personas_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No default personas found in JSON file"
+            )
+        
+        # Create persona set
+        persona_set = PersonaSet(
+            name="Default Persona Set",
+            description=default_data.get("metadata", {}).get("context", "Default personas loaded from JSON"),
+            status="generated",
+            generation_cycle=1
+        )
+        db.add(persona_set)
+        await db.flush()
+        
+        # Create personas
+        for persona_data in personas_data:
+            db_persona_data = convert_persona_to_db_format(persona_data)
+            persona = Persona(
+                persona_set_id=persona_set.id,
+                name=db_persona_data["name"],
+                persona_data=db_persona_data
+            )
+            db.add(persona)
+        
+        await db.commit()
+        
+        # Reload with relationships
+        result = await db.execute(
+            select(PersonaSet)
+            .where(PersonaSet.id == persona_set.id)
+            .options(selectinload(PersonaSet.personas))
+        )
+        persona_set = result.scalar_one()
+        
+        return PersonaSetResponse.model_validate(persona_set)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error loading default personas: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error loading default personas: {str(e)}"
+        )
+
+
+@router.post("/{persona_set_id}/measure-diversity")
+async def measure_diversity(
+    persona_set_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Step 2: Measure diversity of the persona set using RQE (Representation Quality Evaluation).
+    
+    Calculates how diverse the personas are and stores RQE scores.
+    """
+    try:
+        metrics = await AnalyticsService.calculate_diversity(db, persona_set_id)
+        return {
+            "persona_set_id": persona_set_id,
+            "metrics": metrics,
+            "status": "diversity_measured"
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error measuring diversity: {str(e)}"
+        )
+
+
+@router.post("/{persona_set_id}/validate")
+async def validate_personas(
+    persona_set_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Step 4: Validate personas against actual interview transcripts.
+    
+    Calculates cosine similarity between personas and real interview data.
+    """
+    try:
+        validation = await AnalyticsService.validate_personas(db, persona_set_id)
+        return validation
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error validating personas: {str(e)}"
+        )
+
+
+@router.get("/{persona_set_id}/analytics")
+async def get_analytics(
+    persona_set_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get complete analytics report for a persona set."""
+    try:
+        report = await AnalyticsService.get_analytics_report(db, persona_set_id)
+        return report
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting analytics: {str(e)}"
+        )
+
+
+@router.get("/{persona_set_id}/download")
+async def download_personas_json(
+    persona_set_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Download persona set as JSON."""
+    from fastapi.responses import JSONResponse
+    
+    try:
+        report = await AnalyticsService.get_analytics_report(db, persona_set_id)
+        return JSONResponse(
+            content=report,
+            headers={
+                "Content-Disposition": f"attachment; filename=persona_set_{persona_set_id}.json"
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error downloading personas: {str(e)}"
+        )
 

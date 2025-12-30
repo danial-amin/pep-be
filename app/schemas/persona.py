@@ -2,8 +2,9 @@
 Persona schemas for API requests/responses.
 """
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from datetime import datetime
+from enum import Enum
 
 
 class PersonaBasic(BaseModel):
@@ -17,9 +18,47 @@ class PersonaBasic(BaseModel):
     key_characteristics: Optional[List[str]] = None
 
 
+class PersonaFormat(str, Enum):
+    """Persona output format options."""
+    JSON = "json"
+    PROFILE = "profile"
+    CHAT = "chat"
+    PROTO = "proto"
+    ADHOC = "adhoc"
+    ENGAGING = "engaging"
+    GOAL_BASED = "goal_based"
+    ROLE_BASED = "role_based"
+    INTERACTIVE = "interactive"
+
+
 class PersonaSetCreateRequest(BaseModel):
-    """Request to create a persona set."""
-    num_personas: int = Field(default=3, ge=1, le=10, description="Number of personas to generate")
+    """Request to create a persona set with advanced configuration."""
+    num_personas: int = Field(
+        default=3, 
+        ge=1, 
+        le=10, 
+        description="Number of personas to generate"
+    )
+    context_details: Optional[str] = Field(
+        default=None,
+        description="Additional context about the research, market, or domain"
+    )
+    interview_topic: Optional[str] = Field(
+        default=None,
+        description="What the interviews are about (e.g., 'user experience with mobile app', 'customer pain points')"
+    )
+    user_study_design: Optional[str] = Field(
+        default=None,
+        description="Description of the user study design, methodology, and research approach"
+    )
+    include_ethical_guardrails: bool = Field(
+        default=True,
+        description="Whether to include ethical and fairness considerations in persona generation"
+    )
+    output_format: PersonaFormat = Field(
+        default=PersonaFormat.JSON,
+        description="Format for persona output: json, profile, chat, proto, adhoc, engaging, goal_based, role_based, or interactive"
+    )
 
 
 class PersonaSetResponse(BaseModel):
@@ -28,6 +67,11 @@ class PersonaSetResponse(BaseModel):
     name: str
     description: Optional[str] = None
     personas: List["PersonaResponse"] = []
+    rqe_scores: Optional[List[Dict[str, Any]]] = None
+    diversity_score: Optional[Dict[str, Any]] = None
+    validation_scores: Optional[List[Dict[str, Any]]] = None
+    generation_cycle: Optional[int] = None
+    status: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     
@@ -43,6 +87,8 @@ class PersonaResponse(BaseModel):
     persona_data: Dict[str, Any]
     image_url: Optional[str] = None
     image_prompt: Optional[str] = None
+    similarity_score: Optional[Dict[str, Any]] = None
+    validation_status: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     

@@ -21,7 +21,12 @@ class PersonaService:
     @staticmethod
     async def generate_persona_set(
         session: AsyncSession,
-        num_personas: int = 3
+        num_personas: int = 3,
+        context_details: Optional[str] = None,
+        interview_topic: Optional[str] = None,
+        user_study_design: Optional[str] = None,
+        include_ethical_guardrails: bool = True,
+        output_format: str = "json"
     ) -> PersonaSet:
         """
         Generate initial persona set with basic demographics using RAG.
@@ -82,28 +87,66 @@ class PersonaService:
         
         logger.info(f"Using {len(interview_texts)} interview chunks and {len(context_texts)} context chunks for persona generation")
         
-        # Generate persona set using LLM with retrieved chunks
+        # Generate persona set using LLM with retrieved chunks and advanced options
         persona_set_data = await llm_service.generate_persona_set(
             interview_documents=interview_texts,
             context_documents=context_texts,
-            num_personas=num_personas
+            num_personas=num_personas,
+            context_details=context_details,
+            interview_topic=interview_topic,
+            user_study_design=user_study_design,
+            include_ethical_guardrails=include_ethical_guardrails,
+            output_format=output_format
         )
         
         # Create persona set
         persona_set = PersonaSet(
             name=f"Persona Set {len(await PersonaService._get_all_persona_sets(session)) + 1}",
-            description=persona_set_data.get("description", "Generated persona set")
+            description=persona_set_data.get("description", "Generated persona set"),
+            status="generated",
+            generation_cycle=1
         )
         session.add(persona_set)
         await session.flush()
         
         # Create basic personas
-        personas_data = persona_set_data.get("personas", [])
-        for persona_data in personas_data:
+        # Handle different output formats
+        if output_format == "json":
+            personas_data = persona_set_data.get("personas", [])
+            if not isinstance(personas_data, list):
+                # If personas is not a list, try to extract it
+                personas_data = [personas_data] if personas_data else []
+            
+            for persona_data in personas_data:
+                if isinstance(persona_data, dict):
+                    persona = Persona(
+                        persona_set_id=persona_set.id,
+                        name=persona_data.get("name", "Unknown"),
+                        persona_data=persona_data
+                    )
+                else:
+                    persona = Persona(
+                        persona_set_id=persona_set.id,
+                        name="Persona",
+                        persona_data={"content": str(persona_data)}
+                    )
+                session.add(persona)
+        else:
+            # For non-JSON formats, store the formatted content
+            # The LLM returns content in the "personas" field as formatted text
+            formatted_content = persona_set_data.get("personas", "")
+            if not formatted_content:
+                formatted_content = persona_set_data.get("content", "No personas generated")
+            
+            # Store as a single persona entry with the formatted content
             persona = Persona(
                 persona_set_id=persona_set.id,
-                name=persona_data.get("name", "Unknown"),
-                persona_data=persona_data
+                name=f"Persona Set {persona_set.id} - {output_format}",
+                persona_data={
+                    "format": output_format,
+                    "content": str(formatted_content),
+                    "num_personas": num_personas
+                }
             )
             session.add(persona)
         
@@ -171,6 +214,17 @@ class PersonaService:
         
         # Update persona
         persona.persona_data = expanded_data
+        
+        # Update persona set status if all personas are expanded
+        persona_set = persona.persona_set
+        if persona_set:
+            all_expanded = all(
+                p.persona_data.get("detailed_description") or p.persona_data.get("personal_background")
+                for p in persona_set.personas
+            )
+            if all_expanded:
+                persona_set.status = "expanded"
+        
         await session.flush()
         await session.refresh(persona)
         
@@ -182,6 +236,8 @@ class PersonaService:
         persona_id: int
     ) -> Persona:
         """Generate an image for a persona."""
+        from app.utils.image_utils import download_and_save_image
+        
         result = await session.execute(
             select(Persona).where(Persona.id == persona_id)
         )
@@ -193,13 +249,20 @@ class PersonaService:
         # Generate image prompt
         image_prompt = await llm_service.generate_persona_image_prompt(persona.persona_data)
         
-        # Generate image
-        image_url = await llm_service.generate_image(image_prompt)
+        # Generate image (returns temporary DALL-E URL)
+        dall_e_url = await llm_service.generate_image(image_prompt)
         
-        # Update persona
-        persona.image_url = image_url
+        # Download and save the image locally
+        local_image_path = await download_and_save_image(dall_e_url, persona_id)
+        
+        if not local_image_path:
+            logger.warning(f"Failed to download image for persona {persona_id}, using DALL-E URL")
+            local_image_path = dall_e_url
+        
+        # Update persona with local image path
+        persona.image_url = local_image_path
         persona.image_prompt = image_prompt
-        await session.flush()
+        await session.commit()
         await session.refresh(persona)
         
         return persona
@@ -236,8 +299,11 @@ class PersonaService:
         persona_set_id: int
     ) -> Optional[PersonaSet]:
         """Get a persona set by ID."""
+        from sqlalchemy.orm import selectinload
         result = await session.execute(
-            select(PersonaSet).where(PersonaSet.id == persona_set_id)
+            select(PersonaSet)
+            .where(PersonaSet.id == persona_set_id)
+            .options(selectinload(PersonaSet.personas))
         )
         return result.scalar_one_or_none()
     
@@ -246,7 +312,10 @@ class PersonaService:
         session: AsyncSession
     ) -> List[PersonaSet]:
         """Get all persona sets."""
-        result = await session.execute(select(PersonaSet))
+        from sqlalchemy.orm import selectinload
+        result = await session.execute(
+            select(PersonaSet).options(selectinload(PersonaSet.personas))
+        )
         return list(result.scalars().all())
     
     @staticmethod

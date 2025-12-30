@@ -6,11 +6,14 @@ from sqlalchemy import select
 from typing import List, Optional
 import aiofiles
 import os
+import logging
 
 from app.models.document import Document, DocumentType
 from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentService:
@@ -26,36 +29,54 @@ class DocumentService:
     ) -> Document:
         """Process a document: extract text, process with LLM, create embeddings."""
         
-        # Process with LLM
-        processed_data = await llm_service.process_document(content, document_type.value)
-        processed_content = str(processed_data)
+        # Process with LLM (skip if content is too short or if it's a default document)
+        # For default documents, skip LLM processing to avoid API calls and errors
+        if len(content) > 100 and not filename.startswith("default_") and not filename.startswith("transcripts-"):
+            try:
+                # Try to use process_large_document if available, otherwise use process_document
+                if hasattr(llm_service, 'process_large_document'):
+                    processed_data = await llm_service.process_large_document(content, document_type.value)
+                else:
+                    processed_data = await llm_service.process_document(content, document_type.value)
+                processed_content = str(processed_data)
+            except Exception as e:
+                logger.warning(f"LLM processing failed, using raw content: {e}")
+                processed_content = content
+        else:
+            processed_content = content
         
         # Create embeddings and store in vector DB
-        # Use token-aware chunking for better embeddings
-        from app.utils.token_utils import chunk_text_by_tokens
-        
-        # Chunk by tokens (better for embeddings) - use smaller chunks for embeddings
-        # ChromaDB will automatically create embeddings using the configured embedding function
-        chunks = chunk_text_by_tokens(
-            content,
-            max_tokens=8000,  # Smaller chunks for embeddings (embedding models handle this well)
-            overlap_tokens=200
-        )
-        
-        metadatas = [
-            {
-                "document_type": document_type.value,
-                "filename": filename,
-                "chunk_index": i
-            }
-            for i in range(len(chunks))
-        ]
-        
-        # Store in vector DB (Pinecone or ChromaDB will create embeddings)
-        vector_ids = await vector_db.add_documents(
-            documents=chunks,
-            metadatas=metadatas
-        )
+        # Skip vector DB for default documents if vector DB is not configured
+        vector_ids = []
+        try:
+            # Use token-aware chunking for better embeddings
+            from app.utils.token_utils import chunk_text_by_tokens
+            
+            # Chunk by tokens (better for embeddings) - use smaller chunks for embeddings
+            chunks = chunk_text_by_tokens(
+                content,
+                max_tokens=8000,  # Smaller chunks for embeddings (embedding models handle this well)
+                overlap_tokens=200
+            )
+            
+            metadatas = [
+                {
+                    "document_type": document_type.value,
+                    "filename": filename,
+                    "chunk_index": i,
+                    "text_content": chunk  # Store chunk content for Pinecone
+                }
+                for i in range(len(chunks))
+            ]
+            
+            # Store in vector DB (Pinecone or ChromaDB will create embeddings)
+            vector_ids = await vector_db.add_documents(
+                documents=chunks,
+                metadatas=metadatas
+            )
+        except Exception as e:
+            logger.warning(f"Vector DB storage failed for {filename}, continuing without vector storage: {e}")
+            # Continue without vector storage - document will still be saved in database
         
         # Store document in database
         document = Document(

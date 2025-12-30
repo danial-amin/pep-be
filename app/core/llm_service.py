@@ -250,9 +250,26 @@ Provide a comprehensive and accurate response based on the context provided."""
         self,
         interview_documents: List[str],
         context_documents: List[str],
-        num_personas: int = 3
+        num_personas: int = 3,
+        context_details: Optional[str] = None,
+        interview_topic: Optional[str] = None,
+        user_study_design: Optional[str] = None,
+        include_ethical_guardrails: bool = True,
+        output_format: str = "json"
     ) -> Dict[str, Any]:
-        """Generate initial persona set with demographics."""
+        """
+        Generate initial persona set with advanced configuration options.
+        
+        Args:
+            interview_documents: List of interview document texts
+            context_documents: List of context document texts
+            num_personas: Number of personas to generate
+            context_details: Additional context about research/market/domain
+            interview_topic: What the interviews are about
+            user_study_design: Description of user study design and methodology
+            include_ethical_guardrails: Whether to include ethical considerations
+            output_format: Format for persona output (json, profile, chat, etc.)
+        """
         # Combine documents and check size
         context = "\n\n".join(context_documents)
         interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(interview_documents)])
@@ -284,40 +301,173 @@ Provide a comprehensive and accurate response based on the context provided."""
                     summarized_interviews.append(doc)
             interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(summarized_interviews)])
         
-        prompt = f"""Based on the following context and interview data, generate {num_personas} distinct personas with basic demographics.
-
-Context Information:
-{context}
-
-Interview Data:
-{interviews}
-
-Generate {num_personas} personas, each with:
+        # Build comprehensive prompt with all parameters
+        prompt_parts = [
+            f"Based on the following context and interview data, generate {num_personas} distinct personas.",
+            "",
+            "CONTEXT INFORMATION:",
+            context,
+            "",
+            "INTERVIEW DATA:",
+            interviews
+        ]
+        
+        # Add context details if provided
+        if context_details:
+            prompt_parts.extend([
+                "",
+                "ADDITIONAL CONTEXT:",
+                context_details
+            ])
+        
+        # Add interview topic if provided
+        if interview_topic:
+            prompt_parts.extend([
+                "",
+                "INTERVIEW TOPIC:",
+                f"The interviews focus on: {interview_topic}"
+            ])
+        
+        # Add user study design if provided
+        if user_study_design:
+            prompt_parts.extend([
+                "",
+                "USER STUDY DESIGN:",
+                user_study_design
+            ])
+        
+        # Add format instructions
+        format_instructions = self._get_format_instructions(output_format, num_personas)
+        prompt_parts.extend([
+            "",
+            "OUTPUT FORMAT:",
+            format_instructions
+        ])
+        
+        # Add ethical guardrails if requested
+        if include_ethical_guardrails:
+            prompt_parts.extend([
+                "",
+                "ETHICAL AND FAIRNESS CONSIDERATIONS:",
+                """Please ensure personas are:
+- Representative and diverse (avoid stereotypes)
+- Inclusive of different backgrounds, abilities, and perspectives
+- Free from bias based on race, gender, age, or other protected characteristics
+- Realistic and based on actual data patterns
+- Respectful and ethical in representation
+- Balanced in representation across different user segments"""
+            ])
+        
+        prompt = "\n".join(prompt_parts)
+        
+        try:
+            # Determine response format based on output_format
+            response_format = {"type": "json_object"} if output_format == "json" else None
+            
+            response = await self.client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating realistic, diverse, and ethical personas based on research data and interviews."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format=response_format,
+                temperature=0.8
+            )
+            
+            # Parse response based on format
+            if output_format == "json":
+                return json.loads(response.choices[0].message.content)
+            else:
+                # For non-JSON formats, return content in "personas" field for consistency
+                # The content will be the formatted text from LLM
+                return {
+                    "personas": response.choices[0].message.content,
+                    "format": output_format,
+                    "description": f"Personas generated in {output_format} format"
+                }
+        except Exception as e:
+            logger.error(f"Error generating persona set: {e}")
+            raise
+    
+    def _get_format_instructions(self, output_format: str, num_personas: int) -> str:
+        """Get format-specific instructions for persona generation."""
+        format_guides = {
+            "json": f"""Return as JSON with a 'personas' array. Each persona should have:
 - name
 - age
 - gender
 - location
 - occupation
 - basic_description
-- key_characteristics
-
-Return as JSON with a 'personas' array."""
-        
-        try:
-            response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are an expert at creating realistic personas based on research data and interviews."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.8
-            )
+- key_characteristics""",
             
-            return json.loads(response.choices[0].message.content)
-        except Exception as e:
-            logger.error(f"Error generating persona set: {e}")
-            raise
+            "profile": f"""Generate {num_personas} detailed persona profiles. Each profile should include:
+- Name and photo description
+- Demographics (age, gender, location, occupation)
+- Background and context
+- Goals and motivations
+- Pain points and challenges
+- Behaviors and preferences
+- Technology usage
+- Quotes or key statements
+Format as narrative profiles with rich detail.""",
+            
+            "chat": f"""Generate {num_personas} personas in a conversational format. Each persona should be presented as:
+- A dialogue or interview-style format
+- Natural language descriptions
+- Conversational tone
+- Include direct quotes and speaking style
+Format as if having a conversation with each persona.""",
+            
+            "proto": f"""Generate {num_personas} proto-personas (quick, hypothesis-based personas). Each should include:
+- Name
+- Key characteristics (3-5 bullet points)
+- Primary goal
+- Main pain point
+- Quick sketch/description
+Format as concise, actionable proto-personas.""",
+            
+            "adhoc": f"""Generate {num_personas} ad-hoc personas (informal, quick personas). Each should include:
+- Name and basic info
+- Key traits (2-3 sentences)
+- Primary use case
+- Quick insights
+Format as brief, informal persona descriptions.""",
+            
+            "engaging": f"""Generate {num_personas} engaging, story-driven personas. Each should include:
+- Compelling narrative
+- Personal story and background
+- Emotional journey
+- Relatable scenarios
+- Vivid descriptions
+Format as engaging stories that bring personas to life.""",
+            
+            "goal_based": f"""Generate {num_personas} goal-based personas. Each should focus on:
+- Primary goals and objectives
+- Secondary goals
+- Success metrics
+- Goal-related behaviors
+- Goal-driven decision making
+Format emphasizing goals and motivations.""",
+            
+            "role_based": f"""Generate {num_personas} role-based personas. Each should emphasize:
+- Professional role and responsibilities
+- Role-specific needs
+- Work context and environment
+- Role-related challenges
+- Role-based decision making
+Format emphasizing professional roles and contexts.""",
+            
+            "interactive": f"""Generate {num_personas} interactive personas. Each should include:
+- Dynamic characteristics
+- Scenario-based descriptions
+- Decision trees or paths
+- Interactive elements
+- Conditional behaviors
+Format as personas that can be used in interactive scenarios or simulations."""
+        }
+        
+        return format_guides.get(output_format.lower(), format_guides["json"])
     
     async def expand_persona(self, persona_basic: Dict[str, Any], context_documents: List[str]) -> Dict[str, Any]:
         """Expand a basic persona into a full-fledged persona."""

@@ -54,6 +54,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./uploads:/app/uploads
+      - ./static:/app/static
     depends_on:
       postgres:
         condition: service_healthy
