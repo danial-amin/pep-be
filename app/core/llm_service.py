@@ -5,6 +5,12 @@ from openai import AsyncOpenAI
 from langchain_openai import OpenAIEmbeddings
 from app.core.config import settings
 from app.utils.token_utils import chunk_text_by_tokens, estimate_tokens
+from app.utils.prompts import (
+    PERSONA_SET_GENERATION_SYSTEM_PROMPT,
+    PERSONA_SET_GENERATION_PROMPT_TEMPLATE,
+    PERSONA_EXPANSION_SYSTEM_PROMPT,
+    PERSONA_EXPANSION_PROMPT_TEMPLATE
+)
 from typing import List, Dict, Any, Optional
 import json
 import asyncio
@@ -301,64 +307,45 @@ Provide a comprehensive and accurate response based on the context provided."""
                     summarized_interviews.append(doc)
             interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(summarized_interviews)])
         
-        # Build comprehensive prompt with all parameters
-        prompt_parts = [
-            f"Based on the following context and interview data, generate {num_personas} distinct personas.",
-            "",
-            "CONTEXT INFORMATION:",
-            context,
-            "",
-            "INTERVIEW DATA:",
-            interviews
-        ]
-        
-        # Add context details if provided
+        # Build sections for the customizable prompt template
+        additional_context_section = ""
         if context_details:
-            prompt_parts.extend([
-                "",
-                "ADDITIONAL CONTEXT:",
-                context_details
-            ])
+            additional_context_section = f"\n\nADDITIONAL CONTEXT:\n{context_details}"
         
-        # Add interview topic if provided
+        interview_topic_section = ""
         if interview_topic:
-            prompt_parts.extend([
-                "",
-                "INTERVIEW TOPIC:",
-                f"The interviews focus on: {interview_topic}"
-            ])
+            interview_topic_section = f"\n\nINTERVIEW TOPIC:\nThe interviews focus on: {interview_topic}"
         
-        # Add user study design if provided
+        user_study_design_section = ""
         if user_study_design:
-            prompt_parts.extend([
-                "",
-                "USER STUDY DESIGN:",
-                user_study_design
-            ])
+            user_study_design_section = f"\n\nUSER STUDY DESIGN:\n{user_study_design}"
         
-        # Add format instructions
+        # Get format instructions
         format_instructions = self._get_format_instructions(output_format, num_personas)
-        prompt_parts.extend([
-            "",
-            "OUTPUT FORMAT:",
-            format_instructions
-        ])
         
-        # Add ethical guardrails if requested
+        # Build ethical guardrails section
+        ethical_guardrails_section = ""
         if include_ethical_guardrails:
-            prompt_parts.extend([
-                "",
-                "ETHICAL AND FAIRNESS CONSIDERATIONS:",
-                """Please ensure personas are:
+            ethical_guardrails_section = """\n\nETHICAL AND FAIRNESS CONSIDERATIONS:
+Please ensure personas are:
 - Representative and diverse (avoid stereotypes)
 - Inclusive of different backgrounds, abilities, and perspectives
 - Free from bias based on race, gender, age, or other protected characteristics
 - Realistic and based on actual data patterns
 - Respectful and ethical in representation
 - Balanced in representation across different user segments"""
-            ])
         
-        prompt = "\n".join(prompt_parts)
+        # Use customizable prompt template
+        prompt = PERSONA_SET_GENERATION_PROMPT_TEMPLATE.format(
+            num_personas=num_personas,
+            context=context,
+            interviews=interviews,
+            additional_context_section=additional_context_section,
+            interview_topic_section=interview_topic_section,
+            user_study_design_section=user_study_design_section,
+            format_instructions=format_instructions,
+            ethical_guardrails_section=ethical_guardrails_section
+        )
         
         try:
             # Determine response format based on output_format
@@ -367,7 +354,7 @@ Provide a comprehensive and accurate response based on the context provided."""
             response = await self.client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are an expert at creating realistic, diverse, and ethical personas based on research data and interviews."},
+                    {"role": "system", "content": PERSONA_SET_GENERATION_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt}
                 ],
                 response_format=response_format,
@@ -490,31 +477,17 @@ Format as personas that can be used in interactive scenarios or simulations."""
                     summarized_contexts.append(doc)
             context = "\n\n".join(summarized_contexts)
         
-        prompt = f"""Expand the following basic persona into a comprehensive, detailed persona profile.
-
-Context Information:
-{context}
-
-Basic Persona:
-{persona_str}
-
-Create a full persona with:
-- personal_background
-- demographics (age, gender, location, education, income, etc.)
-- psychographics (values, interests, motivations, pain_points)
-- behaviors (habits, preferences, decision_making_style)
-- goals_and_challenges
-- technology_usage
-- communication_preferences
-- detailed_description
-
-Return as a complete JSON persona object."""
+        # Use customizable prompt template
+        prompt = PERSONA_EXPANSION_PROMPT_TEMPLATE.format(
+            context=context,
+            persona_basic=persona_str
+        )
         
         try:
             response = await self.client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are an expert at creating detailed, realistic persona profiles."},
+                    {"role": "system", "content": PERSONA_EXPANSION_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
