@@ -8,6 +8,8 @@ from app.utils.token_utils import chunk_text_by_tokens, estimate_tokens
 from app.utils.prompts import (
     PERSONA_SET_GENERATION_SYSTEM_PROMPT,
     PERSONA_SET_GENERATION_PROMPT_TEMPLATE,
+    PERSONA_SET_GENERATION_INTERVIEWS_ONLY_TEMPLATE,
+    PERSONA_SET_GENERATION_CONTEXT_ONLY_TEMPLATE,
     PERSONA_EXPANSION_SYSTEM_PROMPT,
     PERSONA_EXPANSION_PROMPT_TEMPLATE
 )
@@ -33,6 +35,10 @@ class LLMService:
     async def create_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Create embeddings for texts."""
         return await self.embeddings.aembed_documents(texts)
+    
+    async def create_query_embedding(self, text: str) -> List[float]:
+        """Create embedding for a single query text."""
+        return await self.embeddings.aembed_query(text)
     
     async def process_document(self, document_text: str, document_type: str) -> Dict[str, Any]:
         """
@@ -261,7 +267,9 @@ Provide a comprehensive and accurate response based on the context provided."""
         interview_topic: Optional[str] = None,
         user_study_design: Optional[str] = None,
         include_ethical_guardrails: bool = True,
-        output_format: str = "json"
+        output_format: str = "json",
+        has_interviews: bool = True,
+        has_context: bool = True
     ) -> Dict[str, Any]:
         """
         Generate initial persona set with advanced configuration options.
@@ -275,37 +283,59 @@ Provide a comprehensive and accurate response based on the context provided."""
             user_study_design: Description of user study design and methodology
             include_ethical_guardrails: Whether to include ethical considerations
             output_format: Format for persona output (json, profile, chat, etc.)
+            has_interviews: Whether interview documents are available
+            has_context: Whether context documents are available
         """
-        # Combine documents and check size
-        context = "\n\n".join(context_documents)
-        interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(interview_documents)])
+        # Determine which prompt template to use based on available data
+        if has_interviews and has_context:
+            # Both interviews and context available - use standard template
+            context = "\n\n".join(context_documents) if context_documents else ""
+            interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(interview_documents)])
+            prompt_template = PERSONA_SET_GENERATION_PROMPT_TEMPLATE
+            full_text = f"Context Information:\n{context}\n\nInterview Data:\n{interviews}"
+        elif has_interviews and not has_context:
+            # Only interviews available
+            interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(interview_documents)])
+            prompt_template = PERSONA_SET_GENERATION_INTERVIEWS_ONLY_TEMPLATE
+            context = ""  # Empty for template
+            full_text = f"Interview Data:\n{interviews}"
+        elif has_context and not has_interviews:
+            # Only context available
+            context = "\n\n".join(context_documents) if context_documents else ""
+            prompt_template = PERSONA_SET_GENERATION_CONTEXT_ONLY_TEMPLATE
+            interviews = ""  # Empty for template
+            full_text = f"Context Information:\n{context}"
+        else:
+            raise ValueError("At least one of interview_documents or context_documents must be provided")
         
-        full_text = f"Context Information:\n{context}\n\nInterview Data:\n{interviews}"
         estimated_tokens = estimate_tokens(full_text)
         
-        # If too large, summarize context first
+        # If too large, summarize documents first
         if estimated_tokens > settings.MAX_TOKENS_PER_CHUNK:
-            logger.info(f"Input too large ({estimated_tokens} tokens), summarizing context first")
-            # Summarize context documents
-            summarized_contexts = []
-            for doc in context_documents:
-                if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
-                    # Summarize large context documents
-                    summary = await self._summarize_text(doc)
-                    summarized_contexts.append(summary)
-                else:
-                    summarized_contexts.append(doc)
-            context = "\n\n".join(summarized_contexts)
+            logger.info(f"Input too large ({estimated_tokens} tokens), summarizing documents first")
             
-            # Summarize interview documents if needed
-            summarized_interviews = []
-            for doc in interview_documents:
-                if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
-                    summary = await self._summarize_text(doc)
-                    summarized_interviews.append(summary)
-                else:
-                    summarized_interviews.append(doc)
-            interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(summarized_interviews)])
+            # Summarize context documents if available
+            if has_context and context_documents:
+                summarized_contexts = []
+                for doc in context_documents:
+                    if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
+                        # Summarize large context documents
+                        summary = await self._summarize_text(doc)
+                        summarized_contexts.append(summary)
+                    else:
+                        summarized_contexts.append(doc)
+                context = "\n\n".join(summarized_contexts)
+            
+            # Summarize interview documents if available
+            if has_interviews and interview_documents:
+                summarized_interviews = []
+                for doc in interview_documents:
+                    if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
+                        summary = await self._summarize_text(doc)
+                        summarized_interviews.append(summary)
+                    else:
+                        summarized_interviews.append(doc)
+                interviews = "\n\n".join([f"Interview {i+1}:\n{interview}" for i, interview in enumerate(summarized_interviews)])
         
         # Build sections for the customizable prompt template
         additional_context_section = ""
@@ -335,8 +365,8 @@ Please ensure personas are:
 - Respectful and ethical in representation
 - Balanced in representation across different user segments"""
         
-        # Use customizable prompt template
-        prompt = PERSONA_SET_GENERATION_PROMPT_TEMPLATE.format(
+        # Use appropriate prompt template based on available data
+        prompt = prompt_template.format(
             num_personas=num_personas,
             context=context,
             interviews=interviews,

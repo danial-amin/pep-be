@@ -12,7 +12,8 @@ from app.schemas.persona import (
     PersonaSetGenerateResponse,
     PersonaExpandResponse,
     PersonaImageResponse,
-    PersonaResponse
+    PersonaResponse,
+    PersonaBasic
 )
 from app.services.persona_service import PersonaService
 from app.services.analytics_service import AnalyticsService
@@ -39,7 +40,9 @@ async def generate_persona_set(
             interview_topic=request.interview_topic,
             user_study_design=request.user_study_design,
             include_ethical_guardrails=request.include_ethical_guardrails,
-            output_format=request.output_format.value
+            output_format=request.output_format.value,
+            document_ids=request.document_ids,
+            project_id=request.project_id
         )
         
         # Convert to response format

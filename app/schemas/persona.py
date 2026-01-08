@@ -59,6 +59,14 @@ class PersonaSetCreateRequest(BaseModel):
         default=PersonaFormat.JSON,
         description="Format for persona output: json, profile, chat, proto, adhoc, engaging, goal_based, role_based, or interactive"
     )
+    document_ids: Optional[List[int]] = Field(
+        default=None,
+        description="Optional list of document IDs to use for persona generation (for session isolation). If not provided, all documents will be used."
+    )
+    project_id: Optional[str] = Field(
+        default=None,
+        description="Optional project/session ID to filter documents by project (for session isolation). Alternative to document_ids."
+    )
 
 
 class PersonaSetResponse(BaseModel):

@@ -119,7 +119,7 @@ class PineconeVectorDB:
         
         # Generate embeddings (async)
         logger.info(f"Creating embeddings for {len(documents)} documents")
-        embeddings = await llm_service.embeddings.aembed_documents(documents)
+        embeddings = await llm_service.create_embeddings(documents)
         
         # Generate IDs if not provided
         if ids is None:
@@ -177,7 +177,7 @@ class PineconeVectorDB:
             return {"documents": [], "metadatas": []}
         
         # Generate query embedding (async)
-        query_embedding = await llm_service.embeddings.aembed_query(query_texts[0])
+        query_embedding = await llm_service.create_query_embedding(query_texts[0])
         
         # Build filter if provided
         filter_dict = None
@@ -185,7 +185,12 @@ class PineconeVectorDB:
             # Convert simple filter to Pinecone format
             filter_dict = {}
             for key, value in filter_metadata.items():
-                filter_dict[key] = {"$eq": value}
+                if isinstance(value, dict):
+                    # Already in Pinecone format (e.g., {"$in": [...]})
+                    filter_dict[key] = value
+                else:
+                    # Simple equality filter
+                    filter_dict[key] = {"$eq": value}
         
         # Query Pinecone
         query_response = self.index.query(
@@ -219,6 +224,52 @@ class PineconeVectorDB:
             "distances": [distances],
             "ids": [ids]
         }
+    
+    async def update_document_metadata(
+        self,
+        vector_ids: List[str],
+        metadata_updates: Dict[str, Any],
+        collection_name: str = "persona_documents"
+    ) -> bool:
+        """
+        Update metadata for existing vectors.
+        
+        Args:
+            vector_ids: List of vector IDs to update
+            metadata_updates: Dictionary of metadata fields to update
+            collection_name: Not used (kept for API compatibility)
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Fetch existing vectors
+            fetch_response = self.index.fetch(ids=vector_ids)
+            
+            # Update metadata for each vector
+            vectors_to_upsert = []
+            for vector_id in vector_ids:
+                if vector_id in fetch_response.vectors:
+                    vector_data = fetch_response.vectors[vector_id]
+                    # Merge existing metadata with updates
+                    updated_metadata = {
+                        **vector_data.metadata,
+                        **metadata_updates
+                    }
+                    vectors_to_upsert.append({
+                        "id": vector_id,
+                        "values": vector_data.values,
+                        "metadata": updated_metadata
+                    })
+            
+            if vectors_to_upsert:
+                self.index.upsert(vectors=vectors_to_upsert)
+                logger.info(f"Updated metadata for {len(vectors_to_upsert)} vectors")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error updating vector metadata: {e}")
+            return False
     
     def delete_collection(self, collection_name: str) -> bool:
         """Delete Pinecone index (collection)."""

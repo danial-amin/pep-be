@@ -23,6 +23,7 @@ class Document(Base):
     content = Column(Text, nullable=False)
     processed_content = Column(Text, nullable=True)  # LLM processed summary
     vector_id = Column(String(255), nullable=True)  # ID in vector DB
+    project_id = Column(String(255), nullable=True, index=True)  # Optional project/session identifier for isolation
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

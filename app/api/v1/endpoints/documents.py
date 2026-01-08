@@ -27,6 +27,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 async def process_document(
     file: UploadFile = File(...),
     document_type: DocumentType = Form(...),
+    project_id: str = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -78,7 +79,8 @@ async def process_document(
             file_path=str(file_path),
             filename=file.filename,
             document_type=document_type,
-            content=content
+            content=content,
+            project_id=project_id
         )
         
         return DocumentProcessResponse(

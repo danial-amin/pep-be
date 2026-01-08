@@ -37,6 +37,7 @@ PERSONA_SET_GENERATION_SYSTEM_PROMPT = """You are an expert at creating realisti
 # Note: Sections with "_section" suffix will be empty strings if not provided,
 # so they won't add extra blank lines in the final prompt.
 #
+# Prompt template for when both interviews and context are available
 PERSONA_SET_GENERATION_PROMPT_TEMPLATE = """Based on the following context and interview data, generate {num_personas} distinct personas.
 
 CONTEXT INFORMATION:
@@ -45,6 +46,42 @@ CONTEXT INFORMATION:
 INTERVIEW DATA:
 {interviews}
 {additional_context_section}{interview_topic_section}{user_study_design_section}
+OUTPUT FORMAT:
+{format_instructions}
+{ethical_guardrails_section}"""
+
+# Prompt template for when only interviews are available (no context)
+PERSONA_SET_GENERATION_INTERVIEWS_ONLY_TEMPLATE = """Based on the following interview data, generate {num_personas} distinct personas.
+
+INTERVIEW DATA:
+{interviews}
+{additional_context_section}{interview_topic_section}{user_study_design_section}
+
+INSTRUCTIONS:
+- Analyze the interview transcripts to identify distinct user types, needs, and behaviors
+- Extract patterns, pain points, goals, and characteristics from the interviews
+- Create personas that represent different user segments found in the interview data
+- Base personas on actual quotes, behaviors, and needs mentioned in the interviews
+- Ensure personas are diverse and represent different perspectives from the interviews
+
+OUTPUT FORMAT:
+{format_instructions}
+{ethical_guardrails_section}"""
+
+# Prompt template for when only context is available (no interviews)
+PERSONA_SET_GENERATION_CONTEXT_ONLY_TEMPLATE = """Based on the following context information, generate {num_personas} distinct personas.
+
+CONTEXT INFORMATION:
+{context}
+{additional_context_section}{interview_topic_section}{user_study_design_section}
+
+INSTRUCTIONS:
+- Use the context information to understand the target market, user base, and domain
+- Create personas that represent different user segments within this context
+- Base personas on market research, demographics, and behavioral patterns described in the context
+- Ensure personas are realistic and align with the context provided
+- Consider different user needs, goals, and challenges mentioned in the context
+
 OUTPUT FORMAT:
 {format_instructions}
 {ethical_guardrails_section}"""

@@ -6,6 +6,10 @@ from sqlalchemy import select
 from typing import List, Dict, Any, Optional
 import logging
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 try:
     import numpy as np
     from sklearn.metrics.pairwise import cosine_similarity
@@ -19,8 +23,6 @@ from app.models.document import Document, DocumentType
 from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
 from app.services.persona_service import PersonaService
-
-logger = logging.getLogger(__name__)
 
 
 class AnalyticsService:

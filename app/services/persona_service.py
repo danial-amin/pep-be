@@ -26,77 +26,126 @@ class PersonaService:
         interview_topic: Optional[str] = None,
         user_study_design: Optional[str] = None,
         include_ethical_guardrails: bool = True,
-        output_format: str = "json"
+        output_format: str = "json",
+        document_ids: Optional[List[int]] = None,
+        project_id: Optional[str] = None
     ) -> PersonaSet:
         """
         Generate initial persona set with basic demographics using RAG.
         
         Uses vector database to retrieve relevant document chunks instead of
         loading all documents, making it more efficient and scalable.
+        
+        Args:
+            document_ids: Optional list of document IDs to filter by (for session isolation)
+            project_id: Optional project ID to filter documents by project
         """
+        # Build query filter for documents
+        document_query = select(Document)
+        
+        # Filter by document_ids if provided (for session isolation)
+        if document_ids:
+            document_query = document_query.where(Document.id.in_(document_ids))
+        # Or filter by project_id if provided
+        elif project_id:
+            document_query = document_query.where(Document.project_id == project_id)
+        
         # Check if we have any interview documents
-        interview_result = await session.execute(
-            select(Document).where(Document.document_type == DocumentType.INTERVIEW)
-        )
+        interview_query = document_query.where(Document.document_type == DocumentType.INTERVIEW)
+        interview_result = await session.execute(interview_query)
         interviews = list(interview_result.scalars().all())
         
-        if not interviews:
-            raise ValueError("No interview documents found. Please process interview documents first.")
+        # Check if we have any context documents
+        context_query_db = document_query.where(Document.document_type == DocumentType.CONTEXT)
+        context_result = await session.execute(context_query_db)
+        contexts = list(context_result.scalars().all())
         
-        # Use RAG to retrieve relevant chunks for persona generation
-        # Query for interview-related content
-        interview_query = "user interviews, user research, interview transcripts, user feedback, user needs"
-        interview_results = await vector_db.query_documents(
-            query_texts=[interview_query],
-            n_results=10,  # Get top 10 relevant chunks
-            filter_metadata={"document_type": "interview"}
-        )
+        # Validate that we have at least one type of document
+        if not interviews and not contexts:
+            raise ValueError("No documents found. Please process at least one interview or context document first.")
         
-        # Query for context-related content
-        context_query = "research context, background information, market research, user behavior, demographics"
-        context_results = await vector_db.query_documents(
-            query_texts=[context_query],
-            n_results=10,  # Get top 10 relevant chunks
-            filter_metadata={"document_type": "context"}
-        )
-        
-        # Extract document texts from vector DB results
         interview_texts = []
-        if interview_results.get("documents") and len(interview_results["documents"]) > 0:
-            # Flatten the results (ChromaDB returns lists of lists)
-            for doc_list in interview_results["documents"]:
-                interview_texts.extend(doc_list)
-        
         context_texts = []
-        if context_results.get("documents") and len(context_results["documents"]) > 0:
-            for doc_list in context_results["documents"]:
-                context_texts.extend(doc_list)
         
-        # If no results from vector DB, fall back to full documents (for backward compatibility)
-        if not interview_texts:
-            logger.warning("No interview chunks found in vector DB, falling back to full documents")
-            interview_texts = [interview.content for interview in interviews]
-        
-        if not context_texts:
-            logger.warning("No context chunks found in vector DB, falling back to full documents")
-            context_result = await session.execute(
-                select(Document).where(Document.document_type == DocumentType.CONTEXT)
+        # Process interviews if available
+        if interviews:
+            # Get interview document IDs for vector DB filtering
+            interview_doc_ids = [str(doc.id) for doc in interviews] if document_ids or project_id else None
+            
+            # Use RAG to retrieve relevant chunks for persona generation
+            interview_query_text = "user interviews, user research, interview transcripts, user feedback, user needs"
+            interview_filter = {"document_type": "interview"}
+            if interview_doc_ids and len(interview_doc_ids) > 0:
+                # Filter by document IDs for session isolation
+                if len(interview_doc_ids) == 1:
+                    interview_filter["document_id"] = interview_doc_ids[0]
+                else:
+                    interview_filter["document_id"] = {"$in": interview_doc_ids}
+            
+            interview_results = await vector_db.query_documents(
+                query_texts=[interview_query_text],
+                n_results=10,  # Get top 10 relevant chunks
+                filter_metadata=interview_filter
             )
-            contexts = list(context_result.scalars().all())
-            context_texts = [context.content for context in contexts]
+            
+            # Extract document texts from vector DB results
+            if interview_results.get("documents") and len(interview_results["documents"]) > 0:
+                # Flatten the results (ChromaDB returns lists of lists)
+                for doc_list in interview_results["documents"]:
+                    interview_texts.extend(doc_list)
+            
+            # If no results from vector DB, fall back to full documents (for backward compatibility)
+            if not interview_texts:
+                logger.warning("No interview chunks found in vector DB, falling back to full documents")
+                interview_texts = [interview.content for interview in interviews]
+        
+        # Process context if available
+        if contexts:
+            context_query_text = "research context, background information, market research, user behavior, demographics"
+            context_doc_ids = [str(doc.id) for doc in contexts] if document_ids or project_id else None
+            
+            context_filter = {"document_type": "context"}
+            if context_doc_ids and len(context_doc_ids) > 0:
+                # Filter by document IDs for session isolation
+                if len(context_doc_ids) == 1:
+                    context_filter["document_id"] = context_doc_ids[0]
+                else:
+                    context_filter["document_id"] = {"$in": context_doc_ids}
+            
+            context_results = await vector_db.query_documents(
+                query_texts=[context_query_text],
+                n_results=10,  # Get top 10 relevant chunks
+                filter_metadata=context_filter
+            )
+            
+            # Extract document texts from vector DB results
+            if context_results.get("documents") and len(context_results["documents"]) > 0:
+                for doc_list in context_results["documents"]:
+                    context_texts.extend(doc_list)
+            
+            # If no results from vector DB, fall back to full documents
+            if not context_texts:
+                logger.warning("No context chunks found in vector DB, falling back to full documents")
+                context_texts = [context.content for context in contexts]
         
         logger.info(f"Using {len(interview_texts)} interview chunks and {len(context_texts)} context chunks for persona generation")
         
+        # Determine generation mode based on available documents
+        has_interviews = len(interview_texts) > 0
+        has_context = len(context_texts) > 0
+        
         # Generate persona set using LLM with retrieved chunks and advanced options
         persona_set_data = await llm_service.generate_persona_set(
-            interview_documents=interview_texts,
-            context_documents=context_texts,
+            interview_documents=interview_texts if has_interviews else [],
+            context_documents=context_texts if has_context else [],
             num_personas=num_personas,
             context_details=context_details,
             interview_topic=interview_topic,
             user_study_design=user_study_design,
             include_ethical_guardrails=include_ethical_guardrails,
-            output_format=output_format
+            output_format=output_format,
+            has_interviews=has_interviews,
+            has_context=has_context
         )
         
         # Create persona set

@@ -49,6 +49,3 @@ async def extract_text_from_file(file_path: str, file_extension: str) -> str:
     else:
         raise ValueError(f"Unsupported file type: {file_ext}")
 
-
-import io
-

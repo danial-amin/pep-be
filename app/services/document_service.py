@@ -25,7 +25,8 @@ class DocumentService:
         file_path: str,
         filename: str,
         document_type: DocumentType,
-        content: str
+        content: str,
+        project_id: Optional[str] = None
     ) -> Document:
         """Process a document: extract text, process with LLM, create embeddings."""
         
@@ -45,8 +46,21 @@ class DocumentService:
         else:
             processed_content = content
         
-        # Create embeddings and store in vector DB
-        # Skip vector DB for default documents if vector DB is not configured
+        # Store document in database first to get the document ID
+        # This allows us to include document_id in vector metadata for filtering
+        document = Document(
+            filename=filename,
+            document_type=document_type,
+            content=content,
+            processed_content=processed_content,
+            project_id=project_id  # Store project_id for session isolation
+        )
+        
+        session.add(document)
+        await session.flush()
+        await session.refresh(document)
+        
+        # Create embeddings and store in vector DB with document_id in metadata
         vector_ids = []
         try:
             # Use token-aware chunking for better embeddings
@@ -59,10 +73,12 @@ class DocumentService:
                 overlap_tokens=200
             )
             
+            # Prepare metadata with document_id for filtering and isolation
             metadatas = [
                 {
                     "document_type": document_type.value,
                     "filename": filename,
+                    "document_id": str(document.id),  # Store document_id for filtering
                     "chunk_index": i,
                     "text_content": chunk  # Store chunk content for Pinecone
                 }
@@ -74,27 +90,13 @@ class DocumentService:
                 documents=chunks,
                 metadatas=metadatas
             )
+            
+            # Update document with first vector_id as reference
+            document.vector_id = vector_ids[0] if vector_ids else None
+            await session.flush()
         except Exception as e:
             logger.warning(f"Vector DB storage failed for {filename}, continuing without vector storage: {e}")
             # Continue without vector storage - document will still be saved in database
-        
-        # Store document in database
-        document = Document(
-            filename=filename,
-            document_type=document_type,
-            content=content,
-            processed_content=processed_content,
-            vector_id=vector_ids[0] if vector_ids else None  # Store first vector ID as reference
-        )
-        
-        session.add(document)
-        await session.flush()
-        await session.refresh(document)
-        
-        # Update vector DB metadata with document ID for better tracking
-        # Note: This would require updating ChromaDB metadata, which may need
-        # the document IDs. For now, we store the first vector_id as reference.
-        # In a production system, you might want to update metadata after document creation.
         
         return document
     
