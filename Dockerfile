@@ -10,8 +10,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+# Use app/requirements.txt as base (always exists) and add missing dependencies
+COPY app/requirements.txt ./requirements.txt
+# Install base requirements
 RUN pip install -r requirements.txt
+# Install additional dependencies that are in root requirements.txt but not in app/requirements.txt
+# These are needed for Railway deployment (pinecone-client, etc.)
+RUN pip install pinecone-client==3.0.0 aiohttp==3.9.1 scikit-learn==1.3.2 numpy==1.26.2
 
 # Copy application code
 COPY ./app /app/app

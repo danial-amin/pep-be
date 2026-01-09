@@ -73,11 +73,14 @@ LOG_LEVEL=INFO
 
 1. In your Railway project, click "New" → "GitHub Repo"
 2. Select the same repository
-3. Configure the service:
-   - **Root Directory**: `frontend`
-   - **Dockerfile Path**: `Dockerfile` (in frontend directory)
+3. **IMPORTANT**: Configure the service settings:
+   - Go to the service → **Settings** → **Source**
+   - Set **Root Directory**: `frontend` (this is critical - must be set to `frontend`)
+   - **Dockerfile Path**: `Dockerfile` (will be found in frontend directory)
    - **Build Command**: (auto-detected)
    - **Start Command**: (auto-detected)
+
+**⚠️ Critical**: If you don't set the Root Directory to `frontend`, Railway will try to build from the root directory and use the backend Dockerfile, which will fail because it's looking for `requirements.txt` in the wrong context.
 
 #### Environment Variables for Frontend
 

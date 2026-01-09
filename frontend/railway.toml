@@ -1,9 +1,12 @@
 # Railway Configuration for Frontend Service
 # This file configures how Railway deploys the frontend service
+# IMPORTANT: In Railway dashboard, set Root Directory to "frontend"
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+# Ensure we're building from the frontend directory
+watchPatterns = ["frontend/**"]
 
 [deploy]
 healthcheckPath = "/"
