@@ -4,7 +4,7 @@
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.frontend"
+dockerfilePath = "Dockerfile"
 # Ensure we're building from the frontend directory
 watchPatterns = ["frontend/**"]
 

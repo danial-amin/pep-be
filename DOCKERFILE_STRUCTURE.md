@@ -1,29 +1,36 @@
 # Dockerfile Structure
 
-This project uses separate Dockerfiles for backend and frontend services to make Railway deployment clearer.
+This project uses a clear folder structure with separate `backend/` and `frontend/` directories, each with their own `Dockerfile`. This prevents Railway from auto-detecting the wrong Dockerfile.
 
 ## File Structure
 
 ```
 pep-be/
-├── Dockerfile.backend          # Backend API (FastAPI/Python)
+├── backend/
+│   ├── Dockerfile              # Backend API (FastAPI/Python)
+│   ├── railway.toml            # Railway config for backend
+│   ├── app/                     # Application code
+│   ├── alembic/                 # Database migrations
+│   └── default_personas/        # Default persona data
 ├── frontend/
-│   └── Dockerfile.frontend     # Frontend (React/Node.js)
+│   ├── Dockerfile              # Frontend (React/Node.js)
+│   ├── railway.toml            # Railway config for frontend
+│   └── src/                     # Frontend source code
 └── docker-compose.yml          # Local development (references both)
 ```
 
 ## Dockerfiles
 
-### Backend: `Dockerfile.backend`
-- **Location**: Root directory
+### Backend: `backend/Dockerfile`
+- **Location**: `backend/` directory
 - **Purpose**: FastAPI Python backend
 - **Base Image**: `python:3.11-slim`
 - **Port**: 8080 (or Railway's PORT env var)
 - **Used by**: 
-  - Railway backend service (root directory)
+  - Railway backend service (with Root Directory: `backend`)
   - Local development via `docker-compose.yml`
 
-### Frontend: `Dockerfile.frontend`
+### Frontend: `frontend/Dockerfile`
 - **Location**: `frontend/` directory
 - **Purpose**: React frontend with nginx
 - **Base Image**: `node:20-alpine` (build) + `nginx:alpine` (production)
@@ -35,26 +42,27 @@ pep-be/
 ## Railway Configuration
 
 ### Backend Service
-- **Root Directory**: (empty/root)
-- **Dockerfile Path**: `Dockerfile.backend`
-- **Railway Config**: `railway.toml` (root)
+- **Root Directory**: `backend` (must be set explicitly)
+- **Dockerfile Path**: `Dockerfile` (default, found in backend directory)
+- **Railway Config**: `backend/railway.toml`
 
 ### Frontend Service
-- **Root Directory**: `frontend`
-- **Dockerfile Path**: `Dockerfile.frontend`
+- **Root Directory**: `frontend` (must be set explicitly)
+- **Dockerfile Path**: `Dockerfile` (default, found in frontend directory)
 - **Railway Config**: `frontend/railway.toml`
 
-## Why Separate Dockerfiles?
+## Why This Structure?
 
-1. **Clarity**: Makes it immediately clear which Dockerfile is for which service
-2. **Railway**: Prevents Railway from auto-detecting the wrong Dockerfile
-3. **Maintenance**: Easier to manage and update each service independently
-4. **Documentation**: Self-documenting structure
+1. **No Auto-Detection Issues**: Railway won't find a Dockerfile in the root, so it won't auto-detect the wrong one
+2. **Clear Separation**: Backend and frontend are completely separated
+3. **Self-Documenting**: The folder structure makes it obvious which service is which
+4. **Easy Maintenance**: Each service is independent and easy to update
+5. **Standard Dockerfile Names**: Both use `Dockerfile` (standard convention) in their respective directories
 
 ## Local Development
 
 Both Dockerfiles are referenced in `docker-compose.yml`:
-- Backend: `dockerfile: Dockerfile.backend`
-- Frontend: `dockerfile: Dockerfile.frontend`
+- Backend: `context: ./backend`, `dockerfile: Dockerfile`
+- Frontend: `context: ./frontend`, `dockerfile: Dockerfile`
 
 This ensures consistency between local development and Railway deployment.

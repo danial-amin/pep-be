@@ -35,13 +35,14 @@ Railway deployment requires three services:
 
 1. In your Railway project, click "New" → "GitHub Repo" (or "Empty Service")
 2. Select your repository
-3. Configure the service:
-   - **Root Directory**: Leave empty (root)
-   - **Dockerfile Path**: `Dockerfile.backend` (explicitly set this)
+3. **IMPORTANT**: Configure the service settings:
+   - Go to the service → **Settings** → **Source**
+   - Set **Root Directory**: `backend` (this is critical - must be set to `backend`)
+   - **Dockerfile Path**: `Dockerfile` (will be found in backend directory)
    - **Build Command**: (auto-detected)
    - **Start Command**: (auto-detected from Dockerfile)
    
-**Note**: The backend uses `Dockerfile.backend` to clearly distinguish it from the frontend service.
+**Note**: The backend is in the `backend/` directory with its own `Dockerfile`. Setting the Root Directory to `backend` ensures Railway uses the correct Dockerfile.
 
 #### Environment Variables for Backend
 
@@ -77,13 +78,13 @@ LOG_LEVEL=INFO
 3. **IMPORTANT**: Configure the service settings:
    - Go to the service → **Settings** → **Source**
    - Set **Root Directory**: `frontend` (this is critical - must be set to `frontend`)
-   - **Dockerfile Path**: `Dockerfile.frontend` (explicitly set this)
+   - **Dockerfile Path**: `Dockerfile` (will be found in frontend directory)
    - **Build Command**: (auto-detected)
    - **Start Command**: (auto-detected)
    
-**Note**: The frontend uses `Dockerfile.frontend` to clearly distinguish it from the backend service.
+**Note**: The frontend is in the `frontend/` directory with its own `Dockerfile`. Setting the Root Directory to `frontend` ensures Railway uses the correct Dockerfile.
 
-**⚠️ Critical**: If you don't set the Root Directory to `frontend`, Railway will try to build from the root directory and use `Dockerfile.backend` (the backend Dockerfile), which will fail because it's looking for Python dependencies instead of Node.js.
+**⚠️ Critical**: If you don't set the Root Directory to `frontend`, Railway will try to build from the root directory and won't find a Dockerfile (since we removed the default one), which will cause the build to fail.
 
 #### Environment Variables for Frontend
 

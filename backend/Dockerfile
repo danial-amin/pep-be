@@ -20,11 +20,11 @@ RUN pip install pinecone-client==3.0.0 aiohttp==3.9.1 scikit-learn==1.3.2 numpy=
 
 # Copy default personas directory (supports multiple persona set files)
 # This handles the directory structure: default_personas/*.json
-COPY default_personas/ /app/default_personas/
+COPY ./default_personas/ /app/default_personas/
 
 # Copy Alembic configuration and migrations
-COPY alembic.ini /app/alembic.ini
-COPY alembic /app/alembic
+COPY ./alembic.ini /app/alembic.ini
+COPY ./alembic /app/alembic
 
 # Create uploads and static directories
 RUN mkdir -p /app/uploads /app/static/images/personas

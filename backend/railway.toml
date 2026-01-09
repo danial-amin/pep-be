@@ -3,7 +3,7 @@
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.backend"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 # Start command is handled by Dockerfile CMD, which uses PORT env var
