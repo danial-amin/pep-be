@@ -45,6 +45,9 @@ uploads/
 *.pdf
 *.docx
 *.txt
+# But keep requirements.txt files (needed for deployment)
+!requirements.txt
+!**/requirements.txt
 
 # Logs
 *.log
