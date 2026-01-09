@@ -44,10 +44,14 @@ wheels/
 uploads/
 *.pdf
 *.docx
+# Exclude .txt files BUT keep important .txt files (needed for deployment)
 *.txt
-# But keep requirements.txt files (needed for deployment)
-!requirements.txt
+# Allow requirements.txt files anywhere
 !**/requirements.txt
+!requirements.txt
+# Allow other important .txt files in backend/frontend
+!backend/**/*.txt
+!frontend/**/*.txt
 
 # Logs
 *.log

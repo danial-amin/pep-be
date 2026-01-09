@@ -2,11 +2,31 @@
 
 This guide will help you deploy the PEP (Persona Generator) application on Railway.
 
+## ⚠️ CRITICAL: Root Directory Configuration
+
+**IMPORTANT**: This repository has **NO Dockerfile in the root directory**.
+
+You **MUST** configure the Root Directory for each service in Railway:
+
+- **Backend Service**: Root Directory = `backend`
+- **Frontend Service**: Root Directory = `frontend`
+
+**Set this in Railway dashboard BEFORE the first build, or delete and recreate the service!**
+
+**How to set Root Directory:**
+1. Go to your service in Railway
+2. Click **Settings** → **Source**
+3. Set **Root Directory** to `backend` or `frontend`
+4. **SAVE** the settings
+5. Trigger a new deployment
+
+If you see build errors about missing files, it means Railway is building from the root directory instead of the service directory.
+
 ## Overview
 
 Railway deployment requires three services:
-1. **Backend API** - FastAPI application
-2. **Frontend** - React application served via nginx
+1. **Backend API** - FastAPI application (in `backend/` directory)
+2. **Frontend** - React application served via nginx (in `frontend/` directory)
 3. **PostgreSQL Database** - Railway managed PostgreSQL service
 
 ## Prerequisites
@@ -35,14 +55,19 @@ Railway deployment requires three services:
 
 1. In your Railway project, click "New" → "GitHub Repo" (or "Empty Service")
 2. Select your repository
-3. **IMPORTANT**: Configure the service settings:
+3. **⚠️ CRITICAL**: Configure the service settings **BEFORE** the first deployment:
    - Go to the service → **Settings** → **Source**
-   - Set **Root Directory**: `backend` (this is critical - must be set to `backend`)
+   - Set **Root Directory**: `backend` (this is **REQUIRED** - the repository has no Dockerfile in root)
    - **Dockerfile Path**: `Dockerfile` (will be found in backend directory)
    - **Build Command**: (auto-detected)
    - **Start Command**: (auto-detected from Dockerfile)
+   - **SAVE** the settings
    
-**Note**: The backend is in the `backend/` directory with its own `Dockerfile`. Setting the Root Directory to `backend` ensures Railway uses the correct Dockerfile.
+**⚠️ IMPORTANT**: 
+- The backend is in the `backend/` directory with its own `Dockerfile`
+- **There is NO Dockerfile in the root directory**
+- If you don't set Root Directory to `backend`, Railway will fail to build
+- You must set this **before** Railway tries to build, or delete and recreate the service
 
 #### Environment Variables for Backend
 
@@ -242,6 +267,23 @@ Railway provides default domains, but you can add custom domains:
 3. Ensure all required files are present
 4. Check `.railwayignore` isn't excluding necessary files
 
+### Build fails: "Dockerfile not found" or "file not found" errors
+
+**Symptom**: Build fails with errors about missing files or Dockerfile
+
+**Cause**: Railway is building from the root directory instead of the `backend` or `frontend` directory
+
+**Solution**:
+1. Go to your service in Railway dashboard
+2. Click **Settings** → **Source**
+3. Set **Root Directory** to:
+   - `backend` for the backend service
+   - `frontend` for the frontend service
+4. **Save** the settings
+5. Trigger a new deployment (or delete and recreate the service)
+
+**Note**: This repository has NO Dockerfile in the root directory. You MUST set the Root Directory for Railway to find the correct Dockerfile.
+
 ### Frontend build error: "COPY requirements.txt" not found
 
 **Symptom**: Frontend build fails with error about `requirements.txt` not found
@@ -254,7 +296,7 @@ Railway provides default domains, but you can add custom domains:
 3. Set **Root Directory** to: `frontend`
 4. Save and redeploy
 
-The frontend Dockerfile doesn't use `requirements.txt` (it's a Node.js app), so this error means Railway is using the wrong Dockerfile from the root directory.
+The frontend Dockerfile doesn't use `requirements.txt` (it's a Node.js app), so this error means Railway is using the wrong Dockerfile or building from the wrong directory.
 
 ## Cost Optimization
 

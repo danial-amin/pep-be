@@ -63,3 +63,7 @@ start.ps1
 
 # Persona JSON files (if not needed in production)
 personas_set_3*.json
+
+# IMPORTANT: Do NOT exclude requirements.txt files - they are needed for builds
+!**/requirements.txt
+!requirements.txt

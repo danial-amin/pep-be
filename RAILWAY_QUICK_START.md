@@ -2,6 +2,16 @@
 
 Use this checklist for a quick deployment on Railway.
 
+## ⚠️ CRITICAL: Root Directory Must Be Set!
+
+**This repository has NO Dockerfile in the root directory!**
+
+You **MUST** set the Root Directory for each service:
+- Backend: Root Directory = `backend`
+- Frontend: Root Directory = `frontend`
+
+**Set this BEFORE Railway tries to build, or the build will fail!**
+
 ## Pre-Deployment
 
 - [ ] Railway account created
@@ -21,8 +31,9 @@ Use this checklist for a quick deployment on Railway.
 
 ### 3. Deploy Backend
 - [ ] New → GitHub Repo → Select repository
-- [ ] **IMPORTANT**: Go to Settings → Source → Set Root Directory: `backend`
-- [ ] Dockerfile Path: `Dockerfile`
+- [ ] **⚠️ CRITICAL**: Go to Settings → Source → Set Root Directory: `backend`
+- [ ] **⚠️ DO THIS BEFORE FIRST BUILD** - Save settings
+- [ ] Dockerfile Path: `Dockerfile` (auto-detected)
 - [ ] Set environment variables:
   - [ ] `DATABASE_URL` = (from PostgreSQL service)
   - [ ] `OPENAI_API_KEY` = (your key)
@@ -34,8 +45,9 @@ Use this checklist for a quick deployment on Railway.
 
 ### 4. Deploy Frontend
 - [ ] New → GitHub Repo → Select same repository
-- [ ] **IMPORTANT**: Go to Settings → Source → Set Root Directory: `frontend`
-- [ ] Dockerfile Path: `Dockerfile`
+- [ ] **⚠️ CRITICAL**: Go to Settings → Source → Set Root Directory: `frontend`
+- [ ] **⚠️ DO THIS BEFORE FIRST BUILD** - Save settings
+- [ ] Dockerfile Path: `Dockerfile` (auto-detected)
 - [ ] Set environment variable:
   - [ ] `VITE_API_URL` = `{backend-url}/api/v1`
 - [ ] Wait for deployment to complete
