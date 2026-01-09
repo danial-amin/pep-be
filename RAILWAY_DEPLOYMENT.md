@@ -106,16 +106,29 @@ Alternatively, you can set it as a build argument in Railway's service settings 
 
 ### Step 5: Configure CORS
 
-Update the backend's `CORS_ORIGINS` environment variable to include your frontend URL:
+Update the backend's `CORS_ORIGINS` environment variable to include your frontend URL. You can set it in multiple formats:
 
+**Option 1: Single URL (recommended)**
 ```
 CORS_ORIGINS=https://your-frontend-service.up.railway.app
 ```
 
-Or if you want to allow all origins (not recommended for production):
+**Option 2: Multiple URLs (comma-separated)**
+```
+CORS_ORIGINS=https://your-frontend-service.up.railway.app,https://another-domain.com
+```
+
+**Option 3: JSON array format**
+```
+CORS_ORIGINS=["https://your-frontend-service.up.railway.app"]
+```
+
+**Option 4: Allow all origins (not recommended for production)**
 ```
 CORS_ORIGINS=*
 ```
+
+**Note**: The application will automatically parse any of these formats. For production, use Option 1 or 2 with your specific frontend URL(s).
 
 ### Step 6: Run Database Migrations
 
@@ -174,7 +187,7 @@ railway logs
 | `PINECONE_INDEX_NAME` | No | Pinecone index name | `pep-documents` |
 | `VECTOR_DB_TYPE` | No | Vector DB type (`pinecone` or `chroma`) | `pinecone` |
 | `ENVIRONMENT` | No | Environment (`development` or `production`) | `development` |
-| `CORS_ORIGINS` | No | CORS allowed origins (comma-separated) | `*` |
+| `CORS_ORIGINS` | No | CORS allowed origins (single URL, comma-separated, or JSON array) | `*` |
 | `LOG_LEVEL` | No | Logging level | `INFO` |
 
 ### Frontend Service

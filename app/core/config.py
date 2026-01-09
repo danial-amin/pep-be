@@ -2,7 +2,9 @@
 Application configuration settings.
 """
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from pydantic import field_validator
+from typing import List, Optional, Union
+import json
 
 
 class Settings(BaseSettings):
@@ -35,7 +37,31 @@ class Settings(BaseSettings):
     # Application
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: Union[str, List[str]] = ["*"]
+    
+    @field_validator('CORS_ORIGINS', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse CORS_ORIGINS from various formats."""
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            # Handle empty string
+            if not v or v.strip() == "":
+                return ["*"]
+            # Try to parse as JSON first
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+            # Handle comma-separated string
+            if "," in v:
+                return [origin.strip() for origin in v.split(",") if origin.strip()]
+            # Single string value
+            return [v.strip()]
+        return ["*"]
     
     # File Upload
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
