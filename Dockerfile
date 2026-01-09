@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements first for better caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Copy application code
 COPY ./app /app/app
@@ -27,9 +27,10 @@ COPY alembic /app/alembic
 # Create uploads and static directories
 RUN mkdir -p /app/uploads /app/static/images/personas
 
-# Expose port
+# Expose port (Railway will provide PORT env var)
 EXPOSE 8080
 
 # Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Railway provides PORT env var, fallback to 8080 for local development
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
 

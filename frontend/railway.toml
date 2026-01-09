@@ -1,0 +1,12 @@
+# Railway Configuration for Frontend Service
+# This file configures how Railway deploys the frontend service
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

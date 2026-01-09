@@ -1,0 +1,65 @@
+# Railway ignore file
+# Files and directories to exclude from Railway deployments
+
+# Development files
+.env
+.env.local
+.env.*.local
+*.log
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+test_*.py
+*_test.py
+tests/
+test/
+
+# Docker compose (not needed for Railway)
+docker-compose.yml
+docker-entrypoint-initdb.d/
+
+# Uploads (should be handled by Railway volumes if needed)
+uploads/*
+!uploads/.gitkeep
+
+# Node modules (for frontend, will be installed during build)
+node_modules/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Local development scripts
+start.sh
+start.ps1
+
+# Persona JSON files (if not needed in production)
+personas_set_3*.json
