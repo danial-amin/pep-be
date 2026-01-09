@@ -1,9 +1,9 @@
-# Railway Configuration
-# This file configures how Railway deploys your services
+# Railway Configuration for Backend Service
+# This file configures how Railway deploys the backend API service
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "Dockerfile.backend"
 
 [deploy]
 # Start command is handled by Dockerfile CMD, which uses PORT env var

@@ -35,12 +35,13 @@ Railway deployment requires three services:
 
 1. In your Railway project, click "New" → "GitHub Repo" (or "Empty Service")
 2. Select your repository
-3. Railway will auto-detect the Dockerfile in the root directory
-4. Configure the service:
+3. Configure the service:
    - **Root Directory**: Leave empty (root)
-   - **Dockerfile Path**: `Dockerfile` (default)
+   - **Dockerfile Path**: `Dockerfile.backend` (explicitly set this)
    - **Build Command**: (auto-detected)
    - **Start Command**: (auto-detected from Dockerfile)
+   
+**Note**: The backend uses `Dockerfile.backend` to clearly distinguish it from the frontend service.
 
 #### Environment Variables for Backend
 
@@ -76,11 +77,13 @@ LOG_LEVEL=INFO
 3. **IMPORTANT**: Configure the service settings:
    - Go to the service → **Settings** → **Source**
    - Set **Root Directory**: `frontend` (this is critical - must be set to `frontend`)
-   - **Dockerfile Path**: `Dockerfile` (will be found in frontend directory)
+   - **Dockerfile Path**: `Dockerfile.frontend` (explicitly set this)
    - **Build Command**: (auto-detected)
    - **Start Command**: (auto-detected)
+   
+**Note**: The frontend uses `Dockerfile.frontend` to clearly distinguish it from the backend service.
 
-**⚠️ Critical**: If you don't set the Root Directory to `frontend`, Railway will try to build from the root directory and use the backend Dockerfile, which will fail because it's looking for `requirements.txt` in the wrong context.
+**⚠️ Critical**: If you don't set the Root Directory to `frontend`, Railway will try to build from the root directory and use `Dockerfile.backend` (the backend Dockerfile), which will fail because it's looking for Python dependencies instead of Node.js.
 
 #### Environment Variables for Frontend
 
