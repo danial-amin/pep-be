@@ -41,5 +41,6 @@ RUN chmod +x /docker-entrypoint.sh
 EXPOSE 80
 
 # Use entrypoint script to inject runtime config
+# The script will inject config and then exec nginx
 ENTRYPOINT ["/docker-entrypoint.sh"]
 

@@ -12,6 +12,18 @@ echo "VITE_API_URL environment variable: ${VITE_API_URL:-<not set, using default
 echo "Using API URL: ${API_URL}"
 echo ""
 
+# Verify nginx html directory exists
+if [ ! -d "/usr/share/nginx/html" ]; then
+    echo "ERROR: /usr/share/nginx/html directory does not exist!"
+    ls -la /usr/share/nginx/ || true
+    exit 1
+fi
+
+# List files in html directory for debugging
+echo "Files in /usr/share/nginx/html:"
+ls -la /usr/share/nginx/html/ | head -10
+echo ""
+
 # Create config.js with the API URL
 echo "Creating config.js with API URL..."
 cat > /usr/share/nginx/html/config.js <<EOF
@@ -21,13 +33,28 @@ window.APP_CONFIG = {
 };
 EOF
 
+# Verify config.js was created
+if [ ! -f "/usr/share/nginx/html/config.js" ]; then
+    echo "ERROR: Failed to create config.js!"
+    exit 1
+fi
+
 echo "Configuration file created successfully"
 echo "Config file contents:"
 cat /usr/share/nginx/html/config.js
 echo ""
+
+# Test nginx configuration
+echo "Testing nginx configuration..."
+nginx -t
+if [ $? -ne 0 ]; then
+    echo "ERROR: nginx configuration test failed!"
+    exit 1
+fi
+
 echo "========================================="
 echo "Starting nginx..."
 echo "========================================="
 
-# Start nginx
+# Start nginx in foreground
 exec nginx -g "daemon off;"
