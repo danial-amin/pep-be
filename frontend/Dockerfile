@@ -40,8 +40,7 @@ RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
 
-# Use entrypoint script to inject runtime config and start nginx
-# This ensures config.js is created before nginx starts
+# Use entrypoint to inject config, then start nginx with default CMD
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD []
+# nginx:alpine default CMD starts nginx, but we override with our entrypoint
 

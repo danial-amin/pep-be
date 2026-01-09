@@ -11,11 +11,10 @@ watchPatterns = ["frontend/**"]
 # VITE_API_URL will be used at build time if provided, but runtime config takes precedence
 
 [deploy]
-# Use /health endpoint for faster health checks
-healthcheckPath = "/health"
+# Use root path for healthcheck (simpler, more reliable)
+healthcheckPath = "/"
 # Increased timeout to allow nginx to fully start
 healthcheckTimeout = 300
-# Start checking after initial delay
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
