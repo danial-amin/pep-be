@@ -1,0 +1,9 @@
+# Railway Configuration
+# This file helps Railway understand the project structure
+# 
+# ⚠️ CRITICAL: You MUST set Root Directory in Railway dashboard:
+# - Backend service: Root Directory = "backend"
+# - Frontend service: Root Directory = "frontend"
+# 
+# There is NO Dockerfile in the root directory.
+# All Dockerfiles are in their respective service directories.

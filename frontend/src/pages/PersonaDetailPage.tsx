@@ -178,14 +178,10 @@ export default function PersonaDetailPage() {
         removeContainer: false,
         // Capture all CSS including gradients
         foreignObjectRendering: false, // Disable for better compatibility
-        // Better text rendering
-        letterRendering: true,
         // Capture scrollable content
         scrollX: 0,
         scrollY: 0,
-        // Better quality
-        pixelRatio: window.devicePixelRatio || 2,
-      });
+      } as any); // Type assertion needed for some html2canvas options
       
       // Convert to blob and download
       canvas.toBlob((blob) => {

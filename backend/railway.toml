@@ -1,5 +1,12 @@
 # Railway Configuration for Backend Service
 # This file configures how Railway deploys the backend API service
+# 
+# ⚠️ IMPORTANT: In Railway dashboard, you MUST set:
+# - Root Directory: backend
+# - Dockerfile Path: Dockerfile
+# 
+# Without setting Root Directory to "backend", Railway will try to build from root
+# and fail because the files are in the backend/ directory.
 
 [build]
 builder = "DOCKERFILE"
