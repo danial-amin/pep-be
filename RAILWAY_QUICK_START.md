@@ -33,11 +33,13 @@ Use this checklist for a quick deployment on Railway.
 
 ### 4. Deploy Frontend
 - [ ] New → GitHub Repo → Select same repository
-- [ ] Root Directory: `frontend`
+- [ ] **IMPORTANT**: Go to Settings → Source → Set Root Directory: `frontend`
 - [ ] Set environment variable:
   - [ ] `VITE_API_URL` = `{backend-url}/api/v1`
 - [ ] Wait for deployment to complete
 - [ ] Copy frontend URL
+
+**⚠️ Critical**: Root Directory MUST be set to `frontend` or Railway will use the wrong Dockerfile!
 
 ### 5. Configure CORS
 - [ ] Go to Backend service → Variables
