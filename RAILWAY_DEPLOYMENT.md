@@ -225,6 +225,20 @@ Railway provides default domains, but you can add custom domains:
 3. Ensure all required files are present
 4. Check `.railwayignore` isn't excluding necessary files
 
+### Frontend build error: "COPY requirements.txt" not found
+
+**Symptom**: Frontend build fails with error about `requirements.txt` not found
+
+**Cause**: Railway is building from the root directory instead of the `frontend` directory
+
+**Solution**:
+1. Go to your frontend service in Railway dashboard
+2. Click **Settings** → **Source**
+3. Set **Root Directory** to: `frontend`
+4. Save and redeploy
+
+The frontend Dockerfile doesn't use `requirements.txt` (it's a Node.js app), so this error means Railway is using the wrong Dockerfile from the root directory.
+
 ## Cost Optimization
 
 - Railway provides a free tier with $5 credit monthly
