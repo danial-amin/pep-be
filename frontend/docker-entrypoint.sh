@@ -6,7 +6,9 @@ echo "Frontend Runtime Configuration"
 echo "========================================="
 
 # Get API URL from environment variable (Railway provides this)
-API_URL="${VITE_API_URL:-http://localhost:8080/api/v1}"
+# Remove trailing slashes to ensure consistent URL format
+RAW_API_URL="${VITE_API_URL:-http://localhost:8080/api/v1}"
+API_URL=$(echo "$RAW_API_URL" | sed 's:/*$::')
 
 echo "VITE_API_URL environment variable: ${VITE_API_URL:-<not set, using default>}"
 echo "Using API URL: ${API_URL}"
@@ -56,5 +58,6 @@ echo "========================================="
 echo "Starting nginx..."
 echo "========================================="
 
-# Start nginx in foreground
+# Start nginx in foreground (this will block and keep container running)
+# Nginx will handle requests immediately when it starts
 exec nginx -g "daemon off;"
