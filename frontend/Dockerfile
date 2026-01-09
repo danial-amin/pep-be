@@ -43,8 +43,12 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Copy startup script
+COPY start-nginx.sh /start-nginx.sh
+RUN chmod +x /start-nginx.sh
+
 EXPOSE 80
 
-# Explicitly start nginx (Railway V2 needs this)
-CMD ["nginx", "-g", "daemon off;"]
+# Use startup script to handle Railway's PORT variable
+CMD ["/start-nginx.sh"]
 
