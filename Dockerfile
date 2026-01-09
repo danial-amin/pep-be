@@ -10,16 +10,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-# Use app/requirements.txt as base (always exists) and add missing dependencies
-COPY app/requirements.txt ./requirements.txt
-# Install base requirements
-RUN pip install -r requirements.txt
+# Strategy: Copy app directory first to ensure requirements.txt is available
+# Then install dependencies before copying the rest (for better layer caching)
+COPY ./app /app/app
+# Install base requirements from app/requirements.txt
+RUN pip install -r /app/app/requirements.txt
 # Install additional dependencies that are in root requirements.txt but not in app/requirements.txt
 # These are needed for Railway deployment (pinecone-client, etc.)
 RUN pip install pinecone-client==3.0.0 aiohttp==3.9.1 scikit-learn==1.3.2 numpy==1.26.2
-
-# Copy application code
-COPY ./app /app/app
 
 # Copy default personas directory (supports multiple persona set files)
 # This handles the directory structure: default_personas/*.json
