@@ -39,4 +39,5 @@ echo "Starting nginx..."
 echo "========================================="
 
 # Start nginx in foreground (this will block and keep container running)
+# Use exec to replace shell process with nginx (PID 1)
 exec nginx -g "daemon off;"
