@@ -113,7 +113,7 @@ LOG_LEVEL=INFO
 
 #### Environment Variables for Frontend
 
-Add this environment variable **before the first deployment**:
+Add this environment variable:
 
 ```
 VITE_API_URL=<your-backend-api-url>/api/v1
@@ -124,11 +124,17 @@ VITE_API_URL=<your-backend-api-url>/api/v1
 - It will look like: `https://your-backend-service.up.railway.app`
 - Use this URL in `VITE_API_URL`: `https://your-backend-service.up.railway.app/api/v1`
 
-**Important:** The `VITE_API_URL` is used at build time, so you need to:
-1. Set the environment variable first
-2. Then trigger a new deployment (Railway will rebuild with the new value)
+**Important:** The frontend now supports **runtime configuration**:
+- The `VITE_API_URL` environment variable is injected at container startup (not build time)
+- This means you can update the API URL without rebuilding the frontend
+- Simply update the `VITE_API_URL` environment variable in Railway and restart the service
+- The frontend will automatically use the new API URL on the next request
 
-Alternatively, you can set it as a build argument in Railway's service settings under "Settings" → "Variables" → "Build Arguments".
+**How it works:**
+- The frontend Dockerfile includes an entrypoint script that creates a `config.js` file at runtime
+- This config file is loaded before the React app starts
+- The React app reads the API URL from `window.APP_CONFIG.VITE_API_URL`
+- If the runtime config isn't available, it falls back to the build-time `VITE_API_URL` env var
 
 ### Step 5: Configure CORS
 
@@ -220,7 +226,9 @@ railway logs
 
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
-| `VITE_API_URL` | Yes | Backend API URL | - |
+| `VITE_API_URL` | Yes | Backend API URL (injected at runtime) | `http://localhost:8080/api/v1` |
+
+**Note:** The frontend uses runtime configuration, so `VITE_API_URL` can be updated without rebuilding. The value is injected when the container starts.
 
 ## Custom Domains
 
@@ -248,10 +256,14 @@ Railway provides default domains, but you can add custom domains:
 
 ### Frontend can't connect to backend
 
-1. Verify `VITE_API_URL` is set correctly
-2. Check backend CORS settings
-3. Ensure backend service is running and healthy
-4. Check Railway service URLs are correct
+1. Verify `VITE_API_URL` is set correctly in Railway environment variables
+2. Check that the frontend container is running (check logs for the entrypoint script)
+3. Verify `config.js` is being generated (check container logs for "Runtime configuration injected")
+4. Open browser console and check `window.APP_CONFIG` - it should contain the API URL
+5. Check backend CORS settings (should include your frontend URL)
+6. Ensure backend service is running and healthy (check `/health` or `/healthcheck` endpoint)
+7. Check Railway service URLs are correct
+8. If you updated `VITE_API_URL`, restart the frontend service (the config is injected at container startup)
 
 ### Database connection errors
 

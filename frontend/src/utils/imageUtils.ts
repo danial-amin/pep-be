@@ -2,7 +2,20 @@
  * Utility functions for handling persona images.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8080';
+// Get API base URL from runtime config or build-time env var
+const getApiBaseUrl = (): string => {
+  // Check for runtime config (injected via config.js)
+  let apiUrl = 'http://localhost:8080/api/v1';
+  if (typeof window !== 'undefined' && (window as any).APP_CONFIG?.VITE_API_URL) {
+    apiUrl = (window as any).APP_CONFIG.VITE_API_URL;
+  } else {
+    apiUrl = import.meta.env.VITE_API_URL || apiUrl;
+  }
+  // Remove /api/v1 suffix to get base URL
+  return apiUrl.replace('/api/v1', '');
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Get the full URL for a persona image.

@@ -14,6 +14,14 @@ COPY . .
 ARG VITE_API_URL=http://localhost:8080/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 
+# Display build-time configuration
+RUN echo "=========================================" && \
+    echo "Frontend Build Configuration:" && \
+    echo "=========================================" && \
+    echo "VITE_API_URL (build-time): ${VITE_API_URL}" && \
+    echo "Note: Runtime config will override this" && \
+    echo "========================================="
+
 # Build the application
 RUN npm run build
 
@@ -26,7 +34,12 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# Use entrypoint script to inject runtime config
+ENTRYPOINT ["/docker-entrypoint.sh"]
 

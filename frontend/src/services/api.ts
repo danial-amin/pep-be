@@ -1,6 +1,16 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+// Get API URL from runtime config (injected at container startup) or build-time env var
+const getApiUrl = (): string => {
+  // Check for runtime config (injected via config.js)
+  if (typeof window !== 'undefined' && (window as any).APP_CONFIG?.VITE_API_URL) {
+    return (window as any).APP_CONFIG.VITE_API_URL;
+  }
+  // Fallback to build-time env var or default
+  return import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+};
+
+const API_URL = getApiUrl();
 
 const api = axios.create({
   baseURL: API_URL,
