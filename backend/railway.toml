@@ -15,7 +15,8 @@ dockerfilePath = "Dockerfile"
 [deploy]
 # Start command is handled by Dockerfile CMD, which uses PORT env var
 # Railway automatically provides PORT environment variable
-healthcheckPath = "/health"
+# Health check endpoint (both /health and /healthcheck are available)
+healthcheckPath = "/healthcheck"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10

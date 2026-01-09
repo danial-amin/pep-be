@@ -150,9 +150,10 @@ app = FastAPI(
 )
 
 # CORS middleware
+# The field_validator in Settings already parses CORS_ORIGINS to a list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -180,5 +181,11 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    return {"status": "healthy"}
+
+
+@app.get("/healthcheck")
+async def health_check_alias():
+    """Health check endpoint (alias for /health)."""
     return {"status": "healthy"}
 
