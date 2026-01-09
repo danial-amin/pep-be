@@ -15,7 +15,8 @@
     "react-router-dom": "^6.20.0",
     "axios": "^1.6.2",
     "lucide-react": "^0.294.0",
-    "recharts": "^2.10.3"
+    "recharts": "^2.10.3",
+    "html2canvas": "^1.4.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

@@ -1,0 +1,158 @@
+[
+  {
+    "id": 27,
+    "persona_set_id": 3,
+    "name": "Elena (The High-Income Urbanite)",
+    "persona_data": {
+      "name": "Elena (The High-Income Urbanite)",
+      "age": 40,
+      "gender": "Female",
+      "nationality": "Finnish",
+      "education_level": "University Degree",
+      "income_bracket": "High (Tech Executive)",
+      "relationship_status": "In a relationship",
+      "social_media_usage": "Heavy usage of Autostadium and LinkedIn; shares travel and luxury acquisitions.",
+      "role": "Premium Early Adopter and status-seeker.",
+      "occupation": "Startup Director",
+      "behaviors": "She changes cars every 2–3 years, favoring Teslas or premium German brands with cognac-colored leather interiors. She mocks 'fossil' drivers and enjoys high performance, such as 0–100 kph in 3.4 seconds. Her choice in vehicles is a reflection of her identity, combining luxury with eco-consciousness. Elena is also meticulous about her home's energy efficiency, investing in smart home technologies that reduce her carbon footprint and showcase her tech-savvy nature.",
+      "goals": [
+        "To maintain a 'green' corporate image and utilize EVs to lower the taxable benefit (verotusarvo) of her company car.",
+        "She wants to see ICE vehicles 'killed by taxation' to clear the way for electrification.",
+        "To influence her network towards more sustainable lifestyle choices, leveraging her status to promote environmental consciousness.",
+        "To continuously upgrade her lifestyle with the latest technological advancements that align with her environmental values."
+      ],
+      "motivations": "Status and technological dominance; she views the subsidy as a rightful return on her high taxes. Elena is driven by a desire to be at the forefront of innovation, particularly in areas that allow her to blend her high-status lifestyle with her commitment to sustainability. She believes in using her influence to push for broader societal shifts towards green technology.",
+      "other_information": "She owns a house valued at 460,000€ with dedicated home charging, making the transition to electric seamless for her lifestyle. Her home is a reflection of her values, equipped with the latest in energy-efficient technology and smart home features. It serves as a hub for hosting gatherings where she enjoys discussing future trends in technology and sustainability."
+    },
+    "image_url": "/static/images/personas/persona_27.png",
+    "image_prompt": "**Image Prompt:**\n\nVisualize Elena, a 40-year-old Finnish tech executive with a confident and sophisticated aura. She has a sleek, professional style, sporting a tailored blazer and designer glasses, her hair styled in a modern, effortless updo that reflects her status as a high-income urbanite. Her expression is one of determination and sharp intelligence, with a hint of a smile suggesting both approachability and assertiveness.\n\nElena stands in the heart of Helsinki's vibrant business district, surrounded by sleek, modern architecture that mirrors her forward-thinking and eco-conscious mindset. The crisp Nordic air is filled with the buzz of the city, yet Elena's presence commands the scene, a clear standout even in the bustling urban environment.\n\nNext to her is her latest acquisition, a cutting-edge Tesla with a custom cognac-colored leather interior, parked outside a stylish, glass-fronted office building. The Tesla not only showcases her high status and love for luxury but also her commitment to green energy and technological advancement. The electric vehicle's sleek lines and the building's modern design complement each other, symbolizing the fusion of luxury and sustainability that Elena champions.\n\nHer interaction with technology is evident, with the latest smartphone in one hand and a smartwatch on the other, possibly scrolling through Autostadium or LinkedIn, sharing moments of her travels and luxury acquisitions. This digital connection highlights her role as a premium early adopter, always connected, always ahead.\n\nThe mood is one of dynamic energy and refined elegance, encapsulating Elena's role as a startup director who is not only a status-seeker but a trendsetter in the tech world. The environment and her attire speak volumes about her success, her values, and her aspirations, painting a picture of a woman who leads by example, driving forward both in her career and in her personal commitment to a more sustainable future.",
+    "similarity_score": null,
+    "validation_status": null,
+    "created_at": "2026-01-09T15:14:34.863201Z",
+    "updated_at": "2026-01-09T15:16:54.569403Z"
+  },
+  {
+    "id": 30,
+    "persona_set_id": 3,
+    "name": "Marjatta (The Rural Entrepreneur)",
+    "persona_data": {
+      "name": "Marjatta (The Rural Entrepreneur)",
+      "age": 52,
+      "gender": "Female",
+      "nationality": "Finnish",
+      "education_level": "Applied Sciences",
+      "income_bracket": "Middle",
+      "relationship_status": "Married",
+      "social_media_usage": "Local community groups and WhatsApp.",
+      "role": "Range-anxious pragmatist.",
+      "occupation": "Rural entrepreneur (Catering/Farming)",
+      "behaviors": "Marjatta systematically evaluates the practicality of new technologies, especially those related to sustainable practices, against the backdrop of her daily operational needs. She conducts thorough research, often seeking out user forums and real-life testimonials, to substantiate manufacturers' claims, especially regarding vehicle performance in harsh winter conditions and towing capabilities.",
+      "goals": [
+        "Wants a vehicle that can reliably handle the dual demands of her rural lifestyle and business needs, including a 300km range to cover distances between her farm, market locations, and catering events without the need for frequent recharging.",
+        "Seeks a vehicle under 30,000€ that does not compromise on essential features like a trailer hitch, demonstrating her prioritization of functionality over luxury.",
+        "Aims to achieve a predictable Total Cost of Ownership (TCO) for her next vehicle purchase, factoring in purchase price, maintenance, fuel or charging costs, and potential tax incentives or penalties, to ensure it aligns with her business's budgeting requirements."
+      ],
+      "motivations": [
+        "Driven by a pragmatic approach to her business investments, she is wary of overpaying for technology that does not offer proportional benefits to her work-life requirements, reflecting her skepticism towards high-cost electric vehicles (EVs) without proven utility and cost efficiency.",
+        "Concerned about future government policies that may impose additional costs on EV owners, she is motivated by the desire to avoid unforeseen financial burdens that could impact her business's sustainability and her personal finances."
+      ],
+      "other_information": "Marjatta represents a segment of the population that is cautious about transitioning to electric vehicles, not due to a resistance to change but from a place of seeking assurance that the infrastructure and technology are mature enough to meet their specific needs. She believes that the current skepticism towards EVs among her peers could be mitigated with clearer information and more visible, practical demonstrations of their efficacy in rural settings."
+    },
+    "image_url": "/static/images/personas/persona_30.png",
+    "image_prompt": "Title: \"Marjatta, The Heart of Rural Innovation – A Day in the Finnish Countryside\"\n\nPrompt:\n\nVisualize Marjatta, a robust and spirited 52-year-old Finnish woman, with an aura of pragmatic determination. She dons practical farmwear: a weather-resistant jacket in earthy tones, sturdy jeans, and durable boots, all designed for the rugged outdoors. Her hair is a blend of grey and its original deep brown, pulled back into a functional ponytail, framing a face marked by lines of wisdom and resilience. In her hands, she confidently holds a tablet, reviewing the latest data on sustainable rural business practices.\n\nThe setting is Marjatta's farm, nestled in the verdant, rolling countryside of Finland, under a vast, cloud-scattered sky. The early morning sun casts a golden hue over fields of crops and grazing animals, promising a day of bountiful work. In the background, a heavy 4x4 diesel truck, equipped with a trailer hitch, stands ready to transport produce or equipment. Despite its ruggedness, the vehicle is a stark contrast to the tranquil and sustainable life Marjatta envisions.\n\nThe style and mood capture the essence of rural entrepreneurship: a blend of tradition and innovation. There's a palpable sense of peace and satisfaction in the air, mixed with the undercurrent of challenge and the relentless pursuit of improvement. Marjatta embodies this duality, grounded in her roots yet always looking forward.\n\nHer professional context is seamlessly integrated into the image. Around her, technology and tradition coexist: solar panels atop barn roofs, high-tech farming equipment next to hand tools, and perhaps a corner of a bustling kitchen from her catering business, revealing the heart of a community centered around local, sustainable food.\n\nAs Marjatta interacts with her environment, her role as a rural entrepreneur and a range-anxious pragmatist is evident. She is the bridge between the old and the new, the local and the global. She champions the use of real-world data to drive her decisions, always with an eye on the practicalities of rural living and the preservation of her community's way of life.\n\nThis image is a tribute to Marjatta's determination to maintain her lifestyle and values in the face of modern challenges, her commitment to sustainability, and her role as a pillar of her community. It's a moment in time that encapsulates the beauty of rural entrepreneurship, the complexities of adopting new technologies in remote areas, and the unwavering spirit of those who call these places home.",
+    "similarity_score": null,
+    "validation_status": null,
+    "created_at": "2026-01-09T15:14:34.863201Z",
+    "updated_at": "2026-01-09T15:16:54.569403Z"
+  },
+  {
+    "id": 26,
+    "persona_set_id": 3,
+    "name": "Pekka (The Rural Traditionalist)",
+    "persona_data": {
+      "name": "Pekka (The Rural Traditionalist)",
+      "age": 63,
+      "gender": "Male",
+      "nationality": "Finnish",
+      "education_level": "Vocational School",
+      "income_bracket": "Lower (Post sorter / approaching retirement)",
+      "relationship_status": "Married",
+      "social_media_usage": "Suomi24 and car forums; consumes tabloid car news.",
+      "role": "Defender of internal combustion engine (ICE) reliability; voice of rural skepticism.",
+      "occupation": "Mail Sorter (Posti lajittelija)",
+      "behaviors": "He maintains a **2004 Toyota Camry** with DIY additions and wooden bead seat covers, believing it is superior to new, unreliable German cars [1-3]. He avoids EVs in winter, fearing they will fail at **-30°C** and leave him stranded in a 'savimaja' (hovel) [1, 4, 5]. Pekka takes pride in his ability to fix almost anything on his vehicle without needing professional help, often sourcing parts from local scrap yards or online forums. He regularly attends local car meets to showcase his Camry, although he primarily goes to exchange maintenance tips and discuss the latest news in the automotive world.",
+      "goals": "To keep his current car running 'until the grave' and avoid government 'traps' like **electricity transfer fees** or higher taxes on the poor [1, 6, 7]. He wants a vehicle that can refuel in 2 minutes for a 1000km range [1, 8]. Additionally, Pekka aims to pass on his knowledge of car maintenance to younger generations, fearing that the art of DIY car repair is dying due to the complexity of newer vehicles.",
+      "motivations": "Practicality and survival; he views the EV subsidy as a wealth transfer from the poor to the rich who have 'extra money' for 50,000€ 'battery toys' [1, 2, 9]. Pekka's distrust of newer automotive technologies is deeply rooted in a belief that they are designed to make vehicles more dependent on professional servicing, thus stripping owners of their autonomy and forcing them into a cycle of costly repairs and maintenance.",
+      "other_information": "He practices **'munkkielämä' (monk life)** to survive on roughly 500€/month and considers car taxes a punishment for being poor [10-12]. Pekka's lifestyle is not only a matter of financial necessity but also a conscious choice to demonstrate that one can lead a fulfilling life without succumbing to consumerist pressures. He grows a portion of his food in a small garden, repairs his own clothes, and is an active member of a local community group that shares resources and skills to reduce living costs."
+    },
+    "image_url": "/static/images/personas/persona_26.png",
+    "image_prompt": "Create an image of Pekka, a 63-year-old Finnish man with a rugged, weathered appearance, embodying the spirit of rural life. His thick, graying hair and a well-maintained, stubbly beard frame a face that tells stories of decades spent outdoors, braving the harsh Finnish winters. He wears practical, worn-in clothing: a flannel shirt under a durable, slightly faded jacket, and sturdy boots, all chosen for their functionality rather than fashion. In his hands, calloused from years of manual labor, he holds a set of car keys, a symbol of his deep connection to his beloved 2004 Toyota Camry.\n\nThe setting is the picturesque, snow-covered Finnish countryside. Pekka stands in front of a modest, traditional wooden Finnish house, with his cherished Camry parked nearby. The car, despite its age, appears meticulously maintained, sporting DIY additions and wooden bead seat covers, reflecting Pekka's pride and mechanical prowess. The environment is serene yet stark, capturing the isolation and beauty of rural Finland in winter. The mood is one of resilience and stoicism, as Pekka represents a bastion of traditional values in a rapidly changing world.\n\nInclude details that highlight Pekka's skepticism towards modernity and technology, such as a disdainful glance towards a passing electric vehicle or a newspaper headline about new car taxes, to capture his role as a defender of the internal combustion engine and his distrust of government policies. The overall style of the image should convey a sense of timelessness, with a focus on the natural and mechanical elements that define Pekka's life. This scene is not just a moment in time but a window into the life of a man who embodies the essence of rural traditionalism, professional dedication, and a deep-seated belief in the reliability of tried and tested technology.",
+    "similarity_score": null,
+    "validation_status": null,
+    "created_at": "2026-01-09T15:14:34.863201Z",
+    "updated_at": "2026-01-09T15:16:54.569403Z"
+  },
+  {
+    "id": 28,
+    "persona_set_id": 3,
+    "name": "Jorgos (The Working Immigrant)",
+    "persona_data": {
+      "name": "Jorgos (The Working Immigrant)",
+      "age": 35,
+      "gender": "Male",
+      "nationality": "Greek-Finnish",
+      "education_level": "Trade School",
+      "income_bracket": "Middle-Lower (Service Sector)",
+      "relationship_status": "Married",
+      "social_media_usage": "Facebook groups like 'Sähköautot.nyt' and Uber app user.",
+      "role": "Pragmatic commuter and potential sähkötaksi driver.",
+      "occupation": "Logistics / Part-time Uber driver",
+      "behaviors": "Dedicated to his long commutes in immigrant-dense suburbs, Jorgos has developed a keen interest in electric vehicles (EVs) primarily for their low operational costs. He is critical of non-plug-in hybrids, which he perceives as less cost-effective and refers to them humorously as 'bensa-kusetus' (gas scam). His day-to-day involves navigating through 'matu-lähiö' (immigrant suburbs), where he keeps a close eye on the evolving market of used EVs, hoping to find a financially viable option.",
+      "goals": [
+        "To reduce his daily 70km commute cost to **'2 euros per 100km'**, aiming for substantial savings and efficiency.",
+        "To navigate and find a competitive edge in the used EV market, with a specific interest in models like the Nissan Leaf, priced around **5,000€**, which could significantly lower his operational costs.",
+        "To overcome the 'latausmahdottomuus' (charging impossibility) challenge at his residence by finding alternative charging solutions or advocating for better infrastructure within his housing company."
+      ],
+      "motivations": "Jorgos is driven by a pursuit of financial efficiency, seeking to maximize his earnings while minimizing operational costs. The potential to save up to **1,000€ per month** by transitioning from diesel to electric power for his professional driving is a significant motivator. This financial incentive is coupled with a personal commitment to contributing to environmental sustainability through reduced emissions.",
+      "other_information": "Jorgos faces significant challenges with the current EV infrastructure, particularly the 'latausmahdottomuus' (charging impossibility) at his housing company, which only offers 2-hour heating poles. This limitation hinders his ability to reliably charge an electric vehicle, posing a significant barrier to his transition to electric driving."
+    },
+    "image_url": "/static/images/personas/persona_28.png",
+    "image_prompt": "\"Visualize Jorgos, a robust 35-year-old Greek-Finnish man with weathered features that tell tales of his hardworking ethos. His short, dark hair is practical and unassuming, much like his pragmatic approach to life. His attire is a blend of his dual heritage: a sturdy, no-nonsense winter jacket to fend off the Finnish chill, paired with a warm, inviting smile that echoes his Greek roots. Jorgos stands confidently amidst the sprawling suburban landscape of 'matu-lähiö', the immigrant suburbs that he navigates daily. His surroundings are a mix of modest residential buildings and the sparse greenery that peeks through the urban sprawl, with the clear, cold skies overhead hinting at the pragmatic challenges of his daily commute.\n\nIn the background, the silhouette of a modest, slightly aged electric vehicle (EV)—perhaps a Nissan Leaf—serves as a beacon of his aspirations towards financial efficiency and environmental responsibility. The car is parked beside a standard 2-hour heating pole, emblematic of the 'latausmahdottomuus' dilemma he faces, yet it proudly displays a makeshift charging solution that Jorgos has ingeniously rigged up, symbolizing his resilience and innovative spirit.\n\nThe mood is one of quiet determination and an unyielding pursuit of practical dreams. There's a palpable sense of the early morning or late evening light that bathes the scene, highlighting the start or end of his long day's journey. This image also subtly captures the essence of Jorgos's life as a part-time Uber driver and logistics worker through the inclusion of a smartphone mounted on the dash, displaying the Uber app, alongside a small Greek flag and a Finnish flag hanging from the rearview mirror, representing his proud, bicultural identity.\n\nThis setting not only narrates Jorgos's professional context but also his personal journey of striving for a better life in a foreign land, marked by the challenges of integration, adaptation, and the relentless pursuit of a more sustainable, cost-effective daily grind.\"",
+    "similarity_score": null,
+    "validation_status": null,
+    "created_at": "2026-01-09T15:14:34.863201Z",
+    "updated_at": "2026-01-09T15:16:54.569403Z"
+  },
+  {
+    "id": 29,
+    "persona_set_id": 3,
+    "name": "Sini (The Gen Z Activist)",
+    "persona_data": {
+      "name": "Sini (The Gen Z Activist)",
+      "age": 22,
+      "gender": "Non-binary",
+      "nationality": "Swedish-Finnish",
+      "education_level": "Basic education / Student",
+      "income_bracket": "Very Low (Työmarkkinatuki / ~500€/month)",
+      "relationship_status": "Single",
+      "social_media_usage": "TikTok and Instagram; follow environmental activists like Greta Thunberg.",
+      "role": "Environmental Fundamentalist.",
+      "occupation": "Student / Seasonal worker",
+      "behaviors": "Sini is deeply engaged in environmental activism, often participating in protests, signing petitions, and sharing informative content on social media platforms. They leverage TikTok and Instagram to spread awareness about climate change, emphasizing the need for immediate action and policy change. Sini is known among their peers for their passionate speeches at university events and their ability to mobilize fellow students for environmental causes. They prioritize sustainable living, choosing second-hand clothes, and minimizing waste in their daily life.",
+      "goals": [
+        "To make Finland **hiilineutraali (carbon neutral)** by 2035 and see the state provide EVs for free to the poor [7, 45, 47, 48].",
+        "They want subsidies to apply to micro-mobility like e-bikes [47, 49].",
+        "To influence at least 100 people to switch to a more sustainable lifestyle by the end of the year through their social media platforms.",
+        "To organize and participate in a nationwide climate march demanding stricter environmental policies."
+      ],
+      "motivations": "Sini is driven by a deep sense of urgency regarding the climate crisis, fueled by their belief in the power of collective action to enact change. They are inspired by the leadership of figures like Greta Thunberg and aspire to make a tangible impact in their community and beyond. Their motivations stem from a core belief that environmental sustainability is crucial for the future well-being of the planet and all its inhabitants.",
+      "other_information": "Sini practices extreme 'munkkielämä' (monk life) and believes that the only way to save the planet is to stop 'turhaturismi' (unnecessary tourism) [10, 11, 46, 54]. They often engage in local community clean-up projects and advocate for the reduction of air travel, promoting alternatives such as train journeys. Sini is also a part of a local environmental club at their university, where they contribute to organizing educational workshops and fundraisers for environmental causes."
+    },
+    "image_url": "/static/images/personas/persona_29.png",
+    "image_prompt": "Sini, a 22-year-old non-binary environmental activist, stands boldly in the heart of Helsinki, Finland, their Swedish-Finnish heritage reflected in their strikingly androgynous features and cool, determined gaze. They sport a practical yet trendy ensemble, consisting of upcycled, sustainably sourced fabrics, blending seamlessly with their minimalist aesthetic. Their hair is styled in an eco-friendly, low-maintenance cut, dyed in shades of green and blue, symbolizing their deep connection to the earth and its waters. A reusable, slogan-emblazoned tote bag hangs over one shoulder, filled with informational pamphlets on carbon neutrality and the importance of e-bikes.\n\nThe setting is a vibrant, bustling city street, transformed into a haven for sustainable living. Solar panels and green roofs adorn the surrounding buildings, while the streets hum with the activity of electric vehicles and citizens on e-bikes. The air is clean, clear, and filled with the sounds of a community actively engaged in environmental conservation.\n\nSini is captured in the midst of organizing a peaceful demonstration, rallying a diverse group of fellow Gen Z activists. They wield a digital tablet, using social media to broadcast their message, engaging followers with a mix of earnest appeal and youthful vigor. Their expressions are a powerful mix of passionate determination and hopeful optimism.\n\nThe style of the image is vibrant and dynamic, filled with the energy of youthful activism and the serene confidence of those who inhabit a lifestyle deeply integrated with their values. The mood is one of inspiring change, capturing the essence of a movement propelled by the belief in a greener, more sustainable future. The professional context, while informal, is palpably impactful, showcasing Sini as a pivotal figure in the environmental movement, a student, and seasonal worker who champions the cause of making Finland carbon-neutral by 2035 through grassroots efforts and social media influence.\n\nThis image tells the story of a new generation's fight against climate change, embodied in the figure of Sini, a non-binary hero for the earth, whose life is a testament to the power of individual action in the monumental task of saving our planet.",
+    "similarity_score": null,
+    "validation_status": null,
+    "created_at": "2026-01-09T15:14:34.863201Z",
+    "updated_at": "2026-01-09T15:16:54.569403Z"
+  }
+]

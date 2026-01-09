@@ -38,7 +38,12 @@ function ExpandedPersonaCard({ persona }: { persona: Persona }) {
       <div className="mb-4">
         <h5 className="text-sm font-semibold text-white uppercase tracking-wide mb-2">Background</h5>
         <p className="text-sm text-white/90 leading-relaxed">
-          {personaData.background || personaData.detailed_description || personaData.personal_background || 'No background information available.'}
+          {personaData.background || 
+           personaData.detailed_description || 
+           personaData.personal_background || 
+           personaData.background_and_personal_history ||
+           personaData.other_information ||
+           'No background information available.'}
         </p>
       </div>
 

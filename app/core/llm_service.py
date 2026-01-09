@@ -409,14 +409,38 @@ Please ensure personas are:
     def _get_format_instructions(self, output_format: str, num_personas: int) -> str:
         """Get format-specific instructions for persona generation."""
         format_guides = {
-            "json": f"""Return as JSON with a 'personas' array. Each persona should have:
-- name
-- age
-- gender
-- location
-- occupation
-- basic_description
-- key_characteristics""",
+            "json": f"""Return as JSON with a 'personas' array. Each persona MUST follow this nested structure:
+{{
+  "persona_id": "persona_001" (optional),
+  "name": "Persona Name",
+  "tagline": "Brief tagline or role description" (optional),
+  "demographics": {{
+    "age": 30,
+    "gender": "Male/Female/Non-binary",
+    "location": "City, Country" or {{"city": "City", "country": "Country"}},
+    "occupation": "Job Title",
+    "education": "Education Level" (optional),
+    "nationality": "Nationality" (optional),
+    "income_bracket": "Income Level" (optional),
+    "relationship_status": "Status" (optional)
+  }},
+  "background": "Detailed background description",
+  "goals": ["Goal 1", "Goal 2", "Goal 3"],
+  "frustrations": ["Frustration 1", "Frustration 2"],
+  "motivations": ["Motivation 1", "Motivation 2"] (optional),
+  "behaviors": "Behavioral description" (optional),
+  "technology_profile": {{
+    "primary_devices": ["Device 1", "Device 2"],
+    "comfort_level": "Basic/Intermediate/Advanced",
+    "software_used": ["Software 1", "Software 2"],
+    "interaction_preferences": ["Preference 1", "Preference 2"],
+    "accessibility_needs": [] (optional)
+  }} (optional),
+  "quote": "Key quote" (optional),
+  "other_information": "Additional info" (optional)
+}}
+
+CRITICAL: Use nested structure with demographics object. Goals and frustrations must be arrays.""",
             
             "profile": f"""Generate {num_personas} detailed persona profiles. Each profile should include:
 - Name and photo description

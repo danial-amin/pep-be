@@ -46,6 +46,9 @@ CONTEXT INFORMATION:
 INTERVIEW DATA:
 {interviews}
 {additional_context_section}{interview_topic_section}{user_study_design_section}
+
+IMPORTANT: All personas MUST use the nested structure with a 'demographics' object. Goals and frustrations must be arrays.
+
 OUTPUT FORMAT:
 {format_instructions}
 {ethical_guardrails_section}"""
@@ -121,20 +124,54 @@ Context Information:
 Basic Persona:
 {persona_basic}
 
-Create a detailed persona profile that includes:
-- Name and demographics (age, gender, location, occupation)
-- Background and personal history
-- Goals and motivations
-- Pain points and frustrations
-- Behaviors and preferences
-- Technology usage and digital literacy
-- Quotes or key statements that represent this persona
-- Detailed description of their needs and how they interact with the product/service
+CRITICAL RULES - YOU MUST FOLLOW THESE STRICTLY:
 
-Ensure the expanded persona is:
-- Realistic and based on the provided context
-- Detailed and specific (not generic)
-- Coherent with the basic persona characteristics
-- Rich in detail that can inform product design decisions
+1. STRUCTURE REQUIREMENT:
+   - ALL personas MUST use the nested structure with a 'demographics' object
+   - Demographics object must contain: age, gender, location, occupation, and optionally education, nationality, income_bracket, relationship_status
+   - Goals and frustrations MUST be arrays (lists), not strings
+   - If the input persona has flat structure, convert it to nested structure during expansion
 
-Return the expanded persona as a JSON object with all the above fields."""
+2. DEMOGRAPHIC FIELDS MUST REMAIN UNCHANGED:
+   - DO NOT modify, expand, or change ANY demographic fields
+   - Demographic fields in demographics object: age, gender, location, occupation, education, nationality, income_bracket, relationship_status
+   - Keep these fields EXACTLY as they are in the original persona
+   - Do NOT add details, descriptions, or explanations to demographic fields
+   - If location is a string, keep it as string. If it's an object with city/country, keep that structure
+
+3. ONLY EXPAND BEHAVIORAL AND PSYCHOGRAPHIC FIELDS:
+   - ONLY expand these types of fields: behaviors, goals, motivations, frustrations, quotes, other_information, background, technology_profile
+   - Add depth, detail, and richness to these fields based on the context
+   - Use context information to enrich these behavioral/psychographic aspects
+   - Goals and frustrations must be arrays - add more items to these arrays
+
+4. PRESERVE NESTED STRUCTURE:
+   - Always use nested structure with demographics object
+   - Do NOT add new top-level demographic fields (put them in demographics object)
+   - Arrays stay as arrays, objects stay as objects
+   - technology_profile should remain an object if it exists
+
+5. EXPANSION GUIDELINES FOR BEHAVIORAL FIELDS:
+   - For behavioral fields (behaviors, background): Add more detail, examples, and depth
+   - For arrays (goals, frustrations, motivations): Add more items that are directly related
+   - For objects (technology_profile): Expand nested fields only if they already exist
+   - Use context information to add realistic, detailed behavioral insights
+
+6. FORMAT CONSISTENCY:
+   - Maintain the exact same data types (strings stay strings, numbers stay numbers, arrays stay arrays)
+   - Keep demographic fields exactly as they are (no changes)
+   - Preserve any formatting conventions (e.g., if names have parentheses, keep that format)
+
+7. WHAT NOT TO DO:
+   - Do NOT modify ANY demographic fields (name, age, gender, occupation, etc.)
+   - Do NOT add new demographic fields outside the demographics object
+   - Do NOT add location details if location wasn't specified
+   - Do NOT add employment history or background to occupation field
+   - Do NOT convert arrays to strings or vice versa
+
+Return the expanded persona as a JSON object that:
+- Uses nested structure with demographics object
+- Has goals and frustrations as arrays
+- Keeps ALL demographic fields EXACTLY as they are (no changes)
+- Only expands behavioral/psychographic fields (behaviors, goals, motivations, quotes, etc.)
+- Does NOT add new fields or information"""

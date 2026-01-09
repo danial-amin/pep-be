@@ -10,6 +10,7 @@ from app.models.document import Document, DocumentType
 from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
 from app.schemas.persona import PersonaBasic
+from app.utils.persona_normalizer import normalize_persona_to_nested
 import logging
 
 logger = logging.getLogger(__name__)
@@ -168,10 +169,12 @@ class PersonaService:
             
             for persona_data in personas_data:
                 if isinstance(persona_data, dict):
+                    # Normalize to standard nested structure
+                    normalized_data = normalize_persona_to_nested(persona_data)
                     persona = Persona(
                         persona_set_id=persona_set.id,
-                        name=persona_data.get("name", "Unknown"),
-                        persona_data=persona_data
+                        name=normalized_data.get("name", "Unknown"),
+                        persona_data=normalized_data
                     )
                 else:
                     persona = Persona(
@@ -261,8 +264,111 @@ class PersonaService:
             context_documents=context_texts
         )
         
-        # Update persona
-        persona.persona_data = expanded_data
+        # Demographic fields that must NEVER be changed (flat structure)
+        DEMOGRAPHIC_FIELDS = {
+            'name', 'age', 'gender', 'nationality', 'education_level', 'income_bracket',
+            'relationship_status', 'occupation', 'location', 'persona_id', 'tagline',
+            'social_media_usage', 'role'  # These are also demographic/descriptive, not behavioral
+        }
+        
+        # Fields that should be expanded (behavioral/psychographic)
+        EXPANDABLE_FIELDS = {
+            'behaviors', 'goals', 'motivations', 'frustrations', 'pain_points', 'quotes',
+            'quote', 'other_information', 'background', 'personal_history', 'detailed_description',
+            'technology_profile', 'interaction_preferences', 'technology_usage', 'digital_literacy',
+            'behaviors_and_preferences', 'goals_and_motivations', 'pain_points_and_frustrations',
+            'background_and_personal_history', 'technology_usage_and_digital_literacy',
+            'needs_and_interaction_with_product_service', 'interaction_with_product_service'
+        }
+        
+        # Normalize both original and expanded to nested structure first
+        original_normalized = normalize_persona_to_nested(persona.persona_data)
+        expanded_normalized = normalize_persona_to_nested(expanded_data)
+        
+        # Strict merge: Only keep fields that exist in the original, remove any new fields
+        # Preserve demographic fields exactly, only expand behavioral fields
+        def strict_deep_merge(original: dict, expanded: dict) -> dict:
+            """Strict deep merge: Preserve demographics exactly, only expand behavioral fields."""
+            result = original.copy()
+            
+            # First, identify all keys in original to detect structure changes
+            original_keys = set(original.keys())
+            expanded_keys = set(expanded.keys())
+            
+            # Log any new fields that were added
+            new_fields = expanded_keys - original_keys
+            if new_fields:
+                logger.warning(f"Expansion added new fields {new_fields} which don't exist in original. These will be ignored.")
+            
+            for key in original_keys:
+                # If key doesn't exist in expanded, keep original (shouldn't happen, but be safe)
+                if key not in expanded:
+                    result[key] = original[key]
+                    continue
+                
+                value = expanded[key]
+                
+                # CRITICAL: Demographic fields must remain EXACTLY as they are
+                if key in DEMOGRAPHIC_FIELDS:
+                    # Keep original value for demographic fields - do NOT change them
+                    logger.debug(f"Preserving demographic field '{key}' exactly as original")
+                    result[key] = original[key]  # Use original, ignore expanded
+                    continue
+                
+                # Check if it's a nested demographics object - preserve it entirely
+                if key == 'demographics' and isinstance(original.get(key), dict):
+                    # Preserve entire demographics object exactly - do not merge
+                    logger.debug(f"Preserving demographics object exactly as original")
+                    result[key] = original[key]
+                    continue
+                
+                # CRITICAL: Preserve structure - if original is flat, don't allow nested
+                # If original has flat demographics, don't allow nested demographics object
+                if key == 'demographics' and not isinstance(original.get(key), dict) and isinstance(value, dict):
+                    logger.warning(f"Expansion tried to add nested 'demographics' object but original has flat structure. Preserving original structure.")
+                    # Don't add nested structure if original was flat
+                    continue
+                
+                # For expandable fields, allow expansion
+                if key in EXPANDABLE_FIELDS:
+                    if isinstance(result[key], dict) and isinstance(value, dict):
+                        # Recursively merge nested dictionaries for behavioral fields
+                        result[key] = strict_deep_merge(result[key], value)
+                    elif isinstance(result[key], list) and isinstance(value, list):
+                        # For arrays, prefer expanded version if it has more content
+                        result[key] = value if len(value) > len(result[key]) else result[key]
+                    else:
+                        # Use expanded value for behavioral fields
+                        if value is not None and value != "":
+                            result[key] = value
+                else:
+                    # For unknown fields, preserve original to be safe
+                    # This includes fields like 'social_media_usage', 'role' which are descriptive
+                    logger.debug(f"Preserving field '{key}' as original (not in expandable list)")
+                    result[key] = original[key]
+            
+            return result
+        
+        # Strict merge: Only expand existing fields, remove any new fields
+        merged_data = strict_deep_merge(original_normalized, expanded_normalized)
+        
+        # Final validation: Ensure structure matches original
+        # If original had flat structure, ensure merged doesn't have nested demographics
+        original_has_flat_demographics = all(
+            key in persona.persona_data for key in ['age', 'gender', 'occupation']
+        ) and 'demographics' not in persona.persona_data
+        
+        if original_has_flat_demographics and 'demographics' in merged_data:
+            logger.warning("Expansion tried to add nested 'demographics' but original has flat structure. Removing nested structure.")
+            # Remove nested demographics and keep flat structure
+            if isinstance(merged_data['demographics'], dict):
+                # Extract flat fields from nested demographics if they exist
+                nested_demo = merged_data.pop('demographics')
+                # But don't add them back - keep original flat structure
+                logger.info("Removed nested demographics structure to preserve original flat structure")
+        
+        # Update persona with merged data
+        persona.persona_data = merged_data
         
         # Update persona set status if all personas are expanded
         persona_set = persona.persona_set

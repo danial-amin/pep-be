@@ -62,6 +62,16 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            await conn.execute(text("""
+                DO $$ 
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='documents' AND column_name='project_id') THEN
+                        ALTER TABLE documents ADD COLUMN project_id VARCHAR(255);
+                        CREATE INDEX IF NOT EXISTS ix_documents_project_id ON documents(project_id);
+                    END IF;
+                END $$;
+            """))
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)

@@ -1,9 +1,10 @@
 """
 Persona generation and management endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
+from pathlib import Path
 
 from app.core.database import get_db
 from app.schemas.persona import (
@@ -69,7 +70,7 @@ async def generate_persona_set(
         )
 
 
-@router.post("/{persona_set_id}/expand", response_model=List[PersonaExpandResponse])
+@router.post("/{persona_set_id}/expand", response_model=List[PersonaResponse])
 async def expand_personas(
     persona_set_id: int,
     db: AsyncSession = Depends(get_db)
@@ -97,11 +98,20 @@ async def expand_personas(
         expanded_personas = []
         for persona in persona_set.personas:
             expanded = await PersonaService.expand_persona(db, persona.id)
+            # Return full PersonaResponse instead of just PersonaExpandResponse
+            # This ensures image_url and image_prompt are included
             expanded_personas.append(
-                PersonaExpandResponse(
-                    persona_id=expanded.id,
+                PersonaResponse(
+                    id=expanded.id,
+                    persona_set_id=expanded.persona_set_id,
+                    name=expanded.name,
                     persona_data=expanded.persona_data,
-                    status="expanded"
+                    image_url=expanded.image_url,
+                    image_prompt=expanded.image_prompt,
+                    similarity_score=expanded.similarity_score,
+                    validation_status=expanded.validation_status,
+                    created_at=expanded.created_at,
+                    updated_at=expanded.updated_at
                 )
             )
         
@@ -228,8 +238,17 @@ async def save_persona_set(
 async def get_all_persona_sets(
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all saved persona sets."""
+    """
+    Get all saved persona sets.
+    
+    Returns all persona sets in the database, including:
+    - Generated persona sets
+    - Loaded default persona sets (from JSON files)
+    - Each set appears as a separate, distinct entry with its own ID, name, and personas
+    """
     persona_sets = await PersonaService.get_all_persona_sets(db)
+    # Sort by created_at (newest first) so recently loaded sets appear first
+    persona_sets.sort(key=lambda x: x.created_at if x.created_at else x.id, reverse=True)
     return [PersonaSetResponse.model_validate(ps) for ps in persona_sets]
 
 
@@ -273,47 +292,221 @@ async def get_persona(
 
 @router.post("/load-default-personas", response_model=PersonaSetResponse)
 async def load_default_personas(
+    set_name: str = Query(None, description="Name of the persona set to load (e.g., 'finland', 'CB')"),
+    file_path: str = Query(None, description="Specific file path to load from"),
+    persona_set_name: str = Query(None, description="Custom name for the persona set in the database"),
+    overwrite: bool = Query(False, description="If True, overwrite existing persona set with same name"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Load default personas from JSON file into a new persona set."""
-    from app.utils.load_default_personas import load_default_personas, convert_persona_to_db_format
+    """
+    Load default personas from JSON file into a persona set.
+    
+    Args:
+        set_name: Optional name of the persona set to load (e.g., "set1", "set2").
+                  Looks for files like "default_personas_set1.json"
+        file_path: Optional specific file path to load from
+        persona_set_name: Optional custom name for the persona set in the database.
+                         If not provided, uses metadata from JSON or generates a name.
+        overwrite: If True and a persona set with the same name exists, overwrite it.
+                  If False (default), returns existing set if found.
+    """
+    from app.utils.load_default_personas import load_default_personas, convert_persona_to_db_format, list_available_persona_sets
     from app.models.persona import PersonaSet, Persona
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     
     try:
-        # Check if default persona set already exists (handle multiple results)
+        # Load personas from JSON
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Loading personas with set_name={set_name}, file_path={file_path}")
+        
+        # If no set_name provided, try to load all available sets
+        if not set_name and not file_path:
+            available_sets = list_available_persona_sets()
+            if not available_sets:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No persona set files found. Please specify a set_name or file_path."
+                )
+            
+            # Load all available sets
+            loaded_sets = []
+            for available_set in available_sets:
+                try:
+                    set_name_to_load = available_set['name']
+                    logger.info(f"Loading persona set: {set_name_to_load}")
+                    
+                    default_data = load_default_personas(set_name=set_name_to_load)
+                    personas_data = default_data.get("personas", [])
+                    
+                    if not personas_data:
+                        logger.warning(f"No personas found in set '{set_name_to_load}', skipping")
+                        continue
+                    
+                    # Determine persona set name
+                    if persona_set_name and len(available_sets) == 1:
+                        final_set_name = persona_set_name
+                    else:
+                        metadata_name = default_data.get("metadata", {}).get("name")
+                        if metadata_name:
+                            final_set_name = metadata_name
+                        elif set_name_to_load and set_name_to_load != "default":
+                            final_set_name = f"{set_name_to_load.replace('_', ' ').title()} Persona Set"
+                        else:
+                            final_set_name = "Default Persona Set"
+                    
+                    # Build description
+                    base_description = default_data.get("metadata", {}).get("context", "")
+                    source_info = [f"Loaded from set: {set_name_to_load}"]
+                    source_text = " | ".join(source_info)
+                    final_description = f"{base_description} ({source_text})" if base_description else source_text
+                    
+                    # Check if persona set already exists
+                    result = await db.execute(
+                        select(PersonaSet)
+                        .where(PersonaSet.name == final_set_name)
+                        .limit(1)
+                        .options(selectinload(PersonaSet.personas))
+                    )
+                    existing_set = result.scalar_one_or_none()
+                    
+                    if existing_set:
+                        if overwrite:
+                            # Delete existing personas
+                            for persona in existing_set.personas:
+                                await db.delete(persona)
+                            await db.flush()
+                            existing_set.description = final_description
+                            persona_set = existing_set
+                        else:
+                            # Return existing set
+                            loaded_sets.append(PersonaSetResponse.model_validate(existing_set))
+                            continue
+                    else:
+                        # Create new persona set
+                        persona_set = PersonaSet(
+                            name=final_set_name,
+                            description=final_description,
+                            status="generated",
+                            generation_cycle=1
+                        )
+                        db.add(persona_set)
+                        await db.flush()
+                    
+                    # Create personas
+                    for persona_data in personas_data:
+                        db_persona_data = convert_persona_to_db_format(persona_data)
+                        persona = Persona(
+                            persona_set_id=persona_set.id,
+                            name=db_persona_data["name"],
+                            persona_data=db_persona_data
+                        )
+                        db.add(persona)
+                    
+                    await db.flush()
+                    
+                    # Reload with relationships
+                    result = await db.execute(
+                        select(PersonaSet)
+                        .where(PersonaSet.id == persona_set.id)
+                        .options(selectinload(PersonaSet.personas))
+                    )
+                    persona_set = result.scalar_one()
+                    loaded_sets.append(PersonaSetResponse.model_validate(persona_set))
+                    
+                except Exception as e:
+                    logger.warning(f"Error loading set '{available_set['name']}': {e}", exc_info=True)
+                    continue
+            
+            await db.commit()
+            
+            if not loaded_sets:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Could not load any persona sets. Available sets: {[s['name'] for s in available_sets]}"
+                )
+            
+            # Return the first loaded set (or last if multiple)
+            logger.info(f"Successfully loaded {len(loaded_sets)} persona set(s)")
+            return loaded_sets[-1]  # Return the last loaded set
+        
+        # Single set loading (when set_name or file_path is provided)
+        default_data = load_default_personas(file_path=file_path, set_name=set_name)
+        personas_data = default_data.get("personas", [])
+        
+        logger.info(f"Loaded data keys: {list(default_data.keys())}, personas count: {len(personas_data)}")
+        
+        if not personas_data:
+            available_sets = list_available_persona_sets()
+            logger.warning(f"No personas found in loaded data. Available sets: {[s['name'] for s in available_sets]}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No personas found in set '{set_name or 'default'}'. Available sets: {[s['name'] for s in available_sets]}. Make sure the JSON file has a 'personas' array with persona objects."
+            )
+        
+        # Determine persona set name - make it clear this is a distinct set
+        if persona_set_name:
+            final_set_name = persona_set_name
+        else:
+            # Use metadata name, or set_name, or default
+            metadata_name = default_data.get("metadata", {}).get("name")
+            if metadata_name:
+                final_set_name = metadata_name
+            elif set_name and set_name != "default":
+                # Make it clear this is a separate set (e.g., "Set 1", "Research Set")
+                final_set_name = f"{set_name.replace('_', ' ').title()} Persona Set"
+            else:
+                final_set_name = "Default Persona Set"
+        
+        # Build description with source information
+        base_description = default_data.get("metadata", {}).get("context", "")
+        source_info = []
+        if set_name:
+            source_info.append(f"Loaded from set: {set_name}")
+        if file_path:
+            source_info.append(f"File: {Path(file_path).name}")
+        if source_info:
+            source_text = " | ".join(source_info)
+            final_description = f"{base_description} ({source_text})" if base_description else source_text
+        else:
+            final_description = base_description or "Default personas loaded from JSON"
+        
+        # Check if persona set with this name already exists
         result = await db.execute(
             select(PersonaSet)
-            .where(PersonaSet.name == "Default Persona Set")
+            .where(PersonaSet.name == final_set_name)
             .limit(1)
             .options(selectinload(PersonaSet.personas))
         )
         existing_set = result.scalar_one_or_none()
         
         if existing_set:
-            # Return existing set with relationships already loaded
-            return PersonaSetResponse.model_validate(existing_set)
+            if overwrite:
+                # Delete existing personas
+                for persona in existing_set.personas:
+                    await db.delete(persona)
+                await db.flush()
+                # Update set metadata
+                existing_set.description = default_data.get("metadata", {}).get("context", f"Personas loaded from {set_name or 'default'}")
+            else:
+                # Return existing set
+                return PersonaSetResponse.model_validate(existing_set)
         
-        # Load personas from JSON
-        default_data = load_default_personas()
-        personas_data = default_data.get("personas", [])
-        
-        if not personas_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No default personas found in JSON file"
+        # Create or update persona set
+        if existing_set and overwrite:
+            persona_set = existing_set
+            persona_set.name = final_set_name  # Update name in case it changed
+            persona_set.description = final_description
+        else:
+            persona_set = PersonaSet(
+                name=final_set_name,
+                description=final_description,
+                status="generated",
+                generation_cycle=1
             )
-        
-        # Create persona set
-        persona_set = PersonaSet(
-            name="Default Persona Set",
-            description=default_data.get("metadata", {}).get("context", "Default personas loaded from JSON"),
-            status="generated",
-            generation_cycle=1
-        )
-        db.add(persona_set)
-        await db.flush()
+            db.add(persona_set)
+            await db.flush()
         
         # Create personas
         for persona_data in personas_data:
@@ -347,6 +540,24 @@ async def load_default_personas(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error loading default personas: {str(e)}"
+        )
+
+
+@router.get("/available-persona-sets")
+async def get_available_persona_sets():
+    """Get list of available persona set files that can be loaded."""
+    from app.utils.load_default_personas import list_available_persona_sets
+    
+    try:
+        sets = list_available_persona_sets()
+        return {
+            "available_sets": sets,
+            "count": len(sets)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error listing available persona sets: {str(e)}"
         )
 
 
@@ -450,5 +661,33 @@ async def download_personas_json(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error downloading personas: {str(e)}"
+        )
+
+
+@router.post("/migrate-to-nested")
+async def migrate_personas_to_nested(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Migrate all personas in the database to the standard nested structure.
+    
+    This endpoint normalizes all existing personas to use the nested structure
+    with a demographics object and arrays for goals/frustrations.
+    """
+    from app.utils.migrate_personas_to_nested import migrate_all_personas_to_nested
+    
+    try:
+        migrated_count = await migrate_all_personas_to_nested()
+        return {
+            "message": f"Migration completed successfully",
+            "personas_migrated": migrated_count
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error during migration: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error migrating personas: {str(e)}"
         )
 

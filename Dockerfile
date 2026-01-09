@@ -16,8 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY ./app /app/app
 
-# Copy default personas JSON file
-COPY default_personas.json /app/default_personas.json
+# Copy default personas directory (supports multiple persona set files)
+# This handles the directory structure: default_personas/*.json
+COPY default_personas/ /app/default_personas/
 
 # Copy Alembic configuration and migrations
 COPY alembic.ini /app/alembic.ini

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
+import html2canvas from 'html2canvas';
 
 export default function PersonaDetailPage() {
   const { setId, personaId } = useParams<{ setId: string; personaId?: string }>();
@@ -13,6 +14,8 @@ export default function PersonaDetailPage() {
   const [loading, setLoading] = useState(true);
   const [generatingImages, setGeneratingImages] = useState<number[]>([]);
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
+  const [downloadingProfile, setDownloadingProfile] = useState(false);
+  const profileCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadPersonaSet();
@@ -105,6 +108,110 @@ export default function PersonaDetailPage() {
     linkElement.click();
   };
 
+  const preloadImages = (element: HTMLElement): Promise<void> => {
+    return new Promise((resolve) => {
+      const images = element.querySelectorAll('img');
+      if (images.length === 0) {
+        resolve();
+        return;
+      }
+      
+      let loaded = 0;
+      const total = images.length;
+      
+      const checkComplete = () => {
+        loaded++;
+        if (loaded === total) {
+          resolve();
+        }
+      };
+      
+      images.forEach((img) => {
+        if (img.complete) {
+          checkComplete();
+        } else {
+          img.onload = checkComplete;
+          img.onerror = checkComplete; // Continue even if image fails
+          // Force reload if src is set
+          if (img.src) {
+            const src = img.src;
+            img.src = '';
+            img.src = src;
+          }
+        }
+      });
+      
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        resolve();
+      }, 5000);
+    });
+  };
+
+  const handleDownloadProfileImage = async () => {
+    if (!profileCardRef.current || downloadingProfile) return;
+    
+    const currentPersona = personaSet?.personas[currentIndex];
+    if (!currentPersona) return;
+    
+    setDownloadingProfile(true);
+    try {
+      // Preload all images in the profile card
+      await preloadImages(profileCardRef.current);
+      
+      // Wait a bit more to ensure rendering is complete
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Capture the profile card with improved settings
+      const canvas = await html2canvas(profileCardRef.current, {
+        backgroundColor: '#667eea', // Match the gradient background start color
+        scale: 3, // Higher quality for better image rendering
+        useCORS: true, // Allow cross-origin images
+        allowTaint: true, // Allow tainted canvas for better image rendering
+        logging: false,
+        width: profileCardRef.current.scrollWidth,
+        height: profileCardRef.current.scrollHeight,
+        windowWidth: profileCardRef.current.scrollWidth,
+        windowHeight: profileCardRef.current.scrollHeight,
+        // Better image rendering
+        imageTimeout: 15000, // Wait up to 15 seconds for images
+        removeContainer: false,
+        // Capture all CSS including gradients
+        foreignObjectRendering: false, // Disable for better compatibility
+        // Better text rendering
+        letterRendering: true,
+        // Capture scrollable content
+        scrollX: 0,
+        scrollY: 0,
+        // Better quality
+        pixelRatio: window.devicePixelRatio || 2,
+      });
+      
+      // Convert to blob and download
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          console.error('Failed to create blob');
+          setDownloadingProfile(false);
+          return;
+        }
+        
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const personaName = currentPersona.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        link.download = `${personaName}_profile.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setDownloadingProfile(false);
+      }, 'image/png', 1.0); // Maximum quality
+    } catch (error) {
+      console.error('Error capturing profile image:', error);
+      setDownloadingProfile(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -123,6 +230,18 @@ export default function PersonaDetailPage() {
 
   const currentPersona = personaSet.personas[currentIndex];
   const personaData = currentPersona.persona_data || {};
+
+  // Helper function to get field value from nested structure
+  const getField = (fieldName: string, fallback?: string) => {
+    // All personas now use nested structure with demographics object
+    if (fieldName === 'age' || fieldName === 'gender' || fieldName === 'occupation' || 
+        fieldName === 'location' || fieldName === 'education' || fieldName === 'nationality' ||
+        fieldName === 'income_bracket' || fieldName === 'relationship_status') {
+      return personaData.demographics?.[fieldName] || fallback;
+    }
+    // Top-level fields
+    return personaData[fieldName] || fallback;
+  };
 
   // Helper function to render key-value pairs
   const renderSection = (title: string, icon: React.ReactNode, data: any, isArray = false) => {
@@ -180,6 +299,14 @@ export default function PersonaDetailPage() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <button
+              onClick={handleDownloadProfileImage}
+              disabled={downloadingProfile}
+              className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ImageIcon className="h-4 w-4" />
+              <span>{downloadingProfile ? 'Generating...' : 'Download Profile Image'}</span>
+            </button>
             <button
               onClick={handleDownload}
               className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors flex items-center space-x-2"
@@ -248,7 +375,7 @@ export default function PersonaDetailPage() {
       </div>
 
       {/* Expanded Persona Card */}
-      <div className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue max-w-7xl mx-auto">
+      <div ref={profileCardRef} className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue max-w-7xl mx-auto">
         {/* Header with Image, Demographics, Quote and Overview */}
         <div className="flex gap-6 mb-4 pb-4 border-b border-white/20">
           {/* Left: Image and Demographics */}
@@ -286,38 +413,61 @@ export default function PersonaDetailPage() {
             {/* Demographics - Four Rows */}
             <div className="flex flex-col justify-center space-y-2 min-w-[200px]">
               <h4 className="text-2xl font-bold text-white mb-2">{personaData.name || currentPersona.name}</h4>
-              {(personaData.age || personaData.demographics?.age) && (
+              {(getField('age')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Age:</strong> {personaData.age || personaData.demographics?.age}</span>
+                  <span><strong>Age:</strong> {getField('age')}</span>
                 </div>
               )}
-              {(personaData.location || personaData.demographics?.location) && (
+              {(getField('location') || getField('nationality')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <MapPin className="h-4 w-4 text-white/70" />
                   <span className="truncate">
                     <strong>Location:</strong> {
-                      typeof (personaData.location || personaData.demographics?.location) === 'string' 
-                        ? (personaData.location || personaData.demographics?.location)
-                        : (personaData.demographics?.location && typeof personaData.demographics.location === 'object' && 'city' in personaData.demographics.location && 'country' in personaData.demographics.location
-                          ? `${personaData.demographics.location.city}, ${personaData.demographics.location.country}`
-                          : (personaData.location && typeof personaData.location === 'object' && 'city' in personaData.location && 'country' in personaData.location
-                            ? `${(personaData.location as any).city}, ${(personaData.location as any).country}`
-                            : JSON.stringify(personaData.location || personaData.demographics?.location)))
+                      (() => {
+                        const location = getField('location');
+                        const nationality = getField('nationality');
+                        if (typeof location === 'string') {
+                          return location;
+                        } else if (location && typeof location === 'object' && 'city' in location && 'country' in location) {
+                          return `${location.city}, ${location.country}`;
+                        } else if (nationality) {
+                          return nationality;
+                        }
+                        return location ? JSON.stringify(location) : '';
+                      })()
                     }
                   </span>
                 </div>
               )}
-              {(personaData.occupation || personaData.demographics?.occupation) && (
+              {(getField('occupation')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <Briefcase className="h-4 w-4 text-white/70" />
-                  <span className="truncate"><strong>Occupation:</strong> {personaData.occupation || personaData.demographics?.occupation}</span>
+                  <span className="truncate"><strong>Occupation:</strong> {getField('occupation')}</span>
                 </div>
               )}
-              {(personaData.gender || personaData.demographics?.gender) && (
+              {(getField('gender')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Gender:</strong> {personaData.gender || personaData.demographics?.gender}</span>
+                  <span><strong>Gender:</strong> {getField('gender')}</span>
+                </div>
+              )}
+              {(getField('nationality') && !getField('location')) && (
+                <div className="flex items-center space-x-2 text-sm text-white/90">
+                  <MapPin className="h-4 w-4 text-white/70" />
+                  <span><strong>Nationality:</strong> {getField('nationality')}</span>
+                </div>
+              )}
+              {(getField('education_level')) && (
+                <div className="flex items-center space-x-2 text-sm text-white/90">
+                  <User className="h-4 w-4 text-white/70" />
+                  <span><strong>Education:</strong> {getField('education_level')}</span>
+                </div>
+              )}
+              {(getField('income_bracket')) && (
+                <div className="flex items-center space-x-2 text-sm text-white/90">
+                  <User className="h-4 w-4 text-white/70" />
+                  <span><strong>Income:</strong> {getField('income_bracket')}</span>
                 </div>
               )}
             </div>
@@ -325,18 +475,28 @@ export default function PersonaDetailPage() {
 
           {/* Right: Quote and Overview */}
           <div className="flex-1 space-y-3">
-            {personaData.quote && (
+            {(personaData.quote || personaData.quotes) && (
               <div className="p-3 bg-white/10 rounded-lg border-l-4 border-purple-400">
                 <div className="flex items-start space-x-2">
                   <Quote className="h-4 w-4 text-purple-300 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-white/90 italic leading-relaxed">"{personaData.quote}"</p>
+                  <div className="text-sm text-white/90 italic leading-relaxed">
+                    {Array.isArray(personaData.quotes) ? (
+                      <ul className="list-disc list-inside space-y-1">
+                        {personaData.quotes.map((q: string, idx: number) => (
+                          <li key={idx}>"{q}"</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>"{personaData.quote}"</p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
-            {(personaData.basic_description || personaData.tagline) && (
+            {(personaData.basic_description || personaData.tagline || personaData.role) && (
               <div>
                 <h5 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Overview</h5>
-                <p className="text-sm text-white/90 leading-relaxed">{personaData.basic_description || personaData.tagline}</p>
+                <p className="text-sm text-white/90 leading-relaxed">{personaData.basic_description || personaData.tagline || personaData.role}</p>
               </div>
             )}
           </div>
@@ -349,7 +509,7 @@ export default function PersonaDetailPage() {
             {renderSection(
               'Background',
               <User className="h-3 w-3 text-white/70" />,
-              personaData.background || personaData.detailed_description || personaData.personal_background
+              personaData.background || personaData.other_information
             )}
           </div>
 
@@ -418,17 +578,23 @@ export default function PersonaDetailPage() {
             {renderSection(
               'Goals',
               <Target className="h-3 w-3 text-white/70" />,
-              personaData.goals,
+              // All personas now use arrays for goals
+              Array.isArray(personaData.goals) ? personaData.goals : null,
               true
             )}
           </div>
 
-          {/* Bottom Right: Frustrations */}
+          {/* Bottom Right: Frustrations / Motivations */}
           <div>
             {renderSection(
-              'Frustrations',
+              personaData.frustrations && personaData.frustrations.length > 0 ? 'Frustrations' : 'Motivations',
               <AlertCircle className="h-3 w-3 text-white/70" />,
-              personaData.frustrations,
+              // All personas now use arrays
+              Array.isArray(personaData.frustrations) && personaData.frustrations.length > 0
+                ? personaData.frustrations
+                : Array.isArray(personaData.motivations) && personaData.motivations.length > 0
+                  ? personaData.motivations
+                  : null,
               true
             )}
           </div>
