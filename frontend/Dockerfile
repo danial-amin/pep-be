@@ -45,6 +45,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
-# No entrypoint script - nginx starts immediately
-# Railway will use default nginx:alpine CMD
+# Explicitly start nginx (Railway V2 needs this)
+CMD ["nginx", "-g", "daemon off;"]
 
