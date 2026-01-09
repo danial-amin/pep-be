@@ -7,22 +7,19 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 # Ensure we're building from the frontend directory
 watchPatterns = ["frontend/**"]
-# Build arguments (can also be set as environment variables in Railway dashboard)
-# VITE_API_URL will be used at build time if provided, but runtime config takes precedence
+# Build arguments - set VITE_API_URL as a build-time variable in Railway
+# Railway will pass this as a build argument during the Docker build
+# Set this in Railway dashboard: Settings → Variables → Add Variable
+# Make sure to set it BEFORE building, or trigger a new build after setting it
 
 [deploy]
 # Use root path for healthcheck (simpler, more reliable)
 healthcheckPath = "/"
-# Increased timeout to allow nginx to fully start
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# Environment Variables (set these in Railway dashboard under Settings → Variables)
-# Required:
-#   VITE_API_URL=<your-backend-api-url>/api/v1
-# Example:
-#   VITE_API_URL=https://your-backend-service.up.railway.app/api/v1
-#
-# Note: The frontend uses runtime configuration, so VITE_API_URL is injected
-# when the container starts. You can update it without rebuilding.
+# IMPORTANT: Set VITE_API_URL as a BUILD-TIME variable in Railway
+# Go to: Railway Dashboard → Your Frontend Service → Settings → Variables
+# Add: VITE_API_URL = https://your-backend-service.up.railway.app/api/v1
+# Then trigger a new deployment (Railway will rebuild with this value)

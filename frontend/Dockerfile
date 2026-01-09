@@ -19,28 +19,32 @@ RUN echo "=========================================" && \
     echo "Frontend Build Configuration:" && \
     echo "=========================================" && \
     echo "VITE_API_URL (build-time): ${VITE_API_URL}" && \
-    echo "Note: Runtime config will override this" && \
     echo "========================================="
 
 # Build the application
 RUN npm run build
 
+# Generate config.js at build time (not runtime)
+# Remove trailing slash from API URL
+RUN API_URL=$(echo "${VITE_API_URL}" | sed 's:/*$::') && \
+    echo "// Build-time configuration" > /app/dist/config.js && \
+    echo "window.APP_CONFIG = {" >> /app/dist/config.js && \
+    echo "  VITE_API_URL: '${API_URL}'" >> /app/dist/config.js && \
+    echo "};" >> /app/dist/config.js && \
+    echo "Generated config.js:" && \
+    cat /app/dist/config.js
+
 # Production stage
 FROM nginx:alpine
 
-# Copy built files to nginx
+# Copy built files to nginx (includes config.js)
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy entrypoint script
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
 EXPOSE 80
 
-# Use entrypoint to inject config, then start nginx with default CMD
-ENTRYPOINT ["/docker-entrypoint.sh"]
-# nginx:alpine default CMD starts nginx, but we override with our entrypoint
+# No entrypoint script - nginx starts immediately
+# Railway will use default nginx:alpine CMD
 
