@@ -27,7 +27,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 async def process_document(
     file: UploadFile = File(...),
     document_type: DocumentType = Form(...),
-    project_id: str = Form(None),
+    project_id: int = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -108,19 +108,20 @@ async def process_document(
 
 @router.get("/", response_model=List[DocumentResponse])
 async def get_documents(
+    project_id: int = None,
     document_type: DocumentType = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all documents, optionally filtered by type."""
+    """Get all documents, optionally filtered by project and type."""
     from sqlalchemy import select
     
+    query = select(Document)
+    if project_id:
+        query = query.where(Document.project_id == project_id)
     if document_type:
-        result = await db.execute(
-            select(Document).where(Document.document_type == document_type)
-        )
-    else:
-        result = await db.execute(select(Document))
+        query = query.where(Document.document_type == document_type)
     
+    result = await db.execute(query)
     documents = result.scalars().all()
     return [DocumentResponse.model_validate(doc) for doc in documents]
 

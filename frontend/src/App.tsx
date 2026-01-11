@@ -1,10 +1,13 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { FileText, Users, MessageSquare, BarChart3 } from 'lucide-react';
+import { FileText, Users, MessageSquare, BarChart3, FolderOpen } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
 import PromptsPage from './pages/PromptsPage';
 import ReportsPage from './pages/ReportsPage';
+import ProjectsPage from './pages/ProjectsPage';
+import NewProjectPage from './pages/NewProjectPage';
+import ProjectWorkflowPage from './pages/ProjectWorkflowPage';
 
 function App() {
   return (
@@ -22,6 +25,13 @@ function App() {
                   <span className="ml-2 text-sm text-white/90 font-medium">Persona Generator</span>
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+                  <Link
+                    to="/projects"
+                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105"
+                  >
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                    Projects
+                  </Link>
                   <Link
                     to="/"
                     className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105"
@@ -59,7 +69,11 @@ function App() {
         {/* Main Content */}
         <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           <Routes>
-            <Route path="/" element={<DocumentsPage />} />
+            <Route path="/" element={<ProjectsPage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects/new" element={<NewProjectPage />} />
+            <Route path="/projects/:projectId/workflow" element={<ProjectWorkflowPage />} />
+            <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/personas" element={<PersonasPage />} />
             <Route path="/personas/:setId" element={<PersonaDetailPage />} />
             <Route path="/personas/:setId/:personaId" element={<PersonaDetailPage />} />

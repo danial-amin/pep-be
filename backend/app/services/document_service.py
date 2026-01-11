@@ -26,7 +26,7 @@ class DocumentService:
         filename: str,
         document_type: DocumentType,
         content: str,
-        project_id: Optional[str] = None
+        project_id: Optional[int] = None
     ) -> Document:
         """Process a document: extract text, process with LLM, create embeddings."""
         
@@ -73,14 +73,20 @@ class DocumentService:
                 overlap_tokens=200
             )
             
-            # Prepare metadata with document_id for filtering and isolation
+            # Prepare metadata with document_id and project_id for filtering and isolation
+            metadata_base = {
+                "document_type": document_type.value,
+                "filename": filename,
+                "document_id": str(document.id),  # Store document_id for filtering
+            }
+            if project_id:
+                metadata_base["project_id"] = str(project_id)  # Store project_id for filtering
+            
             metadatas = [
                 {
-                    "document_type": document_type.value,
-                    "filename": filename,
-                    "document_id": str(document.id),  # Store document_id for filtering
+                    **metadata_base,
                     "chunk_index": i,
-                    "text_content": chunk  # Store chunk content for Pinecone
+                    "text_content": chunks[i]  # Store chunk content for Pinecone
                 }
                 for i in range(len(chunks))
             ]

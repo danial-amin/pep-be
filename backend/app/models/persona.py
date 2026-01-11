@@ -14,6 +14,7 @@ class PersonaSet(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)  # Link to project
     # Metrics and analytics
     rqe_scores = Column(JSON, nullable=True)  # RQE scores over cycles: [{"cycle": 1, "score": 0.85}, ...]
     diversity_score = Column(JSON, nullable=True)  # Diversity metrics
@@ -21,6 +22,7 @@ class PersonaSet(Base):
     generation_cycle = Column(Integer, default=1)  # Current generation cycle
     status = Column(String(50), default="generated")  # generated, expanded, validated
     personas = relationship("Persona", back_populates="persona_set", cascade="all, delete-orphan")
+    project = relationship("Project", back_populates="persona_sets")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

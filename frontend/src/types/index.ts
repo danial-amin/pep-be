@@ -112,3 +112,13 @@ export interface PromptCompleteResponse {
   context_used: number;
 }
 
+export interface Project {
+  id: number;
+  name: string;
+  field_of_study?: string;
+  core_objective?: string;
+  includes_context: boolean;
+  includes_interviews: boolean;
+  created_at: string;
+  updated_at?: string;
+}

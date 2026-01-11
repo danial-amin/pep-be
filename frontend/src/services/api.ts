@@ -21,10 +21,11 @@ const api = axios.create({
 
 // Documents API
 export const documentsApi = {
-  process: async (file: File, documentType: 'context' | 'interview') => {
+  process: async (file: File, documentType: 'context' | 'interview', projectId: number) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('document_type', documentType);
+    formData.append('project_id', projectId.toString());
     
     const response = await api.post('/documents/process', formData, {
       headers: {
@@ -34,8 +35,10 @@ export const documentsApi = {
     return response.data;
   },
 
-  getAll: async (documentType?: 'context' | 'interview') => {
-    const params = documentType ? { document_type: documentType } : {};
+  getAll: async (projectId?: number, documentType?: 'context' | 'interview') => {
+    const params: any = {};
+    if (projectId) params.project_id = projectId;
+    if (documentType) params.document_type = documentType;
     const response = await api.get('/documents/', { params });
     return response.data;
   },
@@ -54,7 +57,8 @@ export const personasApi = {
     interviewTopic?: string,
     userStudyDesign?: string,
     includeEthicalGuardrails: boolean = true,
-    outputFormat: string = 'json'
+    outputFormat: string = 'json',
+    projectId?: number
   ) => {
     const response = await api.post('/personas/generate-set', {
       num_personas: numPersonas,
@@ -63,6 +67,7 @@ export const personasApi = {
       user_study_design: userStudyDesign,
       include_ethical_guardrails: includeEthicalGuardrails,
       output_format: outputFormat,
+      project_id: projectId,
     });
     return response.data;
   },
@@ -144,6 +149,45 @@ export const promptsApi = {
       max_tokens: maxTokens,
     });
     return response.data;
+  },
+};
+
+// Projects API
+export const projectsApi = {
+  create: async (project: {
+    name: string;
+    field_of_study?: string;
+    core_objective?: string;
+    includes_context: boolean;
+    includes_interviews: boolean;
+  }) => {
+    const response = await api.post('/projects/', project);
+    return response.data;
+  },
+
+  getAll: async () => {
+    const response = await api.get('/projects/');
+    return response.data;
+  },
+
+  getById: async (id: number) => {
+    const response = await api.get(`/projects/${id}`);
+    return response.data;
+  },
+
+  update: async (id: number, project: {
+    name?: string;
+    field_of_study?: string;
+    core_objective?: string;
+    includes_context?: boolean;
+    includes_interviews?: boolean;
+  }) => {
+    const response = await api.put(`/projects/${id}`, project);
+    return response.data;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/projects/${id}`);
   },
 };
 

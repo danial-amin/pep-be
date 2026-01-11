@@ -29,7 +29,7 @@ class PersonaService:
         include_ethical_guardrails: bool = True,
         output_format: str = "json",
         document_ids: Optional[List[int]] = None,
-        project_id: Optional[str] = None
+        project_id: Optional[int] = None
     ) -> PersonaSet:
         """
         Generate initial persona set with basic demographics using RAG.
@@ -71,12 +71,15 @@ class PersonaService:
         # Process interviews if available
         if interviews:
             # Get interview document IDs for vector DB filtering
-            interview_doc_ids = [str(doc.id) for doc in interviews] if document_ids or project_id else None
+            interview_doc_ids = [str(doc.id) for doc in interviews] if (document_ids or project_id) else None
             
             # Use RAG to retrieve relevant chunks for persona generation
             interview_query_text = "user interviews, user research, interview transcripts, user feedback, user needs"
             interview_filter = {"document_type": "interview"}
-            if interview_doc_ids and len(interview_doc_ids) > 0:
+            if project_id:
+                # Filter by project_id for project isolation
+                interview_filter["project_id"] = str(project_id)
+            elif interview_doc_ids and len(interview_doc_ids) > 0:
                 # Filter by document IDs for session isolation
                 if len(interview_doc_ids) == 1:
                     interview_filter["document_id"] = interview_doc_ids[0]
@@ -106,7 +109,10 @@ class PersonaService:
             context_doc_ids = [str(doc.id) for doc in contexts] if document_ids or project_id else None
             
             context_filter = {"document_type": "context"}
-            if context_doc_ids and len(context_doc_ids) > 0:
+            if project_id:
+                # Filter by project_id for project isolation
+                context_filter["project_id"] = str(project_id)
+            elif context_doc_ids and len(context_doc_ids) > 0:
                 # Filter by document IDs for session isolation
                 if len(context_doc_ids) == 1:
                     context_filter["document_id"] = context_doc_ids[0]
@@ -153,6 +159,7 @@ class PersonaService:
         persona_set = PersonaSet(
             name=f"Persona Set {len(await PersonaService._get_all_persona_sets(session)) + 1}",
             description=persona_set_data.get("description", "Generated persona set"),
+            project_id=project_id,  # Link to project
             status="generated",
             generation_cycle=1
         )
@@ -234,11 +241,18 @@ class PersonaService:
         # Create a semantic query from persona characteristics
         query = f"{persona_name} {persona_occupation} {persona_description} demographics psychographics behaviors goals challenges"
         
+        # Get persona set to check for project_id
+        persona_set = persona.persona_set
+        
         # Use RAG to retrieve relevant context chunks
+        context_filter = {"document_type": "context"}
+        if persona_set and persona_set.project_id:
+            context_filter["project_id"] = str(persona_set.project_id)
+        
         context_results = await vector_db.query_documents(
             query_texts=[query],
             n_results=8,  # Get top 8 relevant chunks
-            filter_metadata={"document_type": "context"}
+            filter_metadata=context_filter
         )
         
         # Extract document texts from vector DB results
@@ -250,9 +264,10 @@ class PersonaService:
         # Fall back to full documents if no chunks found
         if not context_texts:
             logger.warning("No context chunks found in vector DB, falling back to full documents")
-            context_result = await session.execute(
-                select(Document).where(Document.document_type == DocumentType.CONTEXT)
-            )
+            context_query = select(Document).where(Document.document_type == DocumentType.CONTEXT)
+            if persona_set and persona_set.project_id:
+                context_query = context_query.where(Document.project_id == persona_set.project_id)
+            context_result = await session.execute(context_query)
             contexts = list(context_result.scalars().all())
             context_texts = [context.content for context in contexts]
         

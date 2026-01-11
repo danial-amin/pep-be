@@ -63,9 +63,9 @@ class PersonaSetCreateRequest(BaseModel):
         default=None,
         description="Optional list of document IDs to use for persona generation (for session isolation). If not provided, all documents will be used."
     )
-    project_id: Optional[str] = Field(
+    project_id: Optional[int] = Field(
         default=None,
-        description="Optional project/session ID to filter documents by project (for session isolation). Alternative to document_ids."
+        description="Optional project ID to filter documents by project (for session isolation). Alternative to document_ids."
     )
 
 
