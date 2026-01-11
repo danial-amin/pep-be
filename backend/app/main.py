@@ -62,13 +62,64 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            # Create projects table first (before adding foreign keys)
+            await conn.execute(text("""
+                DO $$ 
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables 
+                                   WHERE table_name='projects') THEN
+                        CREATE TABLE projects (
+                            id SERIAL PRIMARY KEY,
+                            name VARCHAR(255) NOT NULL,
+                            field_of_study VARCHAR(255),
+                            core_objective TEXT,
+                            includes_context BOOLEAN DEFAULT true,
+                            includes_interviews BOOLEAN DEFAULT true,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                            updated_at TIMESTAMP WITH TIME ZONE
+                        );
+                        CREATE INDEX IF NOT EXISTS ix_projects_id ON projects(id);
+                    END IF;
+                END $$;
+            """))
+            # Handle documents.project_id - add if missing, or convert from VARCHAR to INTEGER if exists
+            await conn.execute(text("""
+                DO $$ 
+                DECLARE
+                    col_type text;
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='documents' AND column_name='project_id') THEN
+                        ALTER TABLE documents ADD COLUMN project_id INTEGER;
+                        CREATE INDEX IF NOT EXISTS ix_documents_project_id ON documents(project_id);
+                    ELSE
+                        -- Check if column is VARCHAR and convert to INTEGER
+                        SELECT data_type INTO col_type 
+                        FROM information_schema.columns 
+                        WHERE table_name='documents' AND column_name='project_id';
+                        
+                        IF col_type = 'character varying' THEN
+                            -- Convert VARCHAR to INTEGER (set NULL for non-numeric values first)
+                            UPDATE documents SET project_id = NULL WHERE project_id !~ '^[0-9]+$';
+                            ALTER TABLE documents ALTER COLUMN project_id TYPE INTEGER USING project_id::INTEGER;
+                        END IF;
+                    END IF;
+                END $$;
+            """))
+            # Add project_id to persona_sets if it doesn't exist
             await conn.execute(text("""
                 DO $$ 
                 BEGIN
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                                   WHERE table_name='documents' AND column_name='project_id') THEN
-                        ALTER TABLE documents ADD COLUMN project_id VARCHAR(255);
-                        CREATE INDEX IF NOT EXISTS ix_documents_project_id ON documents(project_id);
+                                   WHERE table_name='persona_sets' AND column_name='project_id') THEN
+                        ALTER TABLE persona_sets ADD COLUMN project_id INTEGER;
+                        CREATE INDEX IF NOT EXISTS ix_persona_sets_project_id ON persona_sets(project_id);
+                        -- Add foreign key constraint (projects table should exist by now)
+                        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='projects') THEN
+                            ALTER TABLE persona_sets 
+                            ADD CONSTRAINT fk_persona_sets_project_id 
+                            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL;
+                        END IF;
                     END IF;
                 END $$;
             """))
