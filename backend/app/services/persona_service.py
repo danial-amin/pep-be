@@ -152,7 +152,8 @@ class PersonaService:
             include_ethical_guardrails=include_ethical_guardrails,
             output_format=output_format,
             has_interviews=has_interviews,
-            has_context=has_context
+            has_context=has_context,
+            project_id=project_id
         )
         
         # Create persona set
@@ -274,9 +275,13 @@ class PersonaService:
         logger.info(f"Using {len(context_texts)} context chunks for persona expansion")
         
         # Expand persona using LLM with retrieved chunks
+        # Get project_id from persona_set if available
+        project_id = persona_set.project_id if persona_set else None
+        
         expanded_data = await llm_service.expand_persona(
             persona_basic=persona.persona_data,
-            context_documents=context_texts
+            context_documents=context_texts,
+            project_id=project_id
         )
         
         # Demographic fields that must NEVER be changed (flat structure)

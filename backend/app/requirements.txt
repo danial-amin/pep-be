@@ -17,6 +17,7 @@ pydantic-settings==2.1.0
 # OpenAI & LLM
 openai
 langchain-openai==0.0.2
+langfuse==2.31.0
 
 # Vector Database
 chromadb==0.4.18
