@@ -18,6 +18,7 @@ export default function DocumentsPage() {
     setLoading(true);
     try {
       const data = await documentsApi.getAll(
+        undefined, // projectId - not used in global documents page
         filter === 'all' ? undefined : filter
       );
       setDocuments(data);
@@ -31,6 +32,8 @@ export default function DocumentsPage() {
   const handleFileUpload = async (file: File, documentType: DocumentType) => {
     setUploading(true);
     try {
+      // Note: Global documents page doesn't have a project context
+      // Documents uploaded here won't be associated with a project
       await documentsApi.process(file, documentType);
       await loadDocuments();
       alert('Document processed successfully!');

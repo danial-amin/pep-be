@@ -21,11 +21,13 @@ const api = axios.create({
 
 // Documents API
 export const documentsApi = {
-  process: async (file: File, documentType: 'context' | 'interview', projectId: number) => {
+  process: async (file: File, documentType: 'context' | 'interview', projectId?: number) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('document_type', documentType);
-    formData.append('project_id', projectId.toString());
+    if (projectId !== undefined) {
+      formData.append('project_id', projectId.toString());
+    }
     
     const response = await api.post('/documents/process', formData, {
       headers: {

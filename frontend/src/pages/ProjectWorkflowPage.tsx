@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Upload, FileText, Users, Sparkles, Image as ImageIcon, BarChart3, CheckCircle, Circle, ArrowLeft } from 'lucide-react';
+import { Upload, FileText, Users, Sparkles, Image as ImageIcon, BarChart3, CheckCircle, ArrowLeft } from 'lucide-react';
 import { projectsApi, documentsApi, personasApi } from '../services/api';
 import { Project, Document, PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
@@ -13,17 +13,13 @@ export default function ProjectWorkflowPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('upload');
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [personaSets, setPersonaSets] = useState<PersonaSet[]>([]);
   const [selectedSet, setSelectedSet] = useState<PersonaSet | null>(null);
-  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   // Persona generation state
   const [numPersonas, setNumPersonas] = useState(3);
   const [contextDetails, setContextDetails] = useState('');
   const [interviewTopic, setInterviewTopic] = useState('');
-  const [userStudyDesign, setUserStudyDesign] = useState('');
-  const [includeEthicalGuardrails, setIncludeEthicalGuardrails] = useState(true);
   const [outputFormat, setOutputFormat] = useState('json');
   const [generating, setGenerating] = useState(false);
   const [expanding, setExpanding] = useState(false);
@@ -50,7 +46,6 @@ export default function ProjectWorkflowPage() {
 
   const loadDocuments = async () => {
     if (!projectId) return;
-    setLoading(true);
     try {
       const data = await documentsApi.getAll(parseInt(projectId));
       setDocuments(data);
@@ -60,8 +55,6 @@ export default function ProjectWorkflowPage() {
       }
     } catch (error) {
       console.error('Failed to load documents:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -71,7 +64,6 @@ export default function ProjectWorkflowPage() {
       const allSets = await personasApi.getAllSets();
       // Filter persona sets for this project (if they have project_id in future)
       // For now, we'll show all sets
-      setPersonaSets(allSets);
       if (allSets.length > 0 && !selectedSet) {
         setSelectedSet(allSets[0]);
       }
@@ -102,8 +94,8 @@ export default function ProjectWorkflowPage() {
         numPersonas,
         contextDetails || undefined,
         interviewTopic || undefined,
-        userStudyDesign || undefined,
-        includeEthicalGuardrails,
+        undefined, // userStudyDesign - not used in simplified workflow
+        true, // includeEthicalGuardrails - default to true
         outputFormat,
         parseInt(projectId)
       );
