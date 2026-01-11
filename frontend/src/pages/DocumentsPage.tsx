@@ -34,11 +34,17 @@ export default function DocumentsPage() {
     try {
       // Note: Global documents page doesn't have a project context
       // Documents uploaded here won't be associated with a project
-      await documentsApi.process(file, documentType);
+      const response = await documentsApi.process(file, documentType);
       await loadDocuments();
-      alert('Document processed successfully!');
+      if (response.vector_id) {
+        alert('Document processed and stored in vector database successfully!');
+      } else {
+        alert('Document saved but vector storage failed. Check backend logs for details.');
+      }
     } catch (error: any) {
-      alert(`Failed to process document: ${error.response?.data?.detail || error.message}`);
+      const errorMsg = error.response?.data?.detail || error.message;
+      alert(`Failed to process document: ${errorMsg}`);
+      console.error('Document processing error:', error);
     } finally {
       setUploading(false);
     }

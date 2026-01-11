@@ -62,6 +62,7 @@ class DocumentService:
         
         # Create embeddings and store in vector DB with document_id in metadata
         vector_ids = []
+        vector_storage_error = None
         try:
             # Use token-aware chunking for better embeddings
             from app.utils.token_utils import chunk_text_by_tokens
@@ -72,6 +73,9 @@ class DocumentService:
                 max_tokens=8000,  # Smaller chunks for embeddings (embedding models handle this well)
                 overlap_tokens=200
             )
+            
+            if not chunks:
+                raise ValueError("No chunks created from document content")
             
             # Prepare metadata with document_id and project_id for filtering and isolation
             metadata_base = {
@@ -92,17 +96,27 @@ class DocumentService:
             ]
             
             # Store in vector DB (Pinecone or ChromaDB will create embeddings)
+            logger.info(f"Storing {len(chunks)} chunks in vector DB for document {document.id}")
             vector_ids = await vector_db.add_documents(
                 documents=chunks,
                 metadatas=metadatas
             )
             
+            if not vector_ids:
+                raise ValueError("No vector IDs returned from vector DB storage")
+            
             # Update document with first vector_id as reference
             document.vector_id = vector_ids[0] if vector_ids else None
             await session.flush()
+            logger.info(f"Successfully stored {len(vector_ids)} chunks in vector DB for document {document.id}")
         except Exception as e:
-            logger.warning(f"Vector DB storage failed for {filename}, continuing without vector storage: {e}")
-            # Continue without vector storage - document will still be saved in database
+            vector_storage_error = str(e)
+            logger.error(f"Vector DB storage failed for {filename}: {e}", exc_info=True)
+            # Store error in document for visibility
+            document.vector_id = None
+            await session.flush()
+            # Re-raise the error so the API can return appropriate response
+            raise ValueError(f"Document saved to database but vector storage failed: {vector_storage_error}")
         
         return document
     

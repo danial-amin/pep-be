@@ -27,10 +27,23 @@ class LLMService:
     
     def __init__(self):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        embedding_model = settings.OPENAI_EMBEDDING_MODEL
+        
+        # Standardize on 1536 dimensions for consistency across all embeddings
+        # If 3-large is specified, use 3-small instead to maintain 1536 dimensions
+        if "3-large" in embedding_model.lower():
+            logger.warning(
+                f"text-embedding-3-large produces 3072 dimensions. "
+                f"Standardizing on text-embedding-3-small (1536 dimensions) for consistency. "
+                f"Set OPENAI_EMBEDDING_MODEL='text-embedding-3-small' to avoid this warning."
+            )
+            embedding_model = "text-embedding-3-small"
+        
         self.embeddings = OpenAIEmbeddings(
-            model=settings.OPENAI_EMBEDDING_MODEL,
+            model=embedding_model,
             openai_api_key=settings.OPENAI_API_KEY
         )
+        logger.info(f"Using embedding model: {embedding_model} (standardized to 1536 dimensions)")
     
     async def create_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Create embeddings for texts."""

@@ -74,23 +74,37 @@ async def process_document(
             )
         
         # Process document
-        document = await DocumentService.process_document(
-            session=db,
-            file_path=str(file_path),
-            filename=file.filename,
-            document_type=document_type,
-            content=content,
-            project_id=project_id
-        )
-        
-        return DocumentProcessResponse(
-            id=document.id,
-            filename=document.filename,
-            document_type=document.document_type,
-            processed=True,
-            vector_id=document.vector_id,
-            created_at=document.created_at
-        )
+        try:
+            document = await DocumentService.process_document(
+                session=db,
+                file_path=str(file_path),
+                filename=file.filename,
+                document_type=document_type,
+                content=content,
+                project_id=project_id
+            )
+            
+            # Check if vector storage was successful
+            if document.vector_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Document saved to database but vector storage failed. Check logs for details."
+                )
+            
+            return DocumentProcessResponse(
+                id=document.id,
+                filename=document.filename,
+                document_type=document.document_type,
+                processed=True,
+                vector_id=document.vector_id,
+                created_at=document.created_at
+            )
+        except ValueError as e:
+            # This catches vector storage failures
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(e)
+            )
     
     except HTTPException:
         raise

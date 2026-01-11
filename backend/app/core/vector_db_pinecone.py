@@ -44,13 +44,27 @@ class PineconeVectorDB:
         if self._index is None:
             index_name = settings.PINECONE_INDEX_NAME
             
+            # Standardize on 1536 dimensions for all embeddings
+            # This ensures consistency regardless of which embedding model is configured
+            expected_dimension = 1536
+            embedding_model = settings.OPENAI_EMBEDDING_MODEL
+            
+            # Log if model would produce different dimensions
+            if "3-large" in embedding_model.lower():
+                logger.info(
+                    f"Embedding model '{embedding_model}' would produce 3072 dimensions, "
+                    f"but standardizing to 1536 for consistency. "
+                    f"LLM service will use text-embedding-3-small instead."
+                )
+            else:
+                logger.info(f"Using standard dimension {expected_dimension} for embedding model {embedding_model}")
+            
             # List existing indexes
             existing_indexes = [idx.name for idx in self.client.list_indexes()]
             
             if index_name not in existing_indexes:
                 # Create index if it doesn't exist
-                # Free tier: 768 dimensions (text-embedding-3-large), pod-based or serverless
-                logger.info(f"Creating Pinecone index: {index_name}")
+                logger.info(f"Creating Pinecone index: {index_name} with dimension {expected_dimension}")
                 
                 # Determine spec based on environment
                 # Free tier uses serverless
@@ -78,11 +92,72 @@ class PineconeVectorDB:
                 
                 self.client.create_index(
                     name=index_name,
-                    dimension=3072,  # text-embedding-3-large dimension
+                    dimension=expected_dimension,
                     metric="cosine",
                     spec=spec
                 )
-                logger.info(f"Index {index_name} created successfully")
+                logger.info(f"Index {index_name} created successfully with dimension {expected_dimension}")
+            else:
+                # Check existing index dimension
+                index_info = self.client.describe_index(index_name)
+                existing_dimension = index_info.dimension
+                
+                if existing_dimension != expected_dimension:
+                    error_msg = (
+                        f"Pinecone index dimension mismatch!\n"
+                        f"  Index '{index_name}' has dimension: {existing_dimension}\n"
+                        f"  Embedding model '{embedding_model}' produces: {expected_dimension} dimensions\n\n"
+                        f"Solutions:\n"
+                        f"  1. Delete the existing index (will lose all vectors):\n"
+                        f"     - Go to Pinecone dashboard and delete index '{index_name}', OR\n"
+                        f"     - Set environment variable AUTO_RECREATE_INDEX=true to auto-delete\n"
+                        f"  2. Change embedding model to match index:\n"
+                        f"     - For 1024 dimensions: No OpenAI model matches (index may be from different service)\n"
+                        f"     - For 1536 dimensions: Set OPENAI_EMBEDDING_MODEL='text-embedding-3-small' or 'text-embedding-ada-002'\n"
+                        f"     - For 3072 dimensions: Keep 'text-embedding-3-large' (current) and recreate index"
+                    )
+                    logger.error(error_msg)
+                    
+                    # Check if auto-recreate is enabled
+                    import os
+                    auto_recreate = os.getenv("AUTO_RECREATE_INDEX", "false").lower() == "true"
+                    
+                    if auto_recreate:
+                        logger.warning(f"Auto-recreating index '{index_name}' due to dimension mismatch...")
+                        try:
+                            self.client.delete_index(index_name)
+                            logger.info(f"Deleted index '{index_name}'")
+                            
+                            # Recreate with correct dimension
+                            if settings.PINECONE_ENVIRONMENT:
+                                if "gcp" in settings.PINECONE_ENVIRONMENT.lower():
+                                    if "starter" in settings.PINECONE_ENVIRONMENT.lower():
+                                        spec = ServerlessSpec(cloud="gcp", region="us-central1")
+                                    else:
+                                        region = settings.PINECONE_ENVIRONMENT.split("-")[0] + "-" + settings.PINECONE_ENVIRONMENT.split("-")[1]
+                                        spec = ServerlessSpec(cloud="gcp", region=region)
+                                elif "aws" in settings.PINECONE_ENVIRONMENT.lower():
+                                    region = "-".join(settings.PINECONE_ENVIRONMENT.split("-")[:-1])
+                                    spec = ServerlessSpec(cloud="aws", region=region)
+                                else:
+                                    spec = ServerlessSpec(cloud="aws", region="us-east-1")
+                            else:
+                                spec = ServerlessSpec(cloud="aws", region="us-east-1")
+                            
+                            self.client.create_index(
+                                name=index_name,
+                                dimension=expected_dimension,
+                                metric="cosine",
+                                spec=spec
+                            )
+                            logger.info(f"Recreated index '{index_name}' with dimension {expected_dimension}")
+                        except Exception as e:
+                            logger.error(f"Failed to auto-recreate index: {e}")
+                            raise ValueError(error_msg)
+                    else:
+                        raise ValueError(error_msg)
+                else:
+                    logger.info(f"Index {index_name} exists with matching dimension {existing_dimension}")
             
             # Connect to index
             self._index = self.client.Index(index_name)

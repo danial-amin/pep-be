@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4-turbo-preview"
-    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"  # 1536 dimensions - consistent and cost-effective
     
     # Image Generation
     IMAGE_GENERATION_SERVICE: str = "openai"
