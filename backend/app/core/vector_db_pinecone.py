@@ -1,5 +1,9 @@
 """
-Pinecone vector database client.
+Pinecone vector database client with Cohere reranking support.
+
+Implements the RAG retrieval pipeline from the PEP paper:
+1. Vector search using Pinecone for initial retrieval
+2. Cohere reranking for improved relevance ordering
 """
 from pinecone import Pinecone, ServerlessSpec
 from app.core.config import settings
@@ -9,6 +13,18 @@ import uuid
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Lazy import of rerank service to avoid circular imports
+_rerank_service = None
+
+
+def get_rerank_service():
+    """Get the rerank service instance (lazy loading)."""
+    global _rerank_service
+    if _rerank_service is None:
+        from app.core.rerank_service import rerank_service
+        _rerank_service = rerank_service
+    return _rerank_service
 
 
 class PineconeVectorDB:
@@ -159,26 +175,34 @@ class PineconeVectorDB:
         query_texts: List[str],
         n_results: int = 5,
         collection_name: str = "persona_documents",
-        filter_metadata: Optional[dict] = None
+        filter_metadata: Optional[dict] = None,
+        use_reranking: bool = True,
+        rerank_query: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Query similar documents from Pinecone.
-        
+        Query similar documents from Pinecone with optional Cohere reranking.
+
+        Implements the two-stage retrieval from PEP paper:
+        1. Vector search for initial candidate retrieval
+        2. Cohere reranking for improved relevance ordering
+
         Args:
             query_texts: List of query texts
-            n_results: Number of results to return
+            n_results: Number of final results to return
             collection_name: Not used (kept for API compatibility)
             filter_metadata: Metadata filter (Pinecone filter format)
-        
+            use_reranking: Whether to apply Cohere reranking (default: True)
+            rerank_query: Optional custom query for reranking (uses query_texts[0] if not provided)
+
         Returns:
-            Dictionary with 'documents' and 'metadatas' keys
+            Dictionary with 'documents', 'metadatas', 'distances', 'ids', and optional 'relevance_scores'
         """
         if not query_texts:
             return {"documents": [], "metadatas": []}
-        
+
         # Generate query embedding (async)
         query_embedding = await llm_service.create_query_embedding(query_texts[0])
-        
+
         # Build filter if provided
         filter_dict = None
         if filter_metadata:
@@ -191,39 +215,84 @@ class PineconeVectorDB:
                 else:
                     # Simple equality filter
                     filter_dict[key] = {"$eq": value}
-        
+
+        # For reranking, fetch more candidates than needed (2-3x)
+        fetch_multiplier = 3 if use_reranking else 1
+        top_k = min(n_results * fetch_multiplier, 100)  # Cap at 100 for API limits
+
         # Query Pinecone
         query_response = self.index.query(
             vector=query_embedding,
-            top_k=n_results,
+            top_k=top_k,
             include_metadata=True,
             filter=filter_dict
         )
-        
-        # Format response to match ChromaDB format
+
+        # Extract initial results
         documents = []
         metadatas = []
         distances = []
         ids = []
-        
+
         for match in query_response.matches:
             # Extract text from metadata
             text = match.metadata.get("text", "")
             documents.append(text)
-            
+
             # Remove text from metadata for response (keep original metadata)
             metadata = {k: v for k, v in match.metadata.items() if k != "text"}
             metadatas.append(metadata)
-            
+
             distances.append(match.score)
             ids.append(match.id)
-        
-        return {
+
+        # Apply Cohere reranking if enabled and available
+        relevance_scores = None
+        if use_reranking and documents:
+            rerank_svc = get_rerank_service()
+            if rerank_svc.is_available:
+                rerank_result = await rerank_svc.rerank_with_metadata(
+                    query=rerank_query or query_texts[0],
+                    documents=documents,
+                    metadatas=metadatas,
+                    top_n=n_results
+                )
+
+                # Use reranked results
+                documents = rerank_result["reranked_documents"]
+                metadatas = rerank_result["reranked_metadatas"]
+                relevance_scores = rerank_result["relevance_scores"]
+
+                # Reorder ids and distances based on reranked indices
+                reranked_indices = rerank_result["reranked_indices"]
+                ids = [ids[i] for i in reranked_indices if i < len(ids)]
+                distances = [distances[i] for i in reranked_indices if i < len(distances)]
+
+                logger.info(f"Applied Cohere reranking. Top relevance: {relevance_scores[0] if relevance_scores else 'N/A'}")
+            else:
+                # Truncate to n_results if reranking not available
+                documents = documents[:n_results]
+                metadatas = metadatas[:n_results]
+                ids = ids[:n_results]
+                distances = distances[:n_results]
+        else:
+            # Truncate to n_results
+            documents = documents[:n_results]
+            metadatas = metadatas[:n_results]
+            ids = ids[:n_results]
+            distances = distances[:n_results]
+
+        result = {
             "documents": [documents],  # ChromaDB format: list of lists
             "metadatas": [metadatas],
             "distances": [distances],
             "ids": [ids]
         }
+
+        if relevance_scores:
+            result["relevance_scores"] = [relevance_scores]
+
+        return result
     
     async def update_document_metadata(
         self,

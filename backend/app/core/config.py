@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4-turbo-preview"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
+
+    # Cohere (for reranking)
+    COHERE_API_KEY: Optional[str] = None
+    COHERE_RERANK_MODEL: str = "rerank-english-v3.0"
+    USE_COHERE_RERANKING: bool = True  # Enable/disable Cohere reranking
     
     # Image Generation
     IMAGE_GENERATION_SERVICE: str = "openai"

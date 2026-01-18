@@ -32,12 +32,19 @@ class PersonaFormat(str, Enum):
 
 
 class PersonaSetCreateRequest(BaseModel):
-    """Request to create a persona set with advanced configuration."""
+    """
+    Request to create a persona set with advanced configuration.
+
+    Follows the PEP paper methodology with:
+    - Iterative generation until RQE threshold is met
+    - Configurable diversity thresholds
+    - Project-level scoping
+    """
     num_personas: int = Field(
-        default=3, 
-        ge=1, 
-        le=10, 
-        description="Number of personas to generate"
+        default=5,
+        ge=1,
+        le=10,
+        description="Number of personas to generate (paper recommends 4-6 for optimal coverage)"
     )
     context_details: Optional[str] = Field(
         default=None,
@@ -68,47 +75,109 @@ class PersonaSetCreateRequest(BaseModel):
         description="Optional project/session ID to filter documents by project (for session isolation). Alternative to document_ids."
     )
 
+    # PEP Paper Parameters - Iterative Generation
+    rqe_threshold: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="Target RQE (diversity) score. Paper recommends >= 0.75 for good diversity. Generation iterates until this threshold is met."
+    )
+    max_iterations: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of generation iterations to attempt if RQE threshold is not met"
+    )
+    auto_iterate: bool = Field(
+        default=True,
+        description="Whether to automatically regenerate if RQE is below threshold. If False, generates once and returns results regardless of RQE."
+    )
+
+    # Validation thresholds
+    cs_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Cosine similarity threshold for attribute validation. Attributes below this are flagged for review."
+    )
+
 
 class PersonaSetResponse(BaseModel):
-    """Persona set response."""
+    """Persona set response with PEP paper metrics."""
     id: int
     name: str
     description: Optional[str] = None
+    project_id: Optional[str] = None
     personas: List["PersonaResponse"] = []
+
+    # Generation configuration
+    generation_config: Optional[Dict[str, Any]] = None
+    rqe_threshold: Optional[float] = None
+    max_iterations: Optional[int] = None
+
+    # Metrics and analytics
     rqe_scores: Optional[List[Dict[str, Any]]] = None
     diversity_score: Optional[Dict[str, Any]] = None
     validation_scores: Optional[List[Dict[str, Any]]] = None
+
+    # Generation tracking
     generation_cycle: Optional[int] = None
     status: Optional[str] = None
+
+    # Timestamps
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
 
 class PersonaResponse(BaseModel):
-    """Persona response."""
+    """Persona response with validation and traceability."""
     id: int
     persona_set_id: int
     name: str
     persona_data: Dict[str, Any]
+
+    # Image generation
     image_url: Optional[str] = None
     image_prompt: Optional[str] = None
+
+    # Source traceability (PEP paper)
+    source_references: Optional[Dict[str, Any]] = None
+
+    # Validation metrics
     similarity_score: Optional[Dict[str, Any]] = None
+    attribute_validation: Optional[Dict[str, Any]] = None
     validation_status: Optional[str] = None
+
+    # Timestamps
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
 
 class PersonaSetGenerateResponse(BaseModel):
-    """Response for persona set generation."""
+    """
+    Response for persona set generation.
+
+    Includes PEP paper metrics from iterative generation.
+    """
     persona_set_id: int
     personas: List[PersonaBasic]
     status: str = "created"
+
+    # Iterative generation metrics
+    generation_cycle: int = 1
+    rqe_score: Optional[float] = None
+    rqe_threshold: Optional[float] = None
+    threshold_met: bool = False
+    iterations_used: int = 1
+
+    # Detailed metrics per iteration
+    iteration_history: Optional[List[Dict[str, Any]]] = None
 
 
 class PersonaExpandResponse(BaseModel):

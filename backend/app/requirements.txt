@@ -20,6 +20,14 @@ langchain-openai==0.0.2
 
 # Vector Database
 chromadb==0.4.18
+pinecone-client==3.0.0
+
+# Reranking (PEP paper methodology)
+cohere==5.0.0
+
+# Analytics
+scikit-learn==1.3.2
+numpy==1.26.2
 
 # File Processing
 aiofiles==23.2.1

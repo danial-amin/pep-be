@@ -22,6 +22,9 @@ langchain-openai==0.0.2
 pinecone-client==3.0.0
 # chromadb==0.4.18  # Optional - kept for backward compatibility
 
+# Reranking (PEP paper methodology)
+cohere==5.0.0
+
 # File Processing
 aiofiles==23.2.1
 aiohttp==3.9.1
