@@ -53,7 +53,7 @@ class IterativeGenerationService:
         include_ethical_guardrails: bool = True,
         output_format: str = "json",
         document_ids: Optional[List[int]] = None,
-        project_id: Optional[str] = None
+        project_id: Optional[int] = None
     ) -> Tuple[PersonaSet, Dict[str, Any]]:
         """
         Generate persona set with iterative refinement until RQE threshold is met.
@@ -232,7 +232,7 @@ class IterativeGenerationService:
     async def _get_documents(
         session: AsyncSession,
         document_ids: Optional[List[int]] = None,
-        project_id: Optional[str] = None
+        project_id: Optional[int] = None
     ) -> Tuple[List[str], List[str]]:
         """Retrieve documents for persona generation using RAG."""
         # Build query filter for documents

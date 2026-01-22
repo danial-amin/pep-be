@@ -107,7 +107,7 @@ class PersonaSetResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
-    project_id: Optional[str] = None
+    project_id: Optional[int] = None
     personas: List["PersonaResponse"] = []
 
     # Generation configuration

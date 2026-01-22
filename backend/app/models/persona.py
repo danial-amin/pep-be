@@ -25,7 +25,7 @@ class PersonaSet(Base):
     description = Column(Text, nullable=True)
 
     # Project scoping - allows multiple projects with separate persona sets
-    project_id = Column(String(255), nullable=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
 
     # Generation configuration - stores user-provided parameters
     # Includes: rqe_threshold, max_iterations, num_personas, output_format, etc.
@@ -46,6 +46,7 @@ class PersonaSet(Base):
 
     # Relationships
     personas = relationship("Persona", back_populates="persona_set", cascade="all, delete-orphan")
+    project = relationship("Project", back_populates="persona_sets")
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())

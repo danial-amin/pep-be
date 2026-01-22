@@ -99,7 +99,7 @@ class ProjectService:
         
         # Delete all documents in the project
         result = await session.execute(
-            select(Document).where(Document.project_id == str(project_id))
+            select(Document).where(Document.project_id == project_id)
         )
         documents = result.scalars().all()
         for doc in documents:
@@ -125,7 +125,7 @@ class ProjectService:
     ) -> List[Document]:
         """Get all documents for a project."""
         result = await session.execute(
-            select(Document).where(Document.project_id == str(project_id))
+            select(Document).where(Document.project_id == project_id)
         )
         return list(result.scalars().all())
     
