@@ -386,7 +386,23 @@ export default function ProjectWorkflowPage() {
                   <div key={persona.id} className="glass-card rounded-xl p-4 pastel-blue">
                     <h4 className="text-lg font-semibold text-white mb-2">{persona.persona_data.name || persona.name}</h4>
                     <p className="text-sm text-white/80 line-clamp-3">
-                      {persona.persona_data.basic_description || persona.persona_data.detailed_description || 'No description'}
+                      {(() => {
+                        const getStringValue = (value: any): string | null => {
+                          if (!value) return null;
+                          if (typeof value === 'string') return value;
+                          if (typeof value === 'object') {
+                            if (Array.isArray(value)) return value.map(String).join(', ');
+                            if ('text' in value || 'description' in value || 'content' in value) {
+                              return String(value.text || value.description || value.content);
+                            }
+                            return JSON.stringify(value);
+                          }
+                          return String(value);
+                        };
+                        return getStringValue(persona.persona_data.basic_description) || 
+                               getStringValue(persona.persona_data.detailed_description) || 
+                               'No description';
+                      })()}
                     </p>
                   </div>
                 ))}

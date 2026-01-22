@@ -227,6 +227,29 @@ export default function PersonaDetailPage() {
   const currentPersona = personaSet.personas[currentIndex];
   const personaData = currentPersona.persona_data || {};
 
+  // Helper function to safely convert any value to string for rendering
+  const safeString = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) {
+      return value.map(item => safeString(item)).join(', ');
+    }
+    if (typeof value === 'object') {
+      // Try to extract meaningful text fields first
+      if ('text' in value && typeof value.text === 'string') return value.text;
+      if ('description' in value && typeof value.description === 'string') return value.description;
+      if ('content' in value && typeof value.content === 'string') return value.content;
+      // Otherwise stringify
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value);
+  };
+
   // Helper function to get field value from nested structure
   const getField = (fieldName: string, fallback?: string) => {
     // All personas now use nested structure with demographics object
@@ -256,13 +279,22 @@ export default function PersonaDetailPage() {
                 <li key={idx}>{typeof item === 'string' ? item : JSON.stringify(item)}</li>
               ))}
             </ul>
-          ) : typeof data === 'object' && data !== null ? (
+          ) : typeof data === 'object' && data !== null && !Array.isArray(data) ? (
             <div className="space-y-2">
               {Object.entries(data).map(([key, value]) => (
                 <div key={key} className="flex">
                   <span className="text-white/70 font-medium min-w-[120px] capitalize">{key.replace(/_/g, ' ')}:</span>
                   <span className="text-white/90 flex-1">
-                    {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                    {(() => {
+                      if (value === null || value === undefined) return String(value || '');
+                      if (typeof value === 'object') {
+                        if (Array.isArray(value)) {
+                          return value.map(String).join(', ');
+                        }
+                        return JSON.stringify(value, null, 2);
+                      }
+                      return String(value);
+                    })()}
                   </span>
                 </div>
               ))}
@@ -523,7 +555,11 @@ export default function PersonaDetailPage() {
             {renderSection(
               'Background',
               <User className="h-3 w-3 text-white/70" />,
-              personaData.background || personaData.other_information
+              (() => {
+                const bg = personaData.background || personaData.other_information;
+                // If it's an object, renderSection will handle it, but ensure it's not null
+                return bg;
+              })()
             )}
           </div>
 
@@ -540,8 +576,10 @@ export default function PersonaDetailPage() {
                     <div>
                       <span className="text-xs text-white/70 font-medium">Devices:</span>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {personaData.technology_profile.primary_devices.map((device: string, idx: number) => (
-                          <span key={idx} className="px-1.5 py-0.5 bg-white/20 rounded text-xs text-white/90">{device}</span>
+                        {personaData.technology_profile.primary_devices.map((device: any, idx: number) => (
+                          <span key={idx} className="px-1.5 py-0.5 bg-white/20 rounded text-xs text-white/90">
+                            {typeof device === 'string' ? device : (typeof device === 'object' ? JSON.stringify(device) : String(device))}
+                          </span>
                         ))}
                       </div>
                     </div>
@@ -549,15 +587,23 @@ export default function PersonaDetailPage() {
                   {personaData.technology_profile.comfort_level && (
                     <div className="text-xs">
                       <span className="text-white/70 font-medium">Level:</span>
-                      <span className="ml-1 text-white/90">{personaData.technology_profile.comfort_level}</span>
+                      <span className="ml-1 text-white/90">
+                        {typeof personaData.technology_profile.comfort_level === 'string' 
+                          ? personaData.technology_profile.comfort_level 
+                          : (typeof personaData.technology_profile.comfort_level === 'object' 
+                            ? JSON.stringify(personaData.technology_profile.comfort_level) 
+                            : String(personaData.technology_profile.comfort_level))}
+                      </span>
                     </div>
                   )}
                   {personaData.technology_profile.software_used && (
                     <div>
                       <span className="text-xs text-white/70 font-medium">Software:</span>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {personaData.technology_profile.software_used.map((software: string, idx: number) => (
-                          <span key={idx} className="px-1.5 py-0.5 bg-white/20 rounded text-xs text-white/90">{software}</span>
+                        {personaData.technology_profile.software_used.map((software: any, idx: number) => (
+                          <span key={idx} className="px-1.5 py-0.5 bg-white/20 rounded text-xs text-white/90">
+                            {typeof software === 'string' ? software : (typeof software === 'object' ? JSON.stringify(software) : String(software))}
+                          </span>
                         ))}
                       </div>
                     </div>
@@ -566,8 +612,10 @@ export default function PersonaDetailPage() {
                     <div>
                       <span className="text-xs text-white/70 font-medium">Preferences:</span>
                       <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-white/90">
-                        {personaData.technology_profile.interaction_preferences.map((pref: string, idx: number) => (
-                          <li key={idx} className="leading-tight">{pref}</li>
+                        {personaData.technology_profile.interaction_preferences.map((pref: any, idx: number) => (
+                          <li key={idx} className="leading-tight">
+                            {typeof pref === 'string' ? pref : (typeof pref === 'object' ? JSON.stringify(pref) : String(pref))}
+                          </li>
                         ))}
                       </ul>
                     </div>
@@ -576,8 +624,10 @@ export default function PersonaDetailPage() {
                     <div>
                       <span className="text-xs text-white/70 font-medium">Accessibility:</span>
                       <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-white/90">
-                        {personaData.technology_profile.accessibility_needs.map((need: string, idx: number) => (
-                          <li key={idx} className="leading-tight">{need}</li>
+                        {personaData.technology_profile.accessibility_needs.map((need: any, idx: number) => (
+                          <li key={idx} className="leading-tight">
+                            {typeof need === 'string' ? need : (typeof need === 'object' ? JSON.stringify(need) : String(need))}
+                          </li>
                         ))}
                       </ul>
                     </div>
