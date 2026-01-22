@@ -1,5 +1,10 @@
 """
 Persona generation and management endpoints.
+
+Implements the PEP paper methodology:
+- Iterative generation with RQE threshold
+- Cohere reranking for improved retrieval
+- Source traceability and validation
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +23,7 @@ from app.schemas.persona import (
 )
 from app.services.persona_service import PersonaService
 from app.services.analytics_service import AnalyticsService
+from app.services.iterative_generation_service import iterative_generation_service
 
 router = APIRouter()
 
@@ -28,15 +34,29 @@ async def generate_persona_set(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Step 1: Generate initial persona set with basic demographics.
-    
-    Creates a persona set based on processed interview documents.
-    Returns basic personas with demographics.
+    Generate persona set with iterative refinement (PEP paper methodology).
+
+    This endpoint implements the full PEP paper generation pipeline:
+    1. Generate initial persona set using RAG with Cohere reranking
+    2. Calculate RQE (Rao's Quadratic Entropy) diversity score
+    3. If RQE < threshold and auto_iterate=True, regenerate with diversity hints
+    4. Iterate until RQE threshold is met or max_iterations reached
+    5. Return personas with comprehensive metrics
+
+    The response includes:
+    - Generated personas with demographics
+    - RQE score and threshold status
+    - Iteration history showing diversity improvement
     """
     try:
-        persona_set = await PersonaService.generate_persona_set(
+        # Use iterative generation service (PEP paper methodology)
+        persona_set, metrics = await iterative_generation_service.generate_persona_set_iterative(
             session=db,
             num_personas=request.num_personas,
+            rqe_threshold=request.rqe_threshold,
+            max_iterations=request.max_iterations,
+            auto_iterate=request.auto_iterate,
+            cs_threshold=request.cs_threshold,
             context_details=request.context_details,
             interview_topic=request.interview_topic,
             user_study_design=request.user_study_design,
@@ -45,25 +65,40 @@ async def generate_persona_set(
             document_ids=request.document_ids,
             project_id=request.project_id
         )
-        
+
         # Convert to response format
-        personas_basic = [
-            PersonaBasic(**persona.persona_data)
-            for persona in persona_set.personas
-        ]
-        
+        personas_basic = []
+        for persona in persona_set.personas:
+            try:
+                personas_basic.append(PersonaBasic(**persona.persona_data))
+            except Exception:
+                # If persona data doesn't match PersonaBasic, create minimal version
+                personas_basic.append(PersonaBasic(
+                    name=persona.name,
+                    basic_description=persona.persona_data.get("background", "")
+                ))
+
         return PersonaSetGenerateResponse(
             persona_set_id=persona_set.id,
             personas=personas_basic,
-            status="created"
+            status="created",
+            generation_cycle=metrics["iterations_used"],
+            rqe_score=metrics["rqe_score"],
+            rqe_threshold=metrics["rqe_threshold"],
+            threshold_met=metrics["threshold_met"],
+            iterations_used=metrics["iterations_used"],
+            iteration_history=metrics["iteration_history"]
         )
-    
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating persona set: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating persona set: {str(e)}"
@@ -597,7 +632,7 @@ async def validate_personas(
 ):
     """
     Step 4: Validate personas against actual interview transcripts.
-    
+
     Calculates cosine similarity between personas and real interview data.
     """
     try:
@@ -612,6 +647,49 @@ async def validate_personas(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error validating personas: {str(e)}"
+        )
+
+
+@router.post("/{persona_set_id}/validate-attributes")
+async def validate_persona_attributes(
+    persona_set_id: int,
+    cs_threshold: float = Query(default=0.8, ge=0.0, le=1.0, description="Cosine similarity threshold (default 0.8 per PEP paper)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Validate persona attributes at the individual attribute level (PEP paper methodology).
+
+    This endpoint implements the reverse RAG validation from the PEP paper:
+    - Each persona attribute (goals, frustrations, behaviors, etc.) is validated
+    - Attributes with CS >= threshold are considered validated
+    - Attributes with CS < threshold are flagged for expert review
+
+    Per the paper:
+    - CS >= 0.8 = corroborated support from transcript data
+    - CS < 0.8 = flagged for expert review or removal
+
+    Returns validation results with:
+    - Per-attribute similarity scores
+    - Flagged attributes that need review
+    - Source traceability (which chunks support each attribute)
+    """
+    try:
+        validation = await AnalyticsService.validate_persona_set_attributes(
+            db, persona_set_id, cs_threshold
+        )
+        return validation
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error validating persona attributes: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error validating persona attributes: {str(e)}"
         )
 
 

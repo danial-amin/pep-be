@@ -29,13 +29,12 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4-turbo-preview"
-    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"  # 1536 dimensions - consistent and cost-effective
-    
-    # Langfuse Observability (optional)
-    LANGFUSE_PUBLIC_KEY: Optional[str] = None
-    LANGFUSE_SECRET_KEY: Optional[str] = None
-    LANGFUSE_HOST: str = "https://cloud.langfuse.com"  # Or self-hosted URL
-    LANGFUSE_ENABLED: bool = True  # Set to False to disable Langfuse
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
+
+    # Cohere (for reranking)
+    COHERE_API_KEY: Optional[str] = None
+    COHERE_RERANK_MODEL: str = "rerank-english-v3.0"
+    USE_COHERE_RERANKING: bool = True  # Enable/disable Cohere reranking
     
     # Image Generation
     IMAGE_GENERATION_SERVICE: str = "openai"
