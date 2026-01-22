@@ -38,12 +38,31 @@ function ExpandedPersonaCard({ persona }: { persona: Persona }) {
       <div className="mb-4">
         <h5 className="text-sm font-semibold text-white uppercase tracking-wide mb-2">Background</h5>
         <p className="text-sm text-white/90 leading-relaxed">
-          {personaData.background || 
-           personaData.detailed_description || 
-           personaData.personal_background || 
-           personaData.background_and_personal_history ||
-           personaData.other_information ||
-           'No background information available.'}
+          {(() => {
+            const getStringValue = (value: any): string | null => {
+              if (!value) return null;
+              if (typeof value === 'string') return value;
+              if (typeof value === 'object') {
+                // If it's an object, try to extract meaningful text or stringify it
+                if (Array.isArray(value)) {
+                  return value.map(String).join(', ');
+                }
+                // For objects, try to find a text field or stringify
+                if ('text' in value || 'description' in value || 'content' in value) {
+                  return String(value.text || value.description || value.content);
+                }
+                return JSON.stringify(value);
+              }
+              return String(value);
+            };
+            
+            return getStringValue(personaData.background) || 
+                   getStringValue(personaData.detailed_description) || 
+                   getStringValue(personaData.personal_background) || 
+                   getStringValue(personaData.background_and_personal_history) ||
+                   getStringValue(personaData.other_information) ||
+                   'No background information available.';
+          })()}
         </p>
       </div>
 

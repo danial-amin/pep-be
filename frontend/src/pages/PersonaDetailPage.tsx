@@ -412,7 +412,7 @@ export default function PersonaDetailPage() {
               {(getField('age')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Age:</strong> {getField('age')}</span>
+                  <span><strong>Age:</strong> {String(getField('age') || '')}</span>
                 </div>
               )}
               {(getField('location') || getField('nationality')) && (
@@ -439,31 +439,31 @@ export default function PersonaDetailPage() {
               {(getField('occupation')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <Briefcase className="h-4 w-4 text-white/70" />
-                  <span className="truncate"><strong>Occupation:</strong> {getField('occupation')}</span>
+                  <span className="truncate"><strong>Occupation:</strong> {String(getField('occupation') || '')}</span>
                 </div>
               )}
               {(getField('gender')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Gender:</strong> {getField('gender')}</span>
+                  <span><strong>Gender:</strong> {String(getField('gender') || '')}</span>
                 </div>
               )}
               {(getField('nationality') && !getField('location')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <MapPin className="h-4 w-4 text-white/70" />
-                  <span><strong>Nationality:</strong> {getField('nationality')}</span>
+                  <span><strong>Nationality:</strong> {String(getField('nationality') || '')}</span>
                 </div>
               )}
               {(getField('education_level')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Education:</strong> {getField('education_level')}</span>
+                  <span><strong>Education:</strong> {String(getField('education_level') || '')}</span>
                 </div>
               )}
               {(getField('income_bracket')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Income:</strong> {getField('income_bracket')}</span>
+                  <span><strong>Income:</strong> {String(getField('income_bracket') || '')}</span>
                 </div>
               )}
             </div>
@@ -478,12 +478,12 @@ export default function PersonaDetailPage() {
                   <div className="text-sm text-white/90 italic leading-relaxed">
                     {Array.isArray(personaData.quotes) ? (
                       <ul className="list-disc list-inside space-y-1">
-                        {personaData.quotes.map((q: string, idx: number) => (
-                          <li key={idx}>"{q}"</li>
+                        {personaData.quotes.map((q: any, idx: number) => (
+                          <li key={idx}>"{typeof q === 'string' ? q : JSON.stringify(q)}"</li>
                         ))}
                       </ul>
                     ) : (
-                      <p>"{personaData.quote}"</p>
+                      <p>"{typeof personaData.quote === 'string' ? personaData.quote : (typeof personaData.quote === 'object' ? JSON.stringify(personaData.quote) : String(personaData.quote || ''))}"</p>
                     )}
                   </div>
                 </div>
@@ -492,7 +492,25 @@ export default function PersonaDetailPage() {
             {(personaData.basic_description || personaData.tagline || personaData.role) && (
               <div>
                 <h5 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Overview</h5>
-                <p className="text-sm text-white/90 leading-relaxed">{personaData.basic_description || personaData.tagline || personaData.role}</p>
+                <p className="text-sm text-white/90 leading-relaxed">
+                  {(() => {
+                    const getStringValue = (value: any): string | null => {
+                      if (!value) return null;
+                      if (typeof value === 'string') return value;
+                      if (typeof value === 'object') {
+                        if (Array.isArray(value)) return value.map(String).join(', ');
+                        if ('text' in value || 'description' in value || 'content' in value) {
+                          return String(value.text || value.description || value.content);
+                        }
+                        return JSON.stringify(value);
+                      }
+                      return String(value);
+                    };
+                    return getStringValue(personaData.basic_description) || 
+                           getStringValue(personaData.tagline) || 
+                           getStringValue(personaData.role) || '';
+                  })()}
+                </p>
               </div>
             )}
           </div>

@@ -432,7 +432,13 @@ export default function ProjectWorkflowPage() {
                     <div>
                       <h4 className="text-lg font-semibold text-white">{persona.persona_data.name || persona.name}</h4>
                       {persona.persona_data.detailed_description && (
-                        <p className="text-sm text-white/80 mt-2">{persona.persona_data.detailed_description}</p>
+                        <p className="text-sm text-white/80 mt-2">
+                          {typeof persona.persona_data.detailed_description === 'string' 
+                            ? persona.persona_data.detailed_description 
+                            : (typeof persona.persona_data.detailed_description === 'object' 
+                              ? JSON.stringify(persona.persona_data.detailed_description) 
+                              : String(persona.persona_data.detailed_description))}
+                        </p>
                       )}
                     </div>
                   </div>

@@ -29,4 +29,4 @@ python-docx==1.1.0
 
 # Utilities
 python-multipart==0.0.6
-
+langfuse
