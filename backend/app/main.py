@@ -28,6 +28,10 @@ async def lifespan(app: FastAPI):
                 DO $$ 
                 BEGIN
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='persona_sets' AND column_name='generation_config') THEN
+                        ALTER TABLE persona_sets ADD COLUMN generation_config JSONB;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                                    WHERE table_name='persona_sets' AND column_name='rqe_scores') THEN
                         ALTER TABLE persona_sets ADD COLUMN rqe_scores JSONB;
                     END IF;
@@ -42,6 +46,14 @@ async def lifespan(app: FastAPI):
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                                    WHERE table_name='persona_sets' AND column_name='generation_cycle') THEN
                         ALTER TABLE persona_sets ADD COLUMN generation_cycle INTEGER DEFAULT 1;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='persona_sets' AND column_name='max_iterations') THEN
+                        ALTER TABLE persona_sets ADD COLUMN max_iterations INTEGER DEFAULT 3;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='persona_sets' AND column_name='rqe_threshold') THEN
+                        ALTER TABLE persona_sets ADD COLUMN rqe_threshold DOUBLE PRECISION DEFAULT 0.75;
                     END IF;
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                                    WHERE table_name='persona_sets' AND column_name='status') THEN
