@@ -226,13 +226,15 @@ class IterativeGenerationService:
         }
 
         await session.flush()
-        await session.refresh(persona_set)
 
-        # Get persona count explicitly
-        personas_count_result = await session.execute(
-            select(Persona).where(Persona.persona_set_id == persona_set.id)
+        # Reload persona_set with personas relationship eagerly loaded
+        # This is required for the endpoint to access persona_set.personas
+        result = await session.execute(
+            select(PersonaSet)
+            .where(PersonaSet.id == persona_set.id)
+            .options(selectinload(PersonaSet.personas))
         )
-        personas_count = len(list(personas_count_result.scalars().all()))
+        persona_set = result.scalar_one()
 
         # Build metrics response
         metrics = {
@@ -242,7 +244,7 @@ class IterativeGenerationService:
             "iterations_used": current_iteration,
             "max_iterations": max_iterations,
             "iteration_history": iteration_history,
-            "num_personas": personas_count
+            "num_personas": len(persona_set.personas)
         }
 
         return persona_set, metrics

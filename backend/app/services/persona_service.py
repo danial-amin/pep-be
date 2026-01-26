@@ -222,12 +222,15 @@ class PersonaService:
     ) -> Persona:
         """
         Expand a basic persona into a full-fledged persona using RAG.
-        
+
         Uses vector database to retrieve relevant context chunks based on
         the persona's characteristics, making it more targeted and efficient.
         """
+        from sqlalchemy.orm import selectinload
         result = await session.execute(
-            select(Persona).where(Persona.id == persona_id)
+            select(Persona)
+            .where(Persona.id == persona_id)
+            .options(selectinload(Persona.persona_set))
         )
         persona = result.scalar_one_or_none()
         
@@ -389,20 +392,26 @@ class PersonaService:
         
         # Update persona with merged data
         persona.persona_data = merged_data
-        
+
         # Update persona set status if all personas are expanded
+        # Use explicit query to avoid lazy loading issues in async context
         persona_set = persona.persona_set
         if persona_set:
+            # Query all personas in the set explicitly
+            all_personas_result = await session.execute(
+                select(Persona).where(Persona.persona_set_id == persona_set.id)
+            )
+            all_personas = list(all_personas_result.scalars().all())
             all_expanded = all(
                 p.persona_data.get("detailed_description") or p.persona_data.get("personal_background")
-                for p in persona_set.personas
+                for p in all_personas
             )
             if all_expanded:
                 persona_set.status = "expanded"
-        
+
         await session.flush()
         await session.refresh(persona)
-        
+
         return persona
     
     @staticmethod
