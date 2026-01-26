@@ -10,6 +10,7 @@ This service implements the core PEP (Persona Engineering Process) algorithm:
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any, Tuple
 import logging
 from datetime import datetime
@@ -150,7 +151,12 @@ class IterativeGenerationService:
 
             # Clear existing personas for this set (if iterating)
             if current_iteration > 1:
-                for persona in persona_set.personas:
+                # Query personas explicitly to avoid lazy loading issues
+                personas_result = await session.execute(
+                    select(Persona).where(Persona.persona_set_id == persona_set.id)
+                )
+                existing_personas = personas_result.scalars().all()
+                for persona in existing_personas:
                     await session.delete(persona)
                 await session.flush()
 
@@ -165,19 +171,26 @@ class IterativeGenerationService:
                 session.add(persona)
 
             await session.flush()
+            # Refresh to get latest state
             await session.refresh(persona_set)
 
             # Calculate RQE diversity score
-            rqe_metrics = await IterativeGenerationService._calculate_rqe(persona_set)
+            rqe_metrics = await IterativeGenerationService._calculate_rqe(session, persona_set)
             current_rqe = rqe_metrics["rqe_score"]
 
+            # Get persona count explicitly
+            personas_count_result = await session.execute(
+                select(Persona).where(Persona.persona_set_id == persona_set.id)
+            )
+            personas_count = len(list(personas_count_result.scalars().all()))
+            
             # Record iteration
             iteration_record = {
                 "iteration": current_iteration,
                 "rqe_score": current_rqe,
                 "threshold": rqe_threshold,
                 "threshold_met": current_rqe >= rqe_threshold,
-                "num_personas": len(persona_set.personas),
+                "num_personas": personas_count,
                 "diversity_hints_used": diversity_hints is not None,
                 "timestamp": datetime.utcnow().isoformat()
             }
@@ -197,7 +210,7 @@ class IterativeGenerationService:
             # Generate diversity hints for next iteration
             if current_iteration < max_iterations:
                 diversity_hints = await IterativeGenerationService._generate_diversity_hints(
-                    persona_set, rqe_metrics
+                    session, persona_set, rqe_metrics
                 )
                 logger.info(f"Generated diversity hints for iteration {current_iteration + 1}")
 
@@ -215,6 +228,12 @@ class IterativeGenerationService:
         await session.flush()
         await session.refresh(persona_set)
 
+        # Get persona count explicitly
+        personas_count_result = await session.execute(
+            select(Persona).where(Persona.persona_set_id == persona_set.id)
+        )
+        personas_count = len(list(personas_count_result.scalars().all()))
+
         # Build metrics response
         metrics = {
             "rqe_score": current_rqe,
@@ -223,7 +242,7 @@ class IterativeGenerationService:
             "iterations_used": current_iteration,
             "max_iterations": max_iterations,
             "iteration_history": iteration_history,
-            "num_personas": len(persona_set.personas)
+            "num_personas": personas_count
         }
 
         return persona_set, metrics
@@ -349,7 +368,7 @@ class IterativeGenerationService:
         return [p for p in personas_data if isinstance(p, dict)]
 
     @staticmethod
-    async def _calculate_rqe(persona_set: PersonaSet) -> Dict[str, Any]:
+    async def _calculate_rqe(session: AsyncSession, persona_set: PersonaSet) -> Dict[str, Any]:
         """
         Calculate RQE (Rao's Quadratic Entropy) for persona set diversity.
 
@@ -369,12 +388,18 @@ class IterativeGenerationService:
             logger.warning("scikit-learn not available. Using fallback RQE calculation.")
             return {"rqe_score": 0.7, "method": "fallback"}
 
-        if not persona_set.personas or len(persona_set.personas) < 2:
-            return {"rqe_score": 1.0, "num_personas": len(persona_set.personas) if persona_set.personas else 0}
+        # Query personas explicitly to avoid lazy loading
+        personas_result = await session.execute(
+            select(Persona).where(Persona.persona_set_id == persona_set.id)
+        )
+        personas = list(personas_result.scalars().all())
+
+        if not personas or len(personas) < 2:
+            return {"rqe_score": 1.0, "num_personas": len(personas)}
 
         # Create text representations of personas
         persona_texts = []
-        for persona in persona_set.personas:
+        for persona in personas:
             data = persona.persona_data
             text_parts = [
                 persona.name,
@@ -409,12 +434,13 @@ class IterativeGenerationService:
             "average_similarity": avg_similarity,
             "min_similarity": min_similarity,
             "max_similarity": max_similarity,
-            "num_personas": len(persona_set.personas),
+            "num_personas": len(personas),
             "similarity_matrix": similarity_matrix.tolist()
         }
 
     @staticmethod
     async def _generate_diversity_hints(
+        session: AsyncSession,
         persona_set: PersonaSet,
         rqe_metrics: Dict[str, Any]
     ) -> str:
@@ -433,8 +459,14 @@ class IterativeGenerationService:
         if similarity_matrix is None:
             return "Ensure each persona has unique demographics, distinct goals, and different behavioral patterns."
 
+        # Query personas explicitly to avoid lazy loading
+        personas_result = await session.execute(
+            select(Persona).where(Persona.persona_set_id == persona_set.id)
+        )
+        personas = list(personas_result.scalars().all())
+
         similarity_matrix = np.array(similarity_matrix)
-        n_personas = len(persona_set.personas)
+        n_personas = len(personas)
 
         # Find most similar pairs
         similar_pairs = []
@@ -442,8 +474,8 @@ class IterativeGenerationService:
             for j in range(i + 1, n_personas):
                 if similarity_matrix[i][j] > 0.7:  # High similarity threshold
                     similar_pairs.append({
-                        "persona1": persona_set.personas[i].name,
-                        "persona2": persona_set.personas[j].name,
+                        "persona1": personas[i].name,
+                        "persona2": personas[j].name,
                         "similarity": float(similarity_matrix[i][j])
                     })
 
