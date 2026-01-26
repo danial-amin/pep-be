@@ -62,7 +62,7 @@ def downgrade() -> None:
     op.alter_column('documents', 'project_id',
                     type_=sa.String(length=255),
                     existing_type=sa.Integer(),
-                    postgresql_using=project_id::text)
+                    postgresql_using="project_id::text")
     
     # Recreate index
     op.create_index(op.f('ix_documents_project_id'), 'documents', ['project_id'], unique=False)

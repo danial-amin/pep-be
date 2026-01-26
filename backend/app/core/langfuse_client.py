@@ -1,8 +1,7 @@
 """
 Langfuse client for LLM observability and tracking.
 """
-from langfuse import Langfuse
-from langfuse.decorators import langfuse_context, observe
+from langfuse import Langfuse, observe
 from langfuse.openai import openai as langfuse_openai
 from app.core.config import settings
 from typing import Optional, Dict, Any, List
