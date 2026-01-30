@@ -76,6 +76,14 @@ async def lifespan(app: FastAPI):
                                    WHERE table_name='personas' AND column_name='validation_status') THEN
                         ALTER TABLE personas ADD COLUMN validation_status VARCHAR(50);
                     END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='personas' AND column_name='source_references') THEN
+                        ALTER TABLE personas ADD COLUMN source_references JSONB;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='personas' AND column_name='attribute_validation') THEN
+                        ALTER TABLE personas ADD COLUMN attribute_validation JSONB;
+                    END IF;
                 END $$;
             """))
             # Create projects table first (before adding foreign keys)
