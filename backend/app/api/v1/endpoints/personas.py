@@ -281,10 +281,18 @@ async def get_all_persona_sets(
     - Loaded default persona sets (from JSON files)
     - Each set appears as a separate, distinct entry with its own ID, name, and personas
     """
-    persona_sets = await PersonaService.get_all_persona_sets(db)
-    # Sort by created_at (newest first) so recently loaded sets appear first
-    persona_sets.sort(key=lambda x: x.created_at if x.created_at else x.id, reverse=True)
-    return [PersonaSetResponse.model_validate(ps) for ps in persona_sets]
+    try:
+        persona_sets = await PersonaService.get_all_persona_sets(db)
+        # Sort by created_at (newest first) so recently loaded sets appear first
+        persona_sets.sort(key=lambda x: x.created_at if x.created_at else x.id, reverse=True)
+        return [PersonaSetResponse.model_validate(ps) for ps in persona_sets]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading persona sets: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error loading persona sets: {str(e)}",
+        )
 
 
 @router.get("/sets/{persona_set_id}", response_model=PersonaSetResponse)

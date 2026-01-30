@@ -1,15 +1,19 @@
 """
 Main FastAPI application entry point.
 """
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.v1.router import api_router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -212,15 +216,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
-# The field_validator in Settings already parses CORS_ORIGINS to a list
+# CORS middleware - must allow frontend origin in production
+# Use CORS_ORIGINS env var: "*" or "https://frontend-production-eae1.up.railway.app" or comma-separated list
+_origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["*"]
+if not _origins or (len(_origins) == 1 and not _origins[0].strip()):
+    _origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["*"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Ensure 500 and other unhandled errors return JSON with CORS headers applied."""
+    logger.exception("Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
