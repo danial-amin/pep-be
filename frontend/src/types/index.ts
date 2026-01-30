@@ -122,3 +122,66 @@ export interface Project {
   created_at: string;
   updated_at?: string;
 }
+
+// Verification Types - Semantic Similarity Verification
+export interface VerificationRequest {
+  similarity_threshold?: number;
+  use_indirect_similarity?: boolean;
+  filter_low_similarity?: boolean;
+  project_id?: number;
+}
+
+export interface AttributeVerificationResult {
+  direct_similarity: number;
+  indirect_similarity?: number;
+  combined_similarity: number;
+  verified: boolean;
+  threshold: number;
+  source_chunks: string[];
+  indirect_path?: Array<{ hop: number; text?: string; similarity: number }>;
+}
+
+export interface VerificationMetrics {
+  average_direct_similarity: number;
+  average_indirect_similarity: number;
+  verification_rate: number;
+  verified_attributes: number;
+  filtered_attributes: number;
+  total_attributes: number;
+  threshold: number;
+}
+
+export interface PersonaVerificationResponse {
+  persona_id: number;
+  persona_name: string;
+  verification_results: Record<string, AttributeVerificationResult>;
+  original_persona_data: Record<string, any>;
+  filtered_persona_data: Record<string, any>;
+  metrics: VerificationMetrics;
+  source_references: Record<string, Array<{ text: string; similarity: number }>>;
+  validation_status: string;
+}
+
+export interface PersonaSetVerificationResponse {
+  persona_set_id: number;
+  persona_results: PersonaVerificationResponse[];
+  aggregate_metrics: {
+    average_verification_rate: number;
+    average_direct_similarity: number;
+    fully_verified_personas: number;
+    partially_verified_personas: number;
+    total_personas: number;
+    threshold: number;
+  };
+  status: string;
+  verified_at: string;
+}
+
+export interface VerifiedPersonaResponse {
+  persona_id: number;
+  persona_name: string;
+  verified_persona_data: Record<string, any>;
+  verification_rate: number;
+  threshold: number;
+  source_references: Record<string, Array<{ text: string; similarity: number }>>;
+}
