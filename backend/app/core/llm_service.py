@@ -4,9 +4,6 @@ LLM service for processing documents and generating personas.
 from openai import AsyncOpenAI
 from langchain_openai import OpenAIEmbeddings
 from app.core.config import settings
-from app.core.langfuse_client import (
-    get_langfuse_client, trace_generation, trace_span, trace_event, create_trace, is_langfuse_enabled
-)
 from app.utils.token_utils import chunk_text_by_tokens, estimate_tokens
 from app.utils.prompts import (
     PERSONA_SET_GENERATION_SYSTEM_PROMPT,
@@ -20,7 +17,6 @@ from typing import List, Dict, Any, Optional
 import json
 import asyncio
 import logging
-import uuid
 from openai import RateLimitError, APIError
 
 logger = logging.getLogger(__name__)
@@ -51,67 +47,19 @@ class LLMService:
     
     async def create_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Create embeddings for texts."""
-        trace_id = str(uuid.uuid4())
-        span_id = trace_span(
-            name="create_embeddings",
-            input={"text_count": len(texts), "model": settings.OPENAI_EMBEDDING_MODEL},
-            trace_id=trace_id
-        )
-        
         try:
             embeddings = await self.embeddings.aembed_documents(texts)
-            
-            # Update span with output
-            if span_id:
-                langfuse = get_langfuse_client()
-                if langfuse:
-                    try:
-                        langfuse.span(id=span_id).end(output={"embedding_count": len(embeddings), "dimension": len(embeddings[0]) if embeddings else 0})
-                    except:
-                        pass
-            
             return embeddings
         except Exception as e:
-            # Trace the error
-            trace_event(
-                name="embedding_error",
-                metadata={"error": str(e), "text_count": len(texts)},
-                trace_id=trace_id,
-                parent_observation_id=span_id
-            )
             logger.error(f"Error creating embeddings: {e}", exc_info=True)
             raise
     
     async def create_query_embedding(self, text: str) -> List[float]:
         """Create embedding for a single query text."""
-        trace_id = str(uuid.uuid4())
-        span_id = trace_span(
-            name="create_query_embedding",
-            input={"text_length": len(text), "model": settings.OPENAI_EMBEDDING_MODEL},
-            trace_id=trace_id
-        )
-        
         try:
             embedding = await self.embeddings.aembed_query(text)
-            
-            # Update span with output
-            if span_id:
-                langfuse = get_langfuse_client()
-                if langfuse:
-                    try:
-                        langfuse.span(id=span_id).end(output={"dimension": len(embedding)})
-                    except:
-                        pass
-            
             return embedding
         except Exception as e:
-            # Trace the error
-            trace_event(
-                name="query_embedding_error",
-                metadata={"error": str(e), "text_length": len(text)},
-                trace_id=trace_id,
-                parent_observation_id=span_id
-            )
             logger.error(f"Error creating query embedding: {e}", exc_info=True)
             raise
     
@@ -191,25 +139,9 @@ Return as JSON format."""
         
         max_retries = 3
         retry_delay = 60  # Wait 60 seconds on rate limit
-        
-        trace_id = str(uuid.uuid4())
-        span_id = trace_span(
-            name=f"process_document_chunk_{chunk_index}",
-            input={"document_type": document_type, "chunk_index": chunk_index, "total_chunks": total_chunks},
-            trace_id=trace_id
-        )
-        
+
         for attempt in range(max_retries):
             try:
-                generation_id = trace_generation(
-                    name="document_processing",
-                    model=settings.OPENAI_MODEL,
-                    input={"prompt": prompt[:500], "document_type": document_type, "chunk_index": chunk_index},
-                    trace_id=trace_id,
-                    parent_observation_id=span_id,
-                    metadata={"attempt": attempt + 1, "max_retries": max_retries}
-                )
-                
                 response = await self.client.chat.completions.create(
                     model=settings.OPENAI_MODEL,
                     messages=[
@@ -221,73 +153,21 @@ Return as JSON format."""
                 )
                 
                 result = json.loads(response.choices[0].message.content)
-                
-                # Update generation with output
-                if generation_id:
-                    langfuse = get_langfuse_client()
-                    if langfuse:
-                        try:
-                            langfuse.generation(id=generation_id).end(
-                                output=result,
-                                metadata={
-                                    "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None,
-                                    "model": settings.OPENAI_MODEL
-                                }
-                            )
-                        except:
-                            pass
-                
-                # Update span with output
-                if span_id:
-                    langfuse = get_langfuse_client()
-                    if langfuse:
-                        try:
-                            langfuse.span(id=span_id).end(output={"success": True, "result_keys": list(result.keys())})
-                        except:
-                            pass
-                
                 return result
             
             except RateLimitError as e:
                 error_msg = f"Rate limit hit on chunk {chunk_index}, attempt {attempt + 1}/{max_retries}"
-                trace_event(
-                    name="rate_limit_error",
-                    metadata={"error": str(e), "chunk_index": chunk_index, "attempt": attempt + 1},
-                    trace_id=trace_id,
-                    parent_observation_id=span_id
-                )
-                
                 if attempt < max_retries - 1:
                     logger.warning(f"{error_msg}, waiting {retry_delay} seconds before retry")
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff
                 else:
                     logger.error(f"Rate limit error after {max_retries} attempts on chunk {chunk_index}")
-                    if span_id:
-                        langfuse = get_langfuse_client()
-                        if langfuse:
-                            try:
-                                langfuse.span(id=span_id).end(output={"success": False, "error": "rate_limit_exceeded"})
-                            except:
-                                pass
                     raise Exception(f"Rate limit exceeded after {max_retries} retries. Please try again later.")
-            
+
             except APIError as e:
                 error_msg = f"API error processing chunk {chunk_index}: {e}"
-                trace_event(
-                    name="api_error",
-                    metadata={"error": str(e), "chunk_index": chunk_index, "error_type": type(e).__name__},
-                    trace_id=trace_id,
-                    parent_observation_id=span_id
-                )
                 logger.error(error_msg)
-                if span_id:
-                    langfuse = get_langfuse_client()
-                    if langfuse:
-                        try:
-                            langfuse.span(id=span_id).end(output={"success": False, "error": str(e)})
-                        except:
-                            pass
                 raise
     
     def _combine_chunk_results(
@@ -384,16 +264,7 @@ User Prompt:
 {user_prompt}
 
 Provide a comprehensive and accurate response based on the context provided."""
-        
-        trace_id = str(uuid.uuid4())
-        generation_id = trace_generation(
-            name="complete_prompt",
-            model=settings.OPENAI_MODEL,
-            input={"prompt": user_prompt[:500], "context_doc_count": len(context_documents), "max_tokens": max_tokens},
-            trace_id=trace_id,
-            metadata={"operation": "prompt_completion"}
-        )
-        
+
         try:
             response = await self.client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
@@ -406,39 +277,11 @@ Provide a comprehensive and accurate response based on the context provided."""
             )
             
             result = response.choices[0].message.content
-            
-            # Update generation with output
-            if generation_id:
-                langfuse = get_langfuse_client()
-                if langfuse:
-                    try:
-                        langfuse.generation(id=generation_id).end(
-                            output=result,
-                            metadata={
-                                "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None,
-                                "model": settings.OPENAI_MODEL
-                            }
-                        )
-                    except:
-                        pass
-            
             return result
         except RateLimitError as e:
-            trace_event(
-                name="rate_limit_error",
-                metadata={"error": str(e), "operation": "complete_prompt"},
-                trace_id=trace_id,
-                parent_observation_id=generation_id
-            )
             logger.error(f"Rate limit error completing prompt: {e}")
             raise Exception("Rate limit exceeded. Please try again in a moment.")
         except APIError as e:
-            trace_event(
-                name="api_error",
-                metadata={"error": str(e), "error_type": type(e).__name__, "operation": "complete_prompt"},
-                trace_id=trace_id,
-                parent_observation_id=generation_id
-            )
             logger.error(f"API error completing prompt: {e}")
             raise
     
@@ -562,45 +405,10 @@ Please ensure personas are:
             ethical_guardrails_section=ethical_guardrails_section
         )
         
-        # Create trace for persona generation
-        trace_id = str(uuid.uuid4())
-        trace = create_trace(
-            name="generate_persona_set",
-            trace_id=trace_id,
-            metadata={
-                "num_personas": num_personas,
-                "has_interviews": has_interviews,
-                "has_context": has_context,
-                "output_format": output_format,
-                "project_id": project_id,
-                "interview_count": len(interview_documents),
-                "context_count": len(context_documents),
-                "estimated_tokens": estimated_tokens
-            }
-        )
-        
-        generation_id = None
         try:
             # Determine response format based on output_format
             response_format = {"type": "json_object"} if output_format == "json" else None
-            
-            generation_id = trace_generation(
-                name="persona_set_generation",
-                model=settings.OPENAI_MODEL,
-                input={
-                    "system_prompt": PERSONA_SET_GENERATION_SYSTEM_PROMPT[:200],
-                    "user_prompt_length": len(prompt),
-                    "num_personas": num_personas,
-                    "output_format": output_format
-                },
-                trace_id=trace_id,
-                metadata={
-                    "has_interviews": has_interviews,
-                    "has_context": has_context,
-                    "project_id": project_id
-                }
-            )
-            
+
             response = await self.client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
@@ -621,77 +429,12 @@ Please ensure personas are:
                     "format": output_format,
                     "description": f"Personas generated in {output_format} format"
                 }
-            
-            # Update generation with output
-            if generation_id and is_langfuse_enabled():
-                langfuse = get_langfuse_client()
-                if langfuse:
-                    try:
-                        langfuse.generation(id=generation_id).end(
-                            output=result,
-                            metadata={
-                                "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') and response.usage else None,
-                                "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') and response.usage else None,
-                                "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') and response.usage else None,
-                                "model": settings.OPENAI_MODEL,
-                                "success": True
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to update Langfuse generation: {e}")
-            
-            # Update trace
-            if trace and is_langfuse_enabled():
-                try:
-                    trace.update(output={"success": True, "persona_count": len(result.get("personas", []))})
-                except Exception as e:
-                    logger.warning(f"Failed to update Langfuse trace: {e}")
-            
+
             return result
             
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Error generating persona set: {e}", exc_info=True)
-            
-            # Track error in Langfuse
-            trace_event(
-                name="persona_generation_error",
-                metadata={
-                    "error": error_msg,
-                    "error_type": type(e).__name__,
-                    "num_personas": num_personas,
-                    "project_id": project_id,
-                    "has_interviews": has_interviews,
-                    "has_context": has_context
-                },
-                trace_id=trace_id,
-                parent_observation_id=generation_id
-            )
-            
-            # Update generation with error
-            if generation_id and is_langfuse_enabled():
-                langfuse = get_langfuse_client()
-                if langfuse:
-                    try:
-                        langfuse.generation(id=generation_id).end(
-                            output=None,
-                            level="ERROR",
-                            metadata={
-                                "error": error_msg,
-                                "error_type": type(e).__name__,
-                                "success": False
-                            }
-                        )
-                    except Exception as trace_error:
-                        logger.warning(f"Failed to update Langfuse generation with error: {trace_error}")
-            
-            # Update trace with error
-            if trace and is_langfuse_enabled():
-                try:
-                    trace.update(output={"success": False, "error": error_msg})
-                except Exception as trace_error:
-                    logger.warning(f"Failed to update Langfuse trace with error: {trace_error}")
-            
             raise
     
     def _get_format_instructions(self, output_format: str, num_personas: int) -> str:
@@ -800,19 +543,6 @@ Format as personas that can be used in interactive scenarios or simulations."""
     
     async def expand_persona(self, persona_basic: Dict[str, Any], context_documents: List[str], project_id: Optional[int] = None) -> Dict[str, Any]:
         """Expand a basic persona into a full-fledged persona."""
-        # Create trace for persona expansion
-        trace_id = str(uuid.uuid4())
-        trace = create_trace(
-            name="expand_persona",
-            trace_id=trace_id,
-            metadata={
-                "persona_name": persona_basic.get("name", "unknown"),
-                "context_doc_count": len(context_documents),
-                "project_id": project_id
-            }
-        )
-        
-        generation_id = None
         try:
             # Combine context and check size
             context = "\n\n".join(context_documents)
@@ -838,19 +568,7 @@ Format as personas that can be used in interactive scenarios or simulations."""
                 context=context,
                 persona_basic=persona_str
             )
-            
-            generation_id = trace_generation(
-                name="persona_expansion",
-                model=settings.OPENAI_MODEL,
-                input={
-                    "persona_name": persona_basic.get("name", "unknown"),
-                    "prompt_length": len(prompt),
-                    "context_doc_count": len(context_documents)
-                },
-                trace_id=trace_id,
-                metadata={"project_id": project_id}
-            )
-            
+
             response = await self.client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
@@ -862,72 +580,11 @@ Format as personas that can be used in interactive scenarios or simulations."""
             )
             
             result = json.loads(response.choices[0].message.content)
-            
-            # Update generation with output
-            if generation_id and is_langfuse_enabled():
-                langfuse = get_langfuse_client()
-                if langfuse:
-                    try:
-                        langfuse.generation(id=generation_id).end(
-                            output=result,
-                            metadata={
-                                "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') and response.usage else None,
-                                "success": True
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to update Langfuse generation: {e}")
-            
-            # Update trace
-            if trace and is_langfuse_enabled():
-                try:
-                    trace.update(output={"success": True})
-                except Exception as e:
-                    logger.warning(f"Failed to update Langfuse trace: {e}")
-            
             return result
-            
+
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Error expanding persona: {e}", exc_info=True)
-            
-            # Track error in Langfuse
-            trace_event(
-                name="persona_expansion_error",
-                metadata={
-                    "error": error_msg,
-                    "error_type": type(e).__name__,
-                    "persona_name": persona_basic.get("name", "unknown"),
-                    "project_id": project_id
-                },
-                trace_id=trace_id,
-                parent_observation_id=generation_id
-            )
-            
-            # Update generation with error
-            if generation_id and is_langfuse_enabled():
-                langfuse = get_langfuse_client()
-                if langfuse:
-                    try:
-                        langfuse.generation(id=generation_id).end(
-                            output=None,
-                            level="ERROR",
-                            metadata={
-                                "error": error_msg,
-                                "error_type": type(e).__name__,
-                                "success": False
-                            }
-                        )
-                    except Exception as trace_error:
-                        logger.warning(f"Failed to update Langfuse generation with error: {trace_error}")
-            
-            # Update trace with error
-            if trace and is_langfuse_enabled():
-                try:
-                    trace.update(output={"success": False, "error": error_msg})
-                except Exception as trace_error:
-                    logger.warning(f"Failed to update Langfuse trace with error: {trace_error}")
-            
             raise
     
     async def generate_persona_image_prompt(self, persona: Dict[str, Any]) -> str:
