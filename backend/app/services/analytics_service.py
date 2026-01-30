@@ -60,6 +60,8 @@ class AnalyticsService:
         
         if not persona_set.personas:
             raise ValueError("Persona set has no personas")
+        if len(persona_set.personas) < 2:
+            raise ValueError("Need at least 2 personas to measure diversity (pairwise comparison requires multiple personas)")
         
         # Get embeddings for all personas
         persona_texts = []
@@ -81,6 +83,9 @@ class AnalyticsService:
         # Remove diagonal (self-similarity)
         mask = ~np.eye(similarity_matrix.shape[0], dtype=bool)
         pairwise_similarities = similarity_matrix[mask]
+        
+        if pairwise_similarities.size == 0:
+            raise ValueError("Need at least 2 personas to measure diversity (pairwise comparison requires multiple personas)")
         
         avg_similarity = float(np.mean(pairwise_similarities))
         diversity_score = 1 - avg_similarity  # Convert similarity to diversity

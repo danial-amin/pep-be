@@ -28,6 +28,40 @@ from app.services.iterative_generation_service import iterative_generation_servi
 router = APIRouter()
 
 
+def _persona_data_to_basic(name: str, persona_data: dict) -> PersonaBasic:
+    """Flatten nested persona_data into PersonaBasic (demographics → top-level, background → basic_description)."""
+    if not persona_data or not isinstance(persona_data, dict):
+        return PersonaBasic(name=name or "Unknown")
+    dem = persona_data.get("demographics") or {}
+    if not isinstance(dem, dict):
+        dem = {}
+    # Location can be dict {city, country} in nested format
+    loc = dem.get("location")
+    if isinstance(loc, dict):
+        loc = ", ".join(filter(None, [loc.get("city"), loc.get("country")])) or str(loc)
+    goals = persona_data.get("goals") or []
+    frustrations = persona_data.get("frustrations") or []
+    if isinstance(goals, str):
+        goals = [goals] if goals else []
+    if isinstance(frustrations, str):
+        frustrations = [frustrations] if frustrations else []
+    key_characteristics = list(goals)[:5] + list(frustrations)[:3] if (goals or frustrations) else None
+    return PersonaBasic(
+        name=persona_data.get("name") or name,
+        age=persona_data.get("age") or dem.get("age"),
+        gender=persona_data.get("gender") or dem.get("gender"),
+        location=persona_data.get("location") or loc,
+        occupation=persona_data.get("occupation") or dem.get("occupation"),
+        basic_description=(
+            persona_data.get("basic_description")
+            or persona_data.get("background")
+            or persona_data.get("detailed_description")
+            or ""
+        ),
+        key_characteristics=persona_data.get("key_characteristics") or key_characteristics,
+    )
+
+
 @router.post("/generate-set", response_model=PersonaSetGenerateResponse, status_code=status.HTTP_201_CREATED)
 async def generate_persona_set(
     request: PersonaSetCreateRequest,
@@ -66,17 +100,10 @@ async def generate_persona_set(
             project_id=request.project_id
         )
 
-        # Convert to response format
+        # Convert to response format: flatten nested persona_data for PersonaBasic
         personas_basic = []
         for persona in persona_set.personas:
-            try:
-                personas_basic.append(PersonaBasic(**persona.persona_data))
-            except Exception:
-                # If persona data doesn't match PersonaBasic, create minimal version
-                personas_basic.append(PersonaBasic(
-                    name=persona.name,
-                    basic_description=persona.persona_data.get("background", "")
-                ))
+            personas_basic.append(_persona_data_to_basic(persona.name, persona.persona_data))
 
         return PersonaSetGenerateResponse(
             persona_set_id=persona_set.id,
