@@ -447,89 +447,227 @@ class PersonaVerificationService:
         max_hops: int = 2
     ) -> Dict[str, Any]:
         """
-        Calculate indirect semantic similarity through intermediate concepts.
+        Calculate indirect/conceptual semantic similarity.
 
-        Implements multi-hop semantic matching:
-        1. Find concepts related to the attribute
-        2. For each related concept, find source chunks
-        3. Calculate transitive similarity with decay
+        Uses multiple strategies to find conceptual relationships:
+        1. Semantic expansion: Extract key themes and search for each
+        2. Synonym/related term search: Find semantically similar concepts
+        3. Contextual matching: Look for broader context that implies the attribute
 
-        This helps verify attributes that don't directly match source text
-        but are semantically related through intermediate concepts.
+        This ensures we find conceptual relationships even when direct text
+        matching fails.
         """
         if not HAS_NUMPY:
             return {"similarity": 0.0, "path": [], "error": "numpy not available"}
 
         try:
-            # First, get the attribute embedding
-            attr_embedding = await llm_service.create_query_embedding(attr_text)
-
-            # Query for related concepts (broader search)
-            broader_query = f"concepts related to: {attr_text[:200]}"
-            intermediate_results = await vector_db.query_documents(
-                query_texts=[broader_query],
-                n_results=10,
-                filter_metadata=metadata_filter
-            )
-
-            if not intermediate_results.get("documents") or not intermediate_results["documents"][0]:
-                return {"similarity": 0.0, "path": [], "reason": "no intermediate concepts found"}
-
-            # Get intermediate chunks and their embeddings
-            intermediate_chunks = intermediate_results["documents"][0]
-            intermediate_embeddings = await llm_service.create_embeddings(intermediate_chunks)
-
-            # Calculate similarity path
-            best_path = []
             best_indirect_similarity = 0.0
+            best_path = []
+            all_concept_scores = []
 
-            for i, (chunk, chunk_embedding) in enumerate(zip(intermediate_chunks, intermediate_embeddings)):
-                # Calculate similarity: attribute -> intermediate chunk
-                hop1_similarity = PersonaVerificationService._cosine_similarity(
-                    attr_embedding, chunk_embedding
-                )
+            # Strategy 1: Search with semantic variations of the attribute
+            semantic_queries = PersonaVerificationService._generate_semantic_queries(attr_text)
 
-                # If first hop is promising, look for second hop
-                if hop1_similarity > INDIRECT_SIMILARITY_THRESHOLD and max_hops > 1:
-                    # Query from intermediate chunk to source
-                    second_hop_results = await vector_db.query_documents(
-                        query_texts=[chunk[:500]],
+            for query_variant in semantic_queries:
+                try:
+                    variant_results = await vector_db.query_documents(
+                        query_texts=[query_variant],
+                        n_results=5,
+                        filter_metadata=metadata_filter
+                    )
+
+                    if variant_results.get("distances") and variant_results["distances"][0]:
+                        scores = variant_results["distances"][0]
+                        max_score = max(scores) if scores else 0.0
+                        if max_score > 0:
+                            all_concept_scores.append({
+                                "query": query_variant[:50],
+                                "similarity": max_score,
+                                "source": variant_results.get("documents", [[]])[0][:1]
+                            })
+                except Exception as e:
+                    logger.debug(f"Semantic query failed: {e}")
+                    continue
+
+            # Strategy 2: Break into key concepts and search individually
+            key_concepts = PersonaVerificationService._extract_key_concepts(attr_text)
+            concept_similarities = []
+
+            for concept in key_concepts[:5]:  # Limit to top 5 concepts
+                try:
+                    concept_results = await vector_db.query_documents(
+                        query_texts=[concept],
                         n_results=3,
                         filter_metadata=metadata_filter
                     )
 
-                    if second_hop_results.get("distances") and second_hop_results["distances"][0]:
-                        hop2_similarities = second_hop_results["distances"][0]
-                        hop2_similarity = max(hop2_similarities) if hop2_similarities else 0.0
+                    if concept_results.get("distances") and concept_results["distances"][0]:
+                        scores = concept_results["distances"][0]
+                        concept_sim = max(scores) if scores else 0.0
+                        if concept_sim > 0.3:  # Only count meaningful matches
+                            concept_similarities.append(concept_sim)
+                            all_concept_scores.append({
+                                "query": f"concept: {concept}",
+                                "similarity": concept_sim,
+                                "source": concept_results.get("documents", [[]])[0][:1]
+                            })
+                except Exception as e:
+                    logger.debug(f"Concept search failed for '{concept}': {e}")
+                    continue
 
-                        # Calculate transitive similarity with decay
-                        indirect_similarity = (
-                            hop1_similarity * (1 - INDIRECT_HOP_DECAY) *
-                            hop2_similarity * (1 - INDIRECT_HOP_DECAY)
-                        )
+            # Strategy 3: Broader contextual search
+            context_query = f"user research data about {attr_text[:100]}"
+            try:
+                context_results = await vector_db.query_documents(
+                    query_texts=[context_query],
+                    n_results=5,
+                    filter_metadata=metadata_filter
+                )
 
-                        if indirect_similarity > best_indirect_similarity:
-                            best_indirect_similarity = indirect_similarity
-                            best_path = [
-                                {"hop": 1, "text": chunk[:100], "similarity": hop1_similarity},
-                                {"hop": 2, "similarity": hop2_similarity}
-                            ]
-                else:
-                    # Single hop indirect similarity
-                    indirect_similarity = hop1_similarity * (1 - INDIRECT_HOP_DECAY)
-                    if indirect_similarity > best_indirect_similarity:
-                        best_indirect_similarity = indirect_similarity
-                        best_path = [{"hop": 1, "text": chunk[:100], "similarity": hop1_similarity}]
+                if context_results.get("distances") and context_results["distances"][0]:
+                    scores = context_results["distances"][0]
+                    context_sim = max(scores) if scores else 0.0
+                    if context_sim > 0.3:
+                        all_concept_scores.append({
+                            "query": "contextual",
+                            "similarity": context_sim,
+                            "source": context_results.get("documents", [[]])[0][:1]
+                        })
+            except Exception as e:
+                logger.debug(f"Context search failed: {e}")
+
+            # Calculate best indirect similarity from all strategies
+            if all_concept_scores:
+                # Sort by similarity
+                all_concept_scores.sort(key=lambda x: x["similarity"], reverse=True)
+
+                # Use weighted average of top matches
+                top_scores = [s["similarity"] for s in all_concept_scores[:3]]
+                if top_scores:
+                    # Weighted: best score counts more
+                    weights = [0.5, 0.3, 0.2][:len(top_scores)]
+                    best_indirect_similarity = sum(s * w for s, w in zip(top_scores, weights))
+
+                    # Build path for explanation
+                    best_path = [
+                        {
+                            "hop": i + 1,
+                            "query": score["query"],
+                            "similarity": round(score["similarity"], 4),
+                            "matched_text": score["source"][0][:100] if score["source"] else ""
+                        }
+                        for i, score in enumerate(all_concept_scores[:3])
+                    ]
+
+            # If concept-level matching found results, boost the score
+            if concept_similarities:
+                avg_concept_sim = sum(concept_similarities) / len(concept_similarities)
+                coverage = len(concept_similarities) / max(len(key_concepts), 1)
+
+                # Conceptual coverage bonus
+                concept_based_score = avg_concept_sim * (0.7 + 0.3 * coverage)
+                if concept_based_score > best_indirect_similarity:
+                    best_indirect_similarity = concept_based_score
+                    best_path.append({
+                        "hop": len(best_path) + 1,
+                        "method": "concept_coverage",
+                        "concepts_matched": len(concept_similarities),
+                        "total_concepts": len(key_concepts),
+                        "similarity": round(concept_based_score, 4)
+                    })
 
             return {
-                "similarity": best_indirect_similarity,
+                "similarity": round(best_indirect_similarity, 4),
                 "path": best_path,
-                "method": "multi_hop" if len(best_path) > 1 else "single_hop"
+                "method": "conceptual_multi_strategy",
+                "strategies_used": len(all_concept_scores)
             }
 
         except Exception as e:
             logger.error(f"Error calculating indirect similarity: {e}")
             return {"similarity": 0.0, "path": [], "error": str(e)}
+
+    @staticmethod
+    def _generate_semantic_queries(text: str) -> List[str]:
+        """Generate semantic variations of the query text."""
+        queries = []
+        text_lower = text.lower()
+
+        # Original text (shortened if needed)
+        queries.append(text[:300])
+
+        # Rephrase as user need/want
+        if len(text) < 200:
+            queries.append(f"user wants to {text}")
+            queries.append(f"user needs {text}")
+            queries.append(f"user looking for {text}")
+
+        # Extract action-oriented rephrasing
+        if "goal" in text_lower or "want" in text_lower:
+            queries.append(f"motivation: {text[:150]}")
+
+        if "frustrat" in text_lower or "pain" in text_lower or "problem" in text_lower:
+            queries.append(f"user challenge: {text[:150]}")
+            queries.append(f"difficulty with {text[:150]}")
+
+        if "behavior" in text_lower or "habit" in text_lower:
+            queries.append(f"user typically {text[:150]}")
+
+        # Generic semantic expansions
+        queries.append(f"research finding about {text[:100]}")
+        queries.append(f"interview insight: {text[:100]}")
+
+        return queries[:6]  # Limit to 6 variations
+
+    @staticmethod
+    def _extract_key_concepts(text: str) -> List[str]:
+        """Extract key concepts/themes from text for granular matching."""
+        import re
+
+        # Remove common words and extract meaningful phrases
+        stop_words = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+            'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
+            'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+            'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need',
+            'it', 'its', 'this', 'that', 'these', 'those', 'i', 'me', 'my',
+            'we', 'our', 'you', 'your', 'he', 'she', 'they', 'them', 'their',
+            'what', 'which', 'who', 'whom', 'when', 'where', 'why', 'how',
+            'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
+            'some', 'such', 'no', 'not', 'only', 'same', 'so', 'than', 'too',
+            'very', 'just', 'also', 'now', 'here', 'there', 'then', 'once'
+        }
+
+        # Clean and tokenize
+        text_clean = re.sub(r'[^\w\s]', ' ', text.lower())
+        words = text_clean.split()
+
+        # Extract meaningful words
+        meaningful_words = [w for w in words if w not in stop_words and len(w) > 2]
+
+        # Create concept phrases (bigrams and key words)
+        concepts = []
+
+        # Add individual key words
+        for word in meaningful_words[:10]:
+            concepts.append(word)
+
+        # Add bigrams (consecutive meaningful words)
+        for i in range(len(words) - 1):
+            if words[i] not in stop_words and words[i+1] not in stop_words:
+                bigram = f"{words[i]} {words[i+1]}"
+                if len(bigram) > 5:
+                    concepts.append(bigram)
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_concepts = []
+        for c in concepts:
+            if c not in seen:
+                seen.add(c)
+                unique_concepts.append(c)
+
+        return unique_concepts[:8]  # Return top 8 concepts
 
     @staticmethod
     def _combine_similarities(
@@ -542,21 +680,47 @@ class PersonaVerificationService:
 
         Strategy:
         - If direct similarity >= threshold, use direct only
-        - If direct < threshold but indirect provides valid path, use weighted combination
-        - Direct similarity is weighted higher (0.7) than indirect (0.3)
+        - If direct is moderate (0.5-0.8), blend with indirect
+        - If direct is low but indirect is strong, indirect can contribute significantly
+        - Use adaptive weighting based on the strength of each signal
         """
+        # If direct is already good, use it
         if direct_similarity >= DEFAULT_SIMILARITY_THRESHOLD:
             return direct_similarity
 
-        if indirect_similarity > 0 and indirect_path:
-            # Weighted combination favoring direct similarity
-            combined = (direct_similarity * 0.7) + (indirect_similarity * 0.3)
-            # Boost if indirect path is strong
-            if indirect_similarity > 0.6:
-                combined = min(1.0, combined * 1.1)
-            return combined
+        # If no indirect similarity, return direct
+        if indirect_similarity <= 0:
+            return direct_similarity
 
-        return direct_similarity
+        # Adaptive weighting based on signal strengths
+        # When direct is very low, give more weight to indirect
+        if direct_similarity < 0.3:
+            # Direct is weak, lean more on indirect
+            direct_weight = 0.4
+            indirect_weight = 0.6
+        elif direct_similarity < 0.5:
+            # Direct is moderate-low
+            direct_weight = 0.5
+            indirect_weight = 0.5
+        else:
+            # Direct is moderate, still prefer it but consider indirect
+            direct_weight = 0.6
+            indirect_weight = 0.4
+
+        # Calculate weighted combination
+        combined = (direct_similarity * direct_weight) + (indirect_similarity * indirect_weight)
+
+        # Boost if we have strong evidence from both sources
+        if direct_similarity > 0.4 and indirect_similarity > 0.5:
+            combined = min(1.0, combined * 1.15)
+
+        # Additional boost if indirect path has multiple strong matches
+        if indirect_path and len(indirect_path) >= 2:
+            path_scores = [p.get("similarity", 0) for p in indirect_path if isinstance(p.get("similarity"), (int, float))]
+            if path_scores and min(path_scores) > 0.4:
+                combined = min(1.0, combined * 1.1)
+
+        return round(combined, 4)
 
     @staticmethod
     async def _filter_list_items(

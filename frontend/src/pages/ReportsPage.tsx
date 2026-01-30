@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import { Download, TrendingUp, Users, CheckCircle, AlertCircle } from 'lucide-react';
+import { Download, TrendingUp, Users, CheckCircle, AlertCircle, ShieldCheck, XCircle, Info, RefreshCw } from 'lucide-react';
 import { personasApi } from '../services/api';
-import { PersonaSet } from '../types';
+import { PersonaSet, PersonaSetVerificationResponse } from '../types';
 
 export default function ReportsPage() {
   const [searchParams] = useSearchParams();
@@ -11,6 +11,9 @@ export default function ReportsPage() {
   const [selectedSet, setSelectedSet] = useState<PersonaSet | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<PersonaSetVerificationResponse | null>(null);
+  const [similarityThreshold, setSimilarityThreshold] = useState(0.80);
 
   useEffect(() => {
     loadPersonaSets();
@@ -35,6 +38,7 @@ export default function ReportsPage() {
 
   const loadAnalytics = async (personaSetId: number) => {
     setLoading(true);
+    setVerificationResult(null); // Reset verification when changing sets
     try {
       const data = await personasApi.getAnalytics(personaSetId);
       setAnalytics(data);
@@ -61,6 +65,25 @@ export default function ReportsPage() {
       document.body.removeChild(a);
     } catch (error: any) {
       alert(`Failed to download: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
+  const handleVerifyPersonaSet = async () => {
+    if (!selectedSet || verifying) return;
+
+    setVerifying(true);
+    try {
+      const result = await personasApi.verifyPersonaSet(selectedSet.id, {
+        similarity_threshold: similarityThreshold,
+        use_indirect_similarity: true,
+        filter_low_similarity: true,
+      });
+      setVerificationResult(result);
+    } catch (error: any) {
+      console.error('Failed to verify persona set:', error);
+      alert(`Failed to verify: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -316,9 +339,158 @@ export default function ReportsPage() {
                 </div>
               )}
 
+              {/* Semantic Similarity Verification Section */}
+              <div className="glass-card rounded-2xl p-6 pastel-green border border-green-400/30">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white flex items-center">
+                    <ShieldCheck className="mr-2 h-5 w-5" />
+                    Semantic Similarity Verification
+                  </h3>
+                  <button
+                    onClick={handleVerifyPersonaSet}
+                    disabled={verifying || !selectedSet}
+                    className="px-4 py-2 bg-green-500/30 text-white rounded-lg hover:bg-green-500/40 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {verifying ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Verifying...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="h-4 w-4" />
+                        <span>Verify Against Source Data</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Threshold Slider */}
+                <div className="mb-4 p-3 bg-white/10 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-white/80">Similarity Threshold</span>
+                    <span className="text-sm font-medium text-white">{Math.round(similarityThreshold * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="95"
+                    value={similarityThreshold * 100}
+                    onChange={(e) => setSimilarityThreshold(parseInt(e.target.value) / 100)}
+                    className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-white/50 mt-1">
+                    <span>50% (Lenient)</span>
+                    <span>80% (Default)</span>
+                    <span>95% (Strict)</span>
+                  </div>
+                </div>
+
+                {verificationResult ? (
+                  <>
+                    {/* Aggregate Metrics */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="bg-white/10 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-white">
+                          {Math.round(verificationResult.aggregate_metrics.average_verification_rate * 100)}%
+                        </div>
+                        <div className="text-xs text-white/70">Avg Verification Rate</div>
+                      </div>
+                      <div className="bg-white/10 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-white">
+                          {Math.round(verificationResult.aggregate_metrics.average_direct_similarity * 100)}%
+                        </div>
+                        <div className="text-xs text-white/70">Avg Direct Similarity</div>
+                      </div>
+                      <div className="bg-white/10 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-green-300">
+                          {verificationResult.aggregate_metrics.fully_verified_personas}
+                        </div>
+                        <div className="text-xs text-white/70">Fully Verified</div>
+                      </div>
+                      <div className="bg-white/10 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-yellow-300">
+                          {verificationResult.aggregate_metrics.partially_verified_personas}
+                        </div>
+                        <div className="text-xs text-white/70">Partially Verified</div>
+                      </div>
+                    </div>
+
+                    {/* Per-Persona Verification Results */}
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium text-white/80 mb-2">Per-Persona Verification</h4>
+                      <div className="max-h-64 overflow-y-auto space-y-2">
+                        {verificationResult.persona_results.map((result: any) => (
+                          <div
+                            key={result.persona_id}
+                            className={`p-3 rounded-lg ${
+                              result.metrics?.verification_rate >= 0.8
+                                ? 'bg-green-500/20'
+                                : result.metrics?.verification_rate >= 0.5
+                                  ? 'bg-yellow-500/20'
+                                  : 'bg-red-500/20'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                {result.metrics?.verification_rate >= 0.8 ? (
+                                  <CheckCircle className="h-4 w-4 text-green-300" />
+                                ) : result.metrics?.verification_rate >= 0.5 ? (
+                                  <Info className="h-4 w-4 text-yellow-300" />
+                                ) : (
+                                  <XCircle className="h-4 w-4 text-red-300" />
+                                )}
+                                <span className="text-sm font-medium text-white">{result.persona_name}</span>
+                              </div>
+                              <div className="flex items-center space-x-4 text-xs">
+                                <span className="text-white/70">
+                                  Direct: {Math.round((result.metrics?.average_direct_similarity || 0) * 100)}%
+                                </span>
+                                <span className="text-white/70">
+                                  Indirect: {Math.round((result.metrics?.average_indirect_similarity || 0) * 100)}%
+                                </span>
+                                <span className={`px-2 py-0.5 rounded font-medium ${
+                                  result.metrics?.verification_rate >= 0.8
+                                    ? 'bg-green-500/30 text-green-300'
+                                    : result.metrics?.verification_rate >= 0.5
+                                      ? 'bg-yellow-500/30 text-yellow-300'
+                                      : 'bg-red-500/30 text-red-300'
+                                }`}>
+                                  {Math.round((result.metrics?.verification_rate || 0) * 100)}% Verified
+                                </span>
+                              </div>
+                            </div>
+                            {result.metrics && (
+                              <div className="mt-2 text-xs text-white/60">
+                                {result.metrics.verified_attributes} of {result.metrics.total_attributes} attributes verified
+                                {result.metrics.filtered_attributes > 0 && (
+                                  <span className="text-red-300 ml-2">
+                                    ({result.metrics.filtered_attributes} filtered out)
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 text-xs text-white/50 text-center">
+                      Verified at: {new Date(verificationResult.verified_at).toLocaleString()}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-white/60">
+                    <ShieldCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>Click "Verify Against Source Data" to check persona attributes</p>
+                    <p className="text-xs mt-1">against the original interview/context documents</p>
+                  </div>
+                )}
+              </div>
+
               {/* Diversity Metrics */}
               {analytics.diversity_score && (
-                <div className="glass-card rounded-2xl p-6 pastel-green">
+                <div className="glass-card rounded-2xl p-6 pastel-yellow">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                     <Users className="mr-2 h-5 w-5" />
                     Diversity Metrics

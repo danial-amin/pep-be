@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, ShieldCheck, CheckCircle, XCircle, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon } from 'lucide-react';
 import { personasApi } from '../services/api';
-import { PersonaSet, PersonaVerificationResponse } from '../types';
+import { PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 import html2canvas from 'html2canvas';
 
@@ -15,10 +15,6 @@ export default function PersonaDetailPage() {
   const [generatingImages, setGeneratingImages] = useState<number[]>([]);
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
   const [downloadingProfile, setDownloadingProfile] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<PersonaVerificationResponse | null>(null);
-  const [showVerificationPanel, setShowVerificationPanel] = useState(false);
-  const [similarityThreshold, setSimilarityThreshold] = useState(0.80);
   const profileCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,9 +26,6 @@ export default function PersonaDetailPage() {
       const index = personaSet.personas.findIndex(p => p.id === parseInt(personaId));
       if (index >= 0) {
         setCurrentIndex(index);
-        // Reset verification when changing persona
-        setVerificationResult(null);
-        setShowVerificationPanel(false);
       }
     }
   }, [personaId, personaSet]);
@@ -215,45 +208,6 @@ export default function PersonaDetailPage() {
     }
   };
 
-  const handleVerifyPersona = async () => {
-    if (!currentPersona || verifying) return;
-
-    setVerifying(true);
-    try {
-      const result = await personasApi.verifyPersona(currentPersona.id, {
-        similarity_threshold: similarityThreshold,
-        use_indirect_similarity: true,
-        filter_low_similarity: true,
-      });
-      setVerificationResult(result);
-      setShowVerificationPanel(true);
-    } catch (error: any) {
-      console.error('Failed to verify persona:', error);
-      alert(`Failed to verify persona: ${error.response?.data?.detail || error.message}`);
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  // Helper to render verification badge
-  const renderVerificationBadge = (verified: boolean, similarity: number) => {
-    const percentage = Math.round(similarity * 100);
-    if (verified) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-300">
-          <CheckCircle className="h-3 w-3 mr-1" />
-          {percentage}%
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-300">
-        <XCircle className="h-3 w-3 mr-1" />
-        {percentage}%
-      </span>
-    );
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -374,14 +328,6 @@ export default function PersonaDetailPage() {
           </div>
           <div className="flex items-center space-x-2">
             <button
-              onClick={handleVerifyPersona}
-              disabled={verifying}
-              className="px-4 py-2 bg-green-500/30 text-white rounded-lg hover:bg-green-500/40 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              <span>{verifying ? 'Verifying...' : 'Verify Similarity'}</span>
-            </button>
-            <button
               onClick={handleDownloadProfileImage}
               disabled={downloadingProfile}
               className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -455,119 +401,6 @@ export default function PersonaDetailPage() {
           </button>
         </div>
       </div>
-
-      {/* Verification Results Panel */}
-      {showVerificationPanel && verificationResult && (
-        <div className="glass-card rounded-2xl p-4 mb-6 pastel-green border border-green-400/30">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <ShieldCheck className="h-5 w-5 text-green-300" />
-              <h3 className="text-lg font-semibold text-white">Verification Results</h3>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                verificationResult.metrics.verification_rate >= 0.8
-                  ? 'bg-green-500/20 text-green-300'
-                  : verificationResult.metrics.verification_rate >= 0.5
-                    ? 'bg-yellow-500/20 text-yellow-300'
-                    : 'bg-red-500/20 text-red-300'
-              }`}>
-                {Math.round(verificationResult.metrics.verification_rate * 100)}% Verified
-              </span>
-            </div>
-            <button
-              onClick={() => setShowVerificationPanel(false)}
-              className="p-1 rounded hover:bg-white/20 transition-colors"
-            >
-              <X className="h-4 w-4 text-white/70" />
-            </button>
-          </div>
-
-          {/* Metrics Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="text-xs text-white/70 mb-1">Direct Similarity</div>
-              <div className="text-lg font-bold text-white">
-                {Math.round(verificationResult.metrics.average_direct_similarity * 100)}%
-              </div>
-            </div>
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="text-xs text-white/70 mb-1">Indirect Similarity</div>
-              <div className="text-lg font-bold text-white">
-                {Math.round(verificationResult.metrics.average_indirect_similarity * 100)}%
-              </div>
-            </div>
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="text-xs text-white/70 mb-1">Verified Attributes</div>
-              <div className="text-lg font-bold text-green-300">
-                {verificationResult.metrics.verified_attributes}
-              </div>
-            </div>
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="text-xs text-white/70 mb-1">Filtered Out</div>
-              <div className="text-lg font-bold text-red-300">
-                {verificationResult.metrics.filtered_attributes}
-              </div>
-            </div>
-          </div>
-
-          {/* Threshold Slider */}
-          <div className="mb-4 p-3 bg-white/10 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-white/80">Similarity Threshold</span>
-              <span className="text-sm font-medium text-white">{Math.round(similarityThreshold * 100)}%</span>
-            </div>
-            <input
-              type="range"
-              min="50"
-              max="95"
-              value={similarityThreshold * 100}
-              onChange={(e) => setSimilarityThreshold(parseInt(e.target.value) / 100)}
-              className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-white/50 mt-1">
-              <span>50%</span>
-              <span>95%</span>
-            </div>
-          </div>
-
-          {/* Attribute-level Results */}
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-white/80 mb-2">Attribute Verification</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-              {Object.entries(verificationResult.verification_results).map(([attr, result]) => (
-                <div
-                  key={attr}
-                  className={`p-2 rounded-lg flex items-center justify-between ${
-                    result.verified ? 'bg-green-500/10' : 'bg-red-500/10'
-                  }`}
-                >
-                  <span className="text-sm text-white/90 capitalize">{attr.replace(/_/g, ' ')}</span>
-                  <div className="flex items-center space-x-2">
-                    {result.indirect_similarity !== null && result.indirect_similarity !== undefined && (
-                      <span className="text-xs text-white/50" title="Indirect similarity used">
-                        <Info className="h-3 w-3 inline mr-1" />
-                        +{Math.round(result.indirect_similarity * 100)}%
-                      </span>
-                    )}
-                    {renderVerificationBadge(result.verified, result.combined_similarity)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Re-verify Button */}
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={handleVerifyPersona}
-              disabled={verifying}
-              className="px-4 py-2 bg-green-500/30 text-white rounded-lg hover:bg-green-500/40 transition-colors flex items-center space-x-2 disabled:opacity-50"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              <span>{verifying ? 'Re-verifying...' : 'Re-verify with New Threshold'}</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Expanded Persona Card */}
       <div ref={profileCardRef} className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue max-w-7xl mx-auto">
