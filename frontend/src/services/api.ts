@@ -141,6 +141,44 @@ export const personasApi = {
     const response = await api.post(`/personas/persona/${personaId}/generate-image`);
     return response.data;
   },
+
+  // Verification endpoints - Semantic similarity verification
+  verifyPersona: async (
+    personaId: number,
+    options?: {
+      similarity_threshold?: number;
+      use_indirect_similarity?: boolean;
+      filter_low_similarity?: boolean;
+      project_id?: number;
+    }
+  ) => {
+    const response = await api.post(`/personas/persona/${personaId}/verify`, options || {});
+    return response.data;
+  },
+
+  verifyPersonaSet: async (
+    personaSetId: number,
+    options?: {
+      similarity_threshold?: number;
+      use_indirect_similarity?: boolean;
+      filter_low_similarity?: boolean;
+      project_id?: number;
+    }
+  ) => {
+    const response = await api.post(`/personas/${personaSetId}/verify`, options || {});
+    return response.data;
+  },
+
+  getVerifiedPersona: async (
+    personaId: number,
+    similarity_threshold: number = 0.80,
+    project_id?: number
+  ) => {
+    const params: any = { similarity_threshold };
+    if (project_id) params.project_id = project_id;
+    const response = await api.get(`/personas/persona/${personaId}/verified`, { params });
+    return response.data;
+  },
 };
 
 // Prompts API

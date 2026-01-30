@@ -207,6 +207,100 @@ class PromptCompleteResponse(BaseModel):
     context_used: int = Field(description="Number of context documents used")
 
 
+# ============================================================================
+# Verification Schemas - Semantic Similarity Verification
+# ============================================================================
+
+class VerificationRequest(BaseModel):
+    """Request for persona verification against source data."""
+    similarity_threshold: float = Field(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        description="Minimum semantic similarity threshold (default 80% as requested)"
+    )
+    use_indirect_similarity: bool = Field(
+        default=True,
+        description="Whether to calculate indirect similarity through intermediate concepts"
+    )
+    filter_low_similarity: bool = Field(
+        default=True,
+        description="Whether to remove attributes below the similarity threshold"
+    )
+    project_id: Optional[int] = Field(
+        default=None,
+        description="Optional project ID for scoping vector DB queries"
+    )
+
+
+class AttributeVerificationResult(BaseModel):
+    """Verification result for a single attribute."""
+    direct_similarity: float = Field(description="Direct cosine similarity with source data")
+    indirect_similarity: Optional[float] = Field(
+        default=None,
+        description="Indirect similarity through intermediate concepts"
+    )
+    combined_similarity: float = Field(description="Combined similarity score")
+    verified: bool = Field(description="Whether the attribute meets the threshold")
+    threshold: float = Field(description="Similarity threshold used")
+    source_chunks: List[str] = Field(
+        default_factory=list,
+        description="Source chunks that support this attribute"
+    )
+    indirect_path: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="Path of intermediate concepts for indirect similarity"
+    )
+
+
+class VerificationMetrics(BaseModel):
+    """Aggregate metrics for verification."""
+    average_direct_similarity: float
+    average_indirect_similarity: float
+    verification_rate: float = Field(description="Percentage of attributes that passed verification")
+    verified_attributes: int
+    filtered_attributes: int
+    total_attributes: int
+    threshold: float
+
+
+class PersonaVerificationResponse(BaseModel):
+    """Response for single persona verification."""
+    persona_id: int
+    persona_name: str
+    verification_results: Dict[str, AttributeVerificationResult]
+    original_persona_data: Dict[str, Any]
+    filtered_persona_data: Dict[str, Any] = Field(
+        description="Persona data with low-similarity items removed"
+    )
+    metrics: VerificationMetrics
+    source_references: Dict[str, List[Dict[str, Any]]]
+    validation_status: str
+
+
+class PersonaSetVerificationResponse(BaseModel):
+    """Response for persona set verification."""
+    persona_set_id: int
+    persona_results: List[Dict[str, Any]]
+    aggregate_metrics: Dict[str, Any] = Field(
+        description="Aggregate verification metrics across all personas"
+    )
+    status: str
+    verified_at: str
+
+
+class VerifiedPersonaResponse(BaseModel):
+    """Response for getting a verified persona (filtered)."""
+    persona_id: int
+    persona_name: str
+    verified_persona_data: Dict[str, Any] = Field(
+        description="Persona data with only high-similarity attributes retained"
+    )
+    verification_rate: float
+    threshold: float
+    source_references: Dict[str, List[Dict[str, Any]]]
+
+
 # Update forward references
 PersonaSetResponse.model_rebuild()
 

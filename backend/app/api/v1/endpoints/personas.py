@@ -8,7 +8,7 @@ Implements the PEP paper methodology:
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 
 from app.core.database import get_db
@@ -19,11 +19,16 @@ from app.schemas.persona import (
     PersonaExpandResponse,
     PersonaImageResponse,
     PersonaResponse,
-    PersonaBasic
+    PersonaBasic,
+    VerificationRequest,
+    PersonaVerificationResponse,
+    PersonaSetVerificationResponse,
+    VerifiedPersonaResponse
 )
 from app.services.persona_service import PersonaService
 from app.services.analytics_service import AnalyticsService
 from app.services.iterative_generation_service import iterative_generation_service
+from app.services.persona_verification_service import persona_verification_service
 
 router = APIRouter()
 
@@ -783,12 +788,12 @@ async def migrate_personas_to_nested(
 ):
     """
     Migrate all personas in the database to the standard nested structure.
-    
+
     This endpoint normalizes all existing personas to use the nested structure
     with a demographics object and arrays for goals/frustrations.
     """
     from app.utils.migrate_personas_to_nested import migrate_all_personas_to_nested
-    
+
     try:
         migrated_count = await migrate_all_personas_to_nested()
         return {
@@ -802,5 +807,176 @@ async def migrate_personas_to_nested(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error migrating personas: {str(e)}"
+        )
+
+
+# ============================================================================
+# Verification Endpoints - Semantic Similarity Verification
+# ============================================================================
+
+@router.post("/persona/{persona_id}/verify", response_model=PersonaVerificationResponse)
+async def verify_persona_similarity(
+    persona_id: int,
+    request: VerificationRequest = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Verify a persona's attributes against source data using semantic similarity.
+
+    This endpoint implements reverse querying of the vector database:
+    1. Each persona attribute is embedded and compared against source chunks
+    2. Direct similarity measures exact semantic match
+    3. Indirect similarity finds relationships through intermediate concepts
+    4. Attributes with combined similarity >= threshold (default 80%) are retained
+    5. Low-similarity attributes can be filtered out
+
+    The verification process:
+    - Queries the vector DB with each persona attribute text
+    - Calculates direct cosine similarity with returned chunks
+    - If direct similarity is below threshold, calculates indirect similarity
+    - Combines scores with weighted approach (70% direct, 30% indirect)
+    - Returns filtered persona data with only verified attributes
+
+    Args:
+        persona_id: ID of the persona to verify
+        request: Verification parameters (threshold, use_indirect, filter)
+
+    Returns:
+        Verification results with original and filtered persona data
+    """
+    if request is None:
+        request = VerificationRequest()
+
+    try:
+        result = await persona_verification_service.verify_persona_similarity(
+            session=db,
+            persona_id=persona_id,
+            similarity_threshold=request.similarity_threshold,
+            use_indirect_similarity=request.use_indirect_similarity,
+            filter_low_similarity=request.filter_low_similarity,
+            project_id=request.project_id
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error verifying persona: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verifying persona: {str(e)}"
+        )
+
+
+@router.post("/{persona_set_id}/verify", response_model=PersonaSetVerificationResponse)
+async def verify_persona_set_similarity(
+    persona_set_id: int,
+    request: VerificationRequest = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Verify all personas in a set against source data using semantic similarity.
+
+    This endpoint verifies each persona in the set and returns aggregate metrics:
+    - Per-persona verification results
+    - Overall verification rate across the set
+    - Average similarity scores
+    - Count of fully vs partially verified personas
+
+    The verification uses the same methodology as single persona verification:
+    - Direct similarity from reverse RAG queries
+    - Indirect similarity through intermediate concepts
+    - 80% threshold by default for retaining attributes
+
+    Args:
+        persona_set_id: ID of the persona set to verify
+        request: Verification parameters
+
+    Returns:
+        Verification results for all personas with aggregate metrics
+    """
+    if request is None:
+        request = VerificationRequest()
+
+    try:
+        result = await persona_verification_service.verify_persona_set(
+            session=db,
+            persona_set_id=persona_set_id,
+            similarity_threshold=request.similarity_threshold,
+            use_indirect_similarity=request.use_indirect_similarity,
+            filter_low_similarity=request.filter_low_similarity,
+            project_id=request.project_id
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error verifying persona set: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verifying persona set: {str(e)}"
+        )
+
+
+@router.get("/persona/{persona_id}/verified", response_model=VerifiedPersonaResponse)
+async def get_verified_persona(
+    persona_id: int,
+    similarity_threshold: float = Query(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity threshold (default 80%)"
+    ),
+    project_id: Optional[int] = Query(default=None, description="Optional project ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get a verified persona with only high-similarity attributes retained.
+
+    This endpoint returns the persona data with low-similarity items filtered out.
+    Use this when you need production-ready persona data that has been validated
+    against the source documents.
+
+    The returned persona contains only attributes that:
+    - Have direct or indirect similarity >= threshold with source data
+    - Are supported by evidence from the vector database
+
+    Args:
+        persona_id: ID of the persona to get
+        similarity_threshold: Minimum similarity for inclusion (default 80%)
+        project_id: Optional project ID for scoping
+
+    Returns:
+        Verified persona data with source references
+    """
+    try:
+        result = await persona_verification_service.get_verified_persona(
+            session=db,
+            persona_id=persona_id,
+            similarity_threshold=similarity_threshold,
+            project_id=project_id
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting verified persona: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting verified persona: {str(e)}"
         )
 
