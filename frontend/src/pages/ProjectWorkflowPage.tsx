@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Upload, FileText, Users, Sparkles, Image as ImageIcon, BarChart3, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Upload, FileText, Users, Sparkles, Image as ImageIcon, BarChart3, CheckCircle, ArrowLeft, Trash2 } from 'lucide-react';
 import { projectsApi, documentsApi, personasApi } from '../services/api';
 import { Project, Document, PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
@@ -15,6 +15,7 @@ export default function ProjectWorkflowPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedSet, setSelectedSet] = useState<PersonaSet | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null);
 
   // Persona generation state
   const [numPersonas, setNumPersonas] = useState(3);
@@ -89,6 +90,19 @@ export default function ProjectWorkflowPage() {
       console.error('Document processing error:', error);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: number) => {
+    setDeletingDocumentId(documentId);
+    try {
+      await documentsApi.delete(documentId);
+      await loadDocuments();
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      alert('Failed to delete document. Please try again.');
+    } finally {
+      setDeletingDocumentId(null);
     }
   };
 
@@ -284,13 +298,25 @@ export default function ProjectWorkflowPage() {
                 <h4 className="text-lg font-semibold text-white mb-4">Uploaded Documents</h4>
                 <div className="space-y-2">
                   {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                      <span className="text-white/90">{doc.filename}</span>
-                      <span className={`px-3 py-1 text-xs rounded-full ${
-                        doc.document_type === 'context' ? 'bg-purple-400/30' : 'bg-pink-400/30'
-                      }`}>
-                        {doc.document_type}
-                      </span>
+                    <div key={doc.id} className="flex items-center justify-between gap-3 p-3 bg-white/10 rounded-lg">
+                      <span className="text-white/90 truncate">{doc.filename}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 text-xs rounded-full ${
+                          doc.document_type === 'context' ? 'bg-purple-400/30' : 'bg-pink-400/30'
+                        }`}>
+                          {doc.document_type}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDocument(doc.id)}
+                          disabled={deletingDocumentId === doc.id}
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-white/80 hover:text-white hover:bg-white/10 disabled:opacity-50"
+                          aria-label={`Delete ${doc.filename}`}
+                          title="Delete document"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -49,6 +49,10 @@ export const documentsApi = {
     const response = await api.get(`/documents/${id}`);
     return response.data;
   },
+
+  delete: async (id: number) => {
+    await api.delete(`/documents/${id}`);
+  },
 };
 
 // Personas API
