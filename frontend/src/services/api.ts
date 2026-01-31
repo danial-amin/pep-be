@@ -196,6 +196,62 @@ export const promptsApi = {
   },
 };
 
+// Simulations API - Multi-persona conversation playground
+export const simulationsApi = {
+  create: async (request: {
+    name: string;
+    goal: string;
+    goal_context?: string;
+    participants: Array<{ persona_id: number; role?: string }>;
+    max_duration_seconds?: number;
+    max_tokens?: number;
+    max_turns?: number;
+    project_id?: number;
+  }) => {
+    const response = await api.post('/simulations/', request);
+    return response.data;
+  },
+
+  getAll: async (projectId?: number, status?: string) => {
+    const params: any = {};
+    if (projectId) params.project_id = projectId;
+    if (status) params.status = status;
+    const response = await api.get('/simulations/', { params });
+    return response.data;
+  },
+
+  getById: async (id: number) => {
+    const response = await api.get(`/simulations/${id}`);
+    return response.data;
+  },
+
+  start: async (id: number, autoContinue: boolean = true) => {
+    const response = await api.post(`/simulations/${id}/start`, {
+      auto_continue: autoContinue
+    });
+    return response.data;
+  },
+
+  nextTurn: async (id: number) => {
+    const response = await api.post(`/simulations/${id}/next-turn`);
+    return response.data;
+  },
+
+  stop: async (id: number) => {
+    const response = await api.post(`/simulations/${id}/stop`);
+    return response.data;
+  },
+
+  generateSummary: async (id: number) => {
+    const response = await api.post(`/simulations/${id}/summary`);
+    return response.data;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/simulations/${id}`);
+  },
+};
+
 // Projects API
 export const projectsApi = {
   create: async (project: {

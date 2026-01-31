@@ -187,3 +187,100 @@ export interface VerifiedPersonaResponse {
   threshold: number;
   source_references: Record<string, Array<{ text: string; similarity: number }>>;
 }
+
+// Simulation Types - Multi-persona conversation playground
+export interface SimulationParticipantConfig {
+  persona_id: number;
+  role?: string;
+}
+
+export interface SimulationCreateRequest {
+  name: string;
+  goal: string;
+  goal_context?: string;
+  participants: SimulationParticipantConfig[];
+  max_duration_seconds?: number;
+  max_tokens?: number;
+  max_turns?: number;
+  project_id?: number;
+}
+
+export interface SimulationMessage {
+  id: number;
+  persona_id: number;
+  persona_name: string;
+  persona_image_url?: string;
+  content: string;
+  turn_number: number;
+  tokens: number;
+  is_moderator_message: boolean;
+  created_at: string;
+}
+
+export interface SimulationParticipant {
+  id: number;
+  persona_id: number;
+  persona_name: string;
+  persona_image_url?: string;
+  role?: string;
+  messages_count: number;
+  tokens_used: number;
+}
+
+export interface Simulation {
+  id: number;
+  name: string;
+  goal: string;
+  goal_context?: string;
+  max_duration_seconds: number;
+  max_tokens: number;
+  max_turns: number;
+  status: 'pending' | 'running' | 'completed' | 'stopped';
+  current_turn: number;
+  tokens_used: number;
+  started_at?: string;
+  completed_at?: string;
+  summary?: string;
+  key_insights?: string[];
+  action_items?: string[];
+  participants: SimulationParticipant[];
+  messages: SimulationMessage[];
+  project_id?: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface SimulationListItem {
+  id: number;
+  name: string;
+  goal: string;
+  status: string;
+  current_turn: number;
+  max_turns: number;
+  tokens_used: number;
+  max_tokens: number;
+  participant_count: number;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+}
+
+export interface SimulationTurnResponse {
+  message: SimulationMessage;
+  simulation_status: string;
+  current_turn: number;
+  tokens_used: number;
+  tokens_remaining: number;
+  turns_remaining: number;
+  is_complete: boolean;
+}
+
+export interface SimulationSummary {
+  simulation_id: number;
+  summary: string;
+  key_insights: string[];
+  action_items: string[];
+  total_turns: number;
+  total_tokens: number;
+  duration_seconds?: number;
+}

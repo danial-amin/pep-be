@@ -1,0 +1,556 @@
+"""
+Persona Simulation Service - orchestrates multi-persona LLM conversations.
+
+This service enables multiple persona-infused LLMs to converse with each other
+towards a common goal, with configurable duration and token limits.
+"""
+from openai import AsyncOpenAI
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from typing import List, Dict, Any, Optional, AsyncGenerator
+from datetime import datetime, timezone
+import json
+import logging
+import asyncio
+
+from app.core.config import settings
+from app.models.simulation import Simulation, SimulationParticipant, SimulationMessage
+from app.models.persona import Persona
+from app.utils.token_utils import estimate_tokens
+
+logger = logging.getLogger(__name__)
+
+
+class PersonaSimulationService:
+    """Service for running multi-persona simulations."""
+
+    def __init__(self):
+        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
+    def _build_persona_system_prompt(self, persona: Persona, role: Optional[str] = None) -> str:
+        """Build a system prompt that infuses the LLM with the persona's personality."""
+        persona_data = persona.persona_data or {}
+
+        # Extract key persona attributes
+        name = persona_data.get("name", persona.name)
+        demographics = persona_data.get("demographics", {})
+        background = persona_data.get("background", "")
+        goals = persona_data.get("goals", [])
+        frustrations = persona_data.get("frustrations", [])
+        motivations = persona_data.get("motivations", [])
+        behaviors = persona_data.get("behaviors", "")
+        quote = persona_data.get("quote", "")
+
+        # Build demographic string
+        demo_parts = []
+        if demographics.get("age"):
+            demo_parts.append(f"{demographics['age']} years old")
+        if demographics.get("gender"):
+            demo_parts.append(demographics["gender"])
+        if demographics.get("occupation"):
+            demo_parts.append(f"works as {demographics['occupation']}")
+        if demographics.get("location"):
+            loc = demographics["location"]
+            if isinstance(loc, dict):
+                loc = f"{loc.get('city', '')}, {loc.get('country', '')}".strip(", ")
+            demo_parts.append(f"from {loc}")
+
+        demographic_str = ", ".join(demo_parts) if demo_parts else "a professional"
+
+        # Format goals and frustrations
+        goals_str = "\n".join([f"  - {g}" for g in goals]) if goals else "  - Not specified"
+        frustrations_str = "\n".join([f"  - {f}" for f in frustrations]) if frustrations else "  - Not specified"
+        motivations_str = "\n".join([f"  - {m}" for m in motivations]) if motivations else ""
+
+        role_instruction = ""
+        if role:
+            role_instruction = f"\n\nYour assigned role in this discussion is: {role}. Act according to this role while staying true to your persona."
+
+        system_prompt = f"""You are {name}, {demographic_str}.
+
+BACKGROUND:
+{background}
+
+YOUR GOALS:
+{goals_str}
+
+YOUR FRUSTRATIONS AND PAIN POINTS:
+{frustrations_str}
+
+{"YOUR MOTIVATIONS:" if motivations_str else ""}
+{motivations_str}
+
+{"BEHAVIORAL TRAITS:" if behaviors else ""}
+{behaviors}
+
+{"CHARACTERISTIC QUOTE: " + '"' + quote + '"' if quote else ""}
+{role_instruction}
+
+CONVERSATION GUIDELINES:
+- Respond authentically as this persona would, drawing from their background, goals, and frustrations
+- Share insights and perspectives that reflect your unique experiences and viewpoint
+- Engage constructively with others while maintaining your persona's authentic voice
+- Be specific and concrete when possible, relating ideas to your personal experience
+- Keep responses focused and conversational (2-4 sentences typically, unless elaborating on a key point)
+- Build on what others say, agree or respectfully disagree based on your persona's perspective
+- If you have expertise relevant to the topic, share it naturally
+- Express your frustrations and concerns when relevant to the discussion"""
+
+        return system_prompt
+
+    def _build_conversation_context(
+        self,
+        messages: List[SimulationMessage],
+        participants: Dict[int, Persona],
+        current_persona_id: int
+    ) -> List[Dict[str, str]]:
+        """Build the conversation history for the LLM context."""
+        context = []
+
+        for msg in messages:
+            persona = participants.get(msg.persona_id)
+            persona_name = persona.name if persona else "Unknown"
+
+            if msg.persona_id == current_persona_id:
+                # This persona's own messages
+                context.append({
+                    "role": "assistant",
+                    "content": msg.content
+                })
+            else:
+                # Other persona's messages - format as user message with name
+                context.append({
+                    "role": "user",
+                    "content": f"[{persona_name}]: {msg.content}"
+                })
+
+        return context
+
+    async def generate_turn(
+        self,
+        simulation: Simulation,
+        session: AsyncSession
+    ) -> Optional[SimulationMessage]:
+        """
+        Generate the next turn in the simulation.
+
+        Selects the next persona to speak based on conversation flow
+        and generates their response.
+        """
+        # Check if simulation can continue
+        if simulation.status == "completed" or simulation.status == "stopped":
+            return None
+
+        if simulation.current_turn >= simulation.max_turns:
+            simulation.status = "completed"
+            simulation.completed_at = datetime.now(timezone.utc)
+            await session.commit()
+            return None
+
+        if simulation.tokens_used >= simulation.max_tokens:
+            simulation.status = "completed"
+            simulation.completed_at = datetime.now(timezone.utc)
+            await session.commit()
+            return None
+
+        # Get participants and their personas
+        participants = {}
+        participant_roles = {}
+        for p in simulation.participants:
+            result = await session.execute(
+                select(Persona).where(Persona.id == p.persona_id)
+            )
+            persona = result.scalar_one_or_none()
+            if persona:
+                participants[p.persona_id] = persona
+                participant_roles[p.persona_id] = p.role
+
+        if not participants:
+            logger.error(f"No valid participants for simulation {simulation.id}")
+            return None
+
+        # Select next speaker
+        next_speaker_id = self._select_next_speaker(
+            list(simulation.messages),
+            list(participants.keys()),
+            simulation.current_turn
+        )
+
+        next_persona = participants[next_speaker_id]
+        next_role = participant_roles.get(next_speaker_id)
+
+        # Build system prompt for this persona
+        system_prompt = self._build_persona_system_prompt(next_persona, next_role)
+
+        # Build conversation context
+        conversation_context = self._build_conversation_context(
+            list(simulation.messages),
+            participants,
+            next_speaker_id
+        )
+
+        # Add the goal and initial prompt if this is the first turn
+        if simulation.current_turn == 0:
+            goal_prompt = f"""The topic for this group discussion is: {simulation.goal}
+
+{simulation.goal_context if simulation.goal_context else ""}
+
+Please share your initial thoughts on this topic, drawing from your personal experience and perspective. Be authentic to who you are."""
+            conversation_context.append({"role": "user", "content": goal_prompt})
+        else:
+            # Prompt to continue the conversation
+            conversation_context.append({
+                "role": "user",
+                "content": "Please continue the discussion by responding to what has been said. Share your perspective, agree or disagree, and add new insights based on your experience."
+            })
+
+        # Generate response
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *conversation_context
+                ],
+                temperature=0.85,
+                max_tokens=500,  # Keep individual responses concise
+                presence_penalty=0.3,
+                frequency_penalty=0.3
+            )
+
+            content = response.choices[0].message.content
+            tokens_used = response.usage.total_tokens if response.usage else estimate_tokens(content)
+
+            # Create message
+            message = SimulationMessage(
+                simulation_id=simulation.id,
+                persona_id=next_speaker_id,
+                content=content,
+                turn_number=simulation.current_turn + 1,
+                tokens=tokens_used
+            )
+            session.add(message)
+
+            # Update simulation state
+            simulation.current_turn += 1
+            simulation.tokens_used += tokens_used
+
+            # Update participant stats
+            for p in simulation.participants:
+                if p.persona_id == next_speaker_id:
+                    p.messages_count += 1
+                    p.tokens_used += tokens_used
+                    break
+
+            # Check if we should complete
+            if simulation.current_turn >= simulation.max_turns or simulation.tokens_used >= simulation.max_tokens:
+                simulation.status = "completed"
+                simulation.completed_at = datetime.now(timezone.utc)
+
+            await session.commit()
+            await session.refresh(message)
+
+            return message
+
+        except Exception as e:
+            logger.error(f"Error generating turn for simulation {simulation.id}: {e}", exc_info=True)
+            raise
+
+    def _select_next_speaker(
+        self,
+        messages: List[SimulationMessage],
+        participant_ids: List[int],
+        current_turn: int
+    ) -> int:
+        """
+        Select the next persona to speak.
+
+        Uses a round-robin approach with some variation to keep
+        the conversation dynamic.
+        """
+        if not messages:
+            # First turn - pick first participant
+            return participant_ids[0]
+
+        # Get the last speaker
+        last_speaker = messages[-1].persona_id if messages else None
+
+        # Count messages per participant
+        message_counts = {pid: 0 for pid in participant_ids}
+        for msg in messages:
+            if msg.persona_id in message_counts:
+                message_counts[msg.persona_id] += 1
+
+        # Find participants who have spoken least
+        min_count = min(message_counts.values())
+        least_spoken = [pid for pid, count in message_counts.items() if count == min_count]
+
+        # Prefer someone who hasn't spoken recently and has spoken least
+        if last_speaker in least_spoken and len(least_spoken) > 1:
+            least_spoken.remove(last_speaker)
+
+        # Pick from least spoken, avoiding the last speaker if possible
+        for pid in least_spoken:
+            if pid != last_speaker:
+                return pid
+
+        # If all have equal counts, just pick next in rotation
+        if last_speaker in participant_ids:
+            idx = participant_ids.index(last_speaker)
+            return participant_ids[(idx + 1) % len(participant_ids)]
+
+        return participant_ids[0]
+
+    async def run_full_simulation(
+        self,
+        simulation: Simulation,
+        session: AsyncSession
+    ) -> List[SimulationMessage]:
+        """
+        Run the entire simulation until completion or limits are reached.
+        """
+        messages = []
+
+        # Start the simulation
+        simulation.status = "running"
+        simulation.started_at = datetime.now(timezone.utc)
+        await session.commit()
+
+        try:
+            while simulation.status == "running":
+                # Refresh to get latest state
+                await session.refresh(simulation, ["messages", "participants"])
+
+                message = await self.generate_turn(simulation, session)
+                if message:
+                    messages.append(message)
+                else:
+                    break
+
+                # Small delay between turns for rate limiting
+                await asyncio.sleep(0.5)
+
+        except Exception as e:
+            logger.error(f"Error running simulation {simulation.id}: {e}", exc_info=True)
+            simulation.status = "stopped"
+            await session.commit()
+            raise
+
+        return messages
+
+    async def generate_summary(
+        self,
+        simulation: Simulation,
+        session: AsyncSession
+    ) -> Dict[str, Any]:
+        """
+        Generate a summary of the simulation conversation.
+
+        Extracts key insights and action items.
+        """
+        # Get participants for names
+        participants = {}
+        for p in simulation.participants:
+            result = await session.execute(
+                select(Persona).where(Persona.id == p.persona_id)
+            )
+            persona = result.scalar_one_or_none()
+            if persona:
+                participants[p.persona_id] = persona
+
+        # Build conversation transcript
+        transcript_parts = []
+        for msg in simulation.messages:
+            persona = participants.get(msg.persona_id)
+            name = persona.name if persona else "Unknown"
+            transcript_parts.append(f"{name}: {msg.content}")
+
+        transcript = "\n\n".join(transcript_parts)
+
+        # Generate summary
+        summary_prompt = f"""Analyze this group discussion and provide:
+
+1. A concise summary (2-3 paragraphs) of the key points discussed
+2. 3-5 key insights that emerged from the conversation
+3. 3-5 actionable recommendations or next steps
+
+DISCUSSION GOAL: {simulation.goal}
+{f"CONTEXT: {simulation.goal_context}" if simulation.goal_context else ""}
+
+TRANSCRIPT:
+{transcript}
+
+Respond in JSON format:
+{{
+  "summary": "...",
+  "key_insights": ["insight 1", "insight 2", ...],
+  "action_items": ["action 1", "action 2", ...]
+}}"""
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert facilitator skilled at synthesizing group discussions into actionable insights."
+                    },
+                    {"role": "user", "content": summary_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.5
+            )
+
+            result = json.loads(response.choices[0].message.content)
+
+            # Update simulation with summary
+            simulation.summary = result.get("summary", "")
+            simulation.key_insights = result.get("key_insights", [])
+            simulation.action_items = result.get("action_items", [])
+            await session.commit()
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error generating summary for simulation {simulation.id}: {e}", exc_info=True)
+            raise
+
+    async def stream_turn(
+        self,
+        simulation: Simulation,
+        session: AsyncSession
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Stream a turn response for real-time updates.
+
+        Yields chunks of the response as they're generated.
+        """
+        # Check if simulation can continue
+        if simulation.status in ["completed", "stopped"]:
+            yield {"type": "error", "message": "Simulation is not active"}
+            return
+
+        if simulation.current_turn >= simulation.max_turns:
+            yield {"type": "complete", "reason": "max_turns_reached"}
+            return
+
+        if simulation.tokens_used >= simulation.max_tokens:
+            yield {"type": "complete", "reason": "max_tokens_reached"}
+            return
+
+        # Get participants
+        participants = {}
+        participant_roles = {}
+        for p in simulation.participants:
+            result = await session.execute(
+                select(Persona).where(Persona.id == p.persona_id)
+            )
+            persona = result.scalar_one_or_none()
+            if persona:
+                participants[p.persona_id] = persona
+                participant_roles[p.persona_id] = p.role
+
+        # Select next speaker
+        next_speaker_id = self._select_next_speaker(
+            list(simulation.messages),
+            list(participants.keys()),
+            simulation.current_turn
+        )
+
+        next_persona = participants[next_speaker_id]
+        next_role = participant_roles.get(next_speaker_id)
+
+        yield {
+            "type": "start",
+            "persona_id": next_speaker_id,
+            "persona_name": next_persona.name,
+            "turn_number": simulation.current_turn + 1
+        }
+
+        # Build prompts
+        system_prompt = self._build_persona_system_prompt(next_persona, next_role)
+        conversation_context = self._build_conversation_context(
+            list(simulation.messages),
+            participants,
+            next_speaker_id
+        )
+
+        if simulation.current_turn == 0:
+            goal_prompt = f"""The topic for this group discussion is: {simulation.goal}
+
+{simulation.goal_context if simulation.goal_context else ""}
+
+Please share your initial thoughts on this topic, drawing from your personal experience and perspective."""
+            conversation_context.append({"role": "user", "content": goal_prompt})
+        else:
+            conversation_context.append({
+                "role": "user",
+                "content": "Please continue the discussion by responding to what has been said."
+            })
+
+        # Stream response
+        full_content = ""
+        try:
+            stream = await self.client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *conversation_context
+                ],
+                temperature=0.85,
+                max_tokens=500,
+                stream=True
+            )
+
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_content += content
+                    yield {
+                        "type": "chunk",
+                        "content": content
+                    }
+
+            # Save the message
+            tokens_used = estimate_tokens(full_content)
+            message = SimulationMessage(
+                simulation_id=simulation.id,
+                persona_id=next_speaker_id,
+                content=full_content,
+                turn_number=simulation.current_turn + 1,
+                tokens=tokens_used
+            )
+            session.add(message)
+
+            simulation.current_turn += 1
+            simulation.tokens_used += tokens_used
+
+            for p in simulation.participants:
+                if p.persona_id == next_speaker_id:
+                    p.messages_count += 1
+                    p.tokens_used += tokens_used
+                    break
+
+            if simulation.current_turn >= simulation.max_turns or simulation.tokens_used >= simulation.max_tokens:
+                simulation.status = "completed"
+                simulation.completed_at = datetime.now(timezone.utc)
+
+            await session.commit()
+
+            yield {
+                "type": "complete",
+                "message_id": message.id,
+                "tokens": tokens_used,
+                "simulation_status": simulation.status,
+                "current_turn": simulation.current_turn,
+                "tokens_used": simulation.tokens_used
+            }
+
+        except Exception as e:
+            logger.error(f"Error streaming turn: {e}", exc_info=True)
+            yield {"type": "error", "message": str(e)}
+
+
+# Global service instance
+simulation_service = PersonaSimulationService()

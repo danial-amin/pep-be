@@ -22,3 +22,4 @@ class Project(Base):
     
     # Relationships - using string reference to avoid circular import
     persona_sets = relationship("PersonaSet", back_populates="project", cascade="all, delete-orphan")
+    simulations = relationship("Simulation", back_populates="project", cascade="all, delete-orphan")

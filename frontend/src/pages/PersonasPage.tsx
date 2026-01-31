@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3 } from 'lucide-react';
+import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3, Play } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet, PersonaSetGenerateResponse, Persona } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -224,9 +224,18 @@ export default function PersonasPage() {
 
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Personas</h2>
-        <p className="text-white/80 text-lg">Generate and manage user personas from your documents</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Personas</h2>
+          <p className="text-white/80 text-lg">Generate and manage user personas from your documents</p>
+        </div>
+        <button
+          onClick={() => navigate('/simulations')}
+          className="px-6 py-3 bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 hover:from-purple-600 hover:via-pink-600 hover:to-rose-600 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 flex items-center gap-2"
+        >
+          <Play className="w-5 h-5" />
+          Launch Simulation
+        </button>
       </div>
 
       {/* Generate New Persona Set */}

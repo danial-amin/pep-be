@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { FileText, Users, MessageSquare, BarChart3, FolderOpen } from 'lucide-react';
+import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
@@ -8,6 +8,7 @@ import ReportsPage from './pages/ReportsPage';
 import ProjectsPage from './pages/ProjectsPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectWorkflowPage from './pages/ProjectWorkflowPage';
+import SimulationPage from './pages/SimulationPage';
 
 function App() {
   return (
@@ -47,6 +48,13 @@ function App() {
                     Personas
                   </Link>
                   <Link
+                    to="/simulations"
+                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105 bg-gradient-to-r from-purple-500/20 to-pink-500/20"
+                  >
+                    <Play className="mr-2 h-4 w-4" />
+                    Simulation
+                  </Link>
+                  <Link
                     to="/prompts"
                     className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105"
                   >
@@ -77,6 +85,8 @@ function App() {
             <Route path="/personas" element={<PersonasPage />} />
             <Route path="/personas/:setId" element={<PersonaDetailPage />} />
             <Route path="/personas/:setId/:personaId" element={<PersonaDetailPage />} />
+            <Route path="/simulations" element={<SimulationPage />} />
+            <Route path="/simulations/:simulationId" element={<SimulationPage />} />
             <Route path="/prompts" element={<PromptsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
           </Routes>
