@@ -8,11 +8,9 @@ import {
   Users,
   Target,
   Clock,
-  Zap,
   FileText,
   ArrowLeft,
   Plus,
-  X,
   CheckCircle,
   Loader2,
   Sparkles
@@ -284,7 +282,7 @@ export default function SimulationPage() {
 
     setRunning(true);
     try {
-      const response = await simulationsApi.nextTurn(currentSimulation.id);
+      await simulationsApi.nextTurn(currentSimulation.id);
       // Reload full simulation to get updated state
       const updated = await simulationsApi.getById(currentSimulation.id);
       setCurrentSimulation(updated);
