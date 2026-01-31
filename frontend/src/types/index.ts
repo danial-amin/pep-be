@@ -168,8 +168,10 @@ export interface PersonaSetVerificationResponse {
   aggregate_metrics: {
     average_verification_rate: number;
     average_direct_similarity: number;
+    average_indirect_similarity?: number;
     fully_verified_personas: number;
     partially_verified_personas: number;
+    successful_verifications?: number;
     total_personas: number;
     threshold: number;
   };

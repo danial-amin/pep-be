@@ -485,10 +485,13 @@ class AnalyticsService:
         session: AsyncSession,
         persona_set_id: int
     ) -> Dict[str, Any]:
-        """Get complete analytics report for a persona set."""
+        """Get complete analytics report for a persona set.
+
+        Automatically calculates missing metrics (diversity, validation) if not present.
+        """
         from sqlalchemy.orm import selectinload
         from sqlalchemy import select
-        
+
         # Load persona set with personas relationship eagerly
         result = await session.execute(
             select(PersonaSet)
@@ -496,10 +499,28 @@ class AnalyticsService:
             .options(selectinload(PersonaSet.personas))
         )
         persona_set = result.scalar_one_or_none()
-        
+
         if not persona_set:
             raise ValueError(f"Persona set {persona_set_id} not found")
-        
+
+        # Auto-calculate diversity if not present and we have enough personas
+        if not persona_set.diversity_score and len(persona_set.personas) >= 2:
+            try:
+                await AnalyticsService.calculate_diversity(session, persona_set_id)
+                # Refresh the persona set after update
+                await session.refresh(persona_set)
+            except Exception as e:
+                logger.warning(f"Could not auto-calculate diversity: {e}")
+
+        # Auto-calculate validation scores if not present
+        if not persona_set.validation_scores and persona_set.personas:
+            try:
+                await AnalyticsService.validate_personas(session, persona_set_id)
+                # Refresh the persona set after update
+                await session.refresh(persona_set)
+            except Exception as e:
+                logger.warning(f"Could not auto-calculate validation: {e}")
+
         return {
             "persona_set_id": persona_set.id,
             "name": persona_set.name,

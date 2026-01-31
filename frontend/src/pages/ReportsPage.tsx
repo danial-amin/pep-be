@@ -389,7 +389,7 @@ export default function ReportsPage() {
                 {verificationResult ? (
                   <>
                     {/* Aggregate Metrics */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                       <div className="bg-white/10 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-white">
                           {Math.round(verificationResult.aggregate_metrics.average_verification_rate * 100)}%
@@ -401,6 +401,12 @@ export default function ReportsPage() {
                           {Math.round(verificationResult.aggregate_metrics.average_direct_similarity * 100)}%
                         </div>
                         <div className="text-xs text-white/70">Avg Direct Similarity</div>
+                      </div>
+                      <div className="bg-white/10 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-blue-300">
+                          {Math.round((verificationResult.aggregate_metrics.average_indirect_similarity || 0) * 100)}%
+                        </div>
+                        <div className="text-xs text-white/70">Avg Indirect Similarity</div>
                       </div>
                       <div className="bg-white/10 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-green-300">

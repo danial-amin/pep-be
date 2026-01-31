@@ -15,10 +15,11 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Similarity thresholds
+# Similarity thresholds - relaxed for better partial matching
 DEFAULT_SIMILARITY_THRESHOLD = 0.80  # 80% threshold as requested
-INDIRECT_SIMILARITY_THRESHOLD = 0.70  # Lower threshold for indirect matches
-INDIRECT_HOP_DECAY = 0.15  # Decay factor for each hop in indirect similarity
+INDIRECT_SIMILARITY_THRESHOLD = 0.50  # Lower threshold for indirect matches (relaxed from 0.70)
+INDIRECT_HOP_DECAY = 0.10  # Decay factor for each hop in indirect similarity (relaxed from 0.15)
+CONCEPT_MATCH_THRESHOLD = 0.20  # Minimum for meaningful concept match (relaxed from 0.30)
 
 try:
     import numpy as np
@@ -109,6 +110,7 @@ class PersonaVerificationService:
 
         total_direct_similarity = 0.0
         total_indirect_similarity = 0.0
+        indirect_count = 0  # Track how many attributes had indirect similarity calculated
         verified_count = 0
         filtered_count = 0
 
@@ -160,8 +162,9 @@ class PersonaVerificationService:
 
             # Track metrics
             total_direct_similarity += direct_result["similarity"]
-            if indirect_result:
+            if indirect_result and indirect_result["similarity"] > 0:
                 total_indirect_similarity += indirect_result["similarity"]
+                indirect_count += 1
 
             if is_verified:
                 verified_count += 1
@@ -193,7 +196,8 @@ class PersonaVerificationService:
         # Calculate overall metrics
         num_attributes = len(verification_results)
         avg_direct_similarity = total_direct_similarity / num_attributes if num_attributes > 0 else 0.0
-        avg_indirect_similarity = total_indirect_similarity / num_attributes if num_attributes > 0 else 0.0
+        # Calculate indirect average only from attributes that actually used indirect similarity
+        avg_indirect_similarity = total_indirect_similarity / indirect_count if indirect_count > 0 else 0.0
         verification_rate = verified_count / num_attributes if num_attributes > 0 else 0.0
 
         # Update persona with verification results
@@ -273,7 +277,9 @@ class PersonaVerificationService:
         persona_results = []
         total_verification_rate = 0.0
         total_direct_similarity = 0.0
+        total_indirect_similarity = 0.0
         fully_verified_count = 0
+        successful_verifications = 0  # Count only successful verifications for averaging
 
         for persona in persona_set.personas:
             try:
@@ -286,11 +292,13 @@ class PersonaVerificationService:
                     project_id=effective_project_id
                 )
                 persona_results.append(result)
+                successful_verifications += 1
 
                 # Aggregate metrics
                 metrics = result["metrics"]
                 total_verification_rate += metrics["verification_rate"]
                 total_direct_similarity += metrics["average_direct_similarity"]
+                total_indirect_similarity += metrics.get("average_indirect_similarity", 0.0)
 
                 if metrics["verification_rate"] >= 0.8:
                     fully_verified_count += 1
@@ -300,13 +308,23 @@ class PersonaVerificationService:
                 persona_results.append({
                     "persona_id": persona.id,
                     "persona_name": persona.name,
-                    "error": str(e)
+                    "error": str(e),
+                    "metrics": {
+                        "verification_rate": 0,
+                        "average_direct_similarity": 0,
+                        "average_indirect_similarity": 0,
+                        "verified_attributes": 0,
+                        "filtered_attributes": 0,
+                        "total_attributes": 0,
+                        "threshold": similarity_threshold
+                    }
                 })
 
-        # Calculate aggregate metrics
+        # Calculate aggregate metrics (only from successful verifications)
         num_personas = len(persona_set.personas)
-        avg_verification_rate = total_verification_rate / num_personas if num_personas > 0 else 0.0
-        avg_direct_similarity = total_direct_similarity / num_personas if num_personas > 0 else 0.0
+        avg_verification_rate = total_verification_rate / successful_verifications if successful_verifications > 0 else 0.0
+        avg_direct_similarity = total_direct_similarity / successful_verifications if successful_verifications > 0 else 0.0
+        avg_indirect_similarity = total_indirect_similarity / successful_verifications if successful_verifications > 0 else 0.0
 
         # Update persona set status
         persona_set.validation_scores = [
@@ -327,8 +345,10 @@ class PersonaVerificationService:
             "aggregate_metrics": {
                 "average_verification_rate": round(avg_verification_rate, 4),
                 "average_direct_similarity": round(avg_direct_similarity, 4),
+                "average_indirect_similarity": round(avg_indirect_similarity, 4),
                 "fully_verified_personas": fully_verified_count,
                 "partially_verified_personas": num_personas - fully_verified_count,
+                "successful_verifications": successful_verifications,
                 "total_personas": num_personas,
                 "threshold": similarity_threshold
             },
@@ -404,26 +424,41 @@ class PersonaVerificationService:
                 # Pinecone returns cosine similarity (higher = more similar). Handle None.
                 for s in scores:
                     if s is None:
-                        similarities.append(0.0)
+                        continue  # Skip None values instead of adding 0.0
                     elif s > 1:
                         # Likely a distance metric (e.g. from ChromaDB)
-                        similarities.append(max(0.0, 1.0 - float(s)))
+                        sim = max(0.0, 1.0 - float(s))
+                        if sim > 0:
+                            similarities.append(sim)
                     else:
-                        similarities.append(float(s))
+                        sim = float(s)
+                        if sim > 0:  # Only include positive similarities
+                            similarities.append(sim)
 
             if query_results.get("documents") and len(query_results["documents"]) > 0:
                 source_chunks = query_results["documents"][0]
 
             # Use relevance scores from reranker if available
             if query_results.get("relevance_scores") and len(query_results["relevance_scores"]) > 0:
-                similarities = query_results["relevance_scores"][0]
+                rerank_scores = query_results["relevance_scores"][0]
+                # Filter out None and zero values from relevance scores too
+                valid_rerank_scores = [float(s) for s in rerank_scores if s is not None and s > 0]
+                if valid_rerank_scores:
+                    similarities = valid_rerank_scores
 
-            # Calculate average similarity
-            avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
-            max_similarity = max(similarities) if similarities else 0.0
+            # Calculate average similarity only from valid scores
+            if similarities:
+                avg_similarity = sum(similarities) / len(similarities)
+                max_similarity = max(similarities)
+                # Use weighted combination: favor max but include average
+                weighted_sim = max_similarity * 0.6 + avg_similarity * 0.4
+            else:
+                avg_similarity = 0.0
+                max_similarity = 0.0
+                weighted_sim = 0.0
 
             return {
-                "similarity": max(avg_similarity, max_similarity * 0.9),  # Weighted towards max
+                "similarity": weighted_sim,
                 "average_similarity": avg_similarity,
                 "max_similarity": max_similarity,
                 "all_similarities": similarities,
@@ -477,13 +512,19 @@ class PersonaVerificationService:
 
                     if variant_results.get("distances") and variant_results["distances"][0]:
                         scores = variant_results["distances"][0]
-                        max_score = max(scores) if scores else 0.0
-                        if max_score > 0:
-                            all_concept_scores.append({
-                                "query": query_variant[:50],
-                                "similarity": max_score,
-                                "source": variant_results.get("documents", [[]])[0][:1]
-                            })
+                        # Filter out None values and convert to float
+                        valid_scores = [float(s) for s in scores if s is not None and s > 0]
+                        if valid_scores:
+                            max_score = max(valid_scores)
+                            avg_score = sum(valid_scores) / len(valid_scores)
+                            # Use a weighted score favoring max but considering avg
+                            weighted_score = max_score * 0.7 + avg_score * 0.3
+                            if weighted_score > CONCEPT_MATCH_THRESHOLD:
+                                all_concept_scores.append({
+                                    "query": query_variant[:50],
+                                    "similarity": weighted_score,
+                                    "source": variant_results.get("documents", [[]])[0][:1]
+                                })
                 except Exception as e:
                     logger.debug(f"Semantic query failed: {e}")
                     continue
@@ -502,14 +543,17 @@ class PersonaVerificationService:
 
                     if concept_results.get("distances") and concept_results["distances"][0]:
                         scores = concept_results["distances"][0]
-                        concept_sim = max(scores) if scores else 0.0
-                        if concept_sim > 0.3:  # Only count meaningful matches
-                            concept_similarities.append(concept_sim)
-                            all_concept_scores.append({
-                                "query": f"concept: {concept}",
-                                "similarity": concept_sim,
-                                "source": concept_results.get("documents", [[]])[0][:1]
-                            })
+                        # Filter out None values
+                        valid_scores = [float(s) for s in scores if s is not None and s > 0]
+                        if valid_scores:
+                            concept_sim = max(valid_scores)
+                            if concept_sim > CONCEPT_MATCH_THRESHOLD:  # Use relaxed threshold
+                                concept_similarities.append(concept_sim)
+                                all_concept_scores.append({
+                                    "query": f"concept: {concept}",
+                                    "similarity": concept_sim,
+                                    "source": concept_results.get("documents", [[]])[0][:1]
+                                })
                 except Exception as e:
                     logger.debug(f"Concept search failed for '{concept}': {e}")
                     continue
@@ -525,13 +569,16 @@ class PersonaVerificationService:
 
                 if context_results.get("distances") and context_results["distances"][0]:
                     scores = context_results["distances"][0]
-                    context_sim = max(scores) if scores else 0.0
-                    if context_sim > 0.3:
-                        all_concept_scores.append({
-                            "query": "contextual",
-                            "similarity": context_sim,
-                            "source": context_results.get("documents", [[]])[0][:1]
-                        })
+                    # Filter out None values
+                    valid_scores = [float(s) for s in scores if s is not None and s > 0]
+                    if valid_scores:
+                        context_sim = max(valid_scores)
+                        if context_sim > CONCEPT_MATCH_THRESHOLD:
+                            all_concept_scores.append({
+                                "query": "contextual",
+                                "similarity": context_sim,
+                                "source": context_results.get("documents", [[]])[0][:1]
+                            })
             except Exception as e:
                 logger.debug(f"Context search failed: {e}")
 
@@ -561,10 +608,17 @@ class PersonaVerificationService:
             # If concept-level matching found results, boost the score
             if concept_similarities:
                 avg_concept_sim = sum(concept_similarities) / len(concept_similarities)
+                max_concept_sim = max(concept_similarities)
                 coverage = len(concept_similarities) / max(len(key_concepts), 1)
 
-                # Conceptual coverage bonus
-                concept_based_score = avg_concept_sim * (0.7 + 0.3 * coverage)
+                # Use weighted average favoring max score, with coverage bonus
+                # More lenient: even partial concept matches contribute
+                concept_based_score = (max_concept_sim * 0.5 + avg_concept_sim * 0.5) * (0.6 + 0.4 * coverage)
+
+                # Boost if we have good coverage (>50% of concepts matched)
+                if coverage > 0.5:
+                    concept_based_score = min(1.0, concept_based_score * 1.15)
+
                 if concept_based_score > best_indirect_similarity:
                     best_indirect_similarity = concept_based_score
                     best_path.append({
@@ -572,6 +626,7 @@ class PersonaVerificationService:
                         "method": "concept_coverage",
                         "concepts_matched": len(concept_similarities),
                         "total_concepts": len(key_concepts),
+                        "coverage": round(coverage, 2),
                         "similarity": round(concept_based_score, 4)
                     })
 
@@ -677,11 +732,12 @@ class PersonaVerificationService:
         """
         Combine direct and indirect similarities into a final score.
 
-        Strategy:
+        Strategy (relaxed for better partial matching):
         - If direct similarity >= threshold, use direct only
-        - If direct is moderate (0.5-0.8), blend with indirect
-        - If direct is low but indirect is strong, indirect can contribute significantly
+        - If direct is moderate (0.4-0.8), blend with indirect generously
+        - If direct is low but indirect is present, indirect contributes significantly
         - Use adaptive weighting based on the strength of each signal
+        - Give credit for any meaningful indirect signal
         """
         # If direct is already good, use it
         if direct_similarity >= DEFAULT_SIMILARITY_THRESHOLD:
@@ -691,33 +747,44 @@ class PersonaVerificationService:
         if indirect_similarity <= 0:
             return direct_similarity
 
-        # Adaptive weighting based on signal strengths
-        # When direct is very low, give more weight to indirect
-        if direct_similarity < 0.3:
+        # Adaptive weighting based on signal strengths - more lenient
+        # When direct is very low, lean heavily on indirect
+        if direct_similarity < 0.2:
+            # Direct is very weak, lean heavily on indirect
+            direct_weight = 0.3
+            indirect_weight = 0.7
+        elif direct_similarity < 0.4:
             # Direct is weak, lean more on indirect
             direct_weight = 0.4
             indirect_weight = 0.6
-        elif direct_similarity < 0.5:
-            # Direct is moderate-low
+        elif direct_similarity < 0.6:
+            # Direct is moderate-low, equal weight
             direct_weight = 0.5
             indirect_weight = 0.5
         else:
             # Direct is moderate, still prefer it but consider indirect
-            direct_weight = 0.6
-            indirect_weight = 0.4
+            direct_weight = 0.55
+            indirect_weight = 0.45
 
         # Calculate weighted combination
         combined = (direct_similarity * direct_weight) + (indirect_similarity * indirect_weight)
 
-        # Boost if we have strong evidence from both sources
-        if direct_similarity > 0.4 and indirect_similarity > 0.5:
-            combined = min(1.0, combined * 1.15)
+        # Boost if we have evidence from both sources (relaxed thresholds)
+        if direct_similarity > 0.25 and indirect_similarity > 0.3:
+            combined = min(1.0, combined * 1.2)
 
-        # Additional boost if indirect path has multiple strong matches
+        # Additional boost if indirect path has multiple matches
         if indirect_path and len(indirect_path) >= 2:
             path_scores = [p.get("similarity", 0) for p in indirect_path if isinstance(p.get("similarity"), (int, float))]
-            if path_scores and min(path_scores) > 0.4:
-                combined = min(1.0, combined * 1.1)
+            if path_scores:
+                avg_path_score = sum(path_scores) / len(path_scores)
+                # Boost based on average path score
+                if avg_path_score > 0.25:
+                    combined = min(1.0, combined * (1.0 + avg_path_score * 0.3))
+
+        # Ensure we don't lose signal - minimum floor based on best available
+        best_signal = max(direct_similarity, indirect_similarity)
+        combined = max(combined, best_signal * 0.85)
 
         return round(combined, 4)
 
