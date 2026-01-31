@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     
     # OpenAI
     OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-4-turbo-preview"
+    OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
 
     # Cohere (for reranking)

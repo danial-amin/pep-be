@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Get API URL from runtime config (injected at container startup) or build-time env var
-const getApiUrl = (): string => {
+export const getApiUrl = (): string => {
   // Check for runtime config (injected via config.js)
   if (typeof window !== 'undefined' && (window as any).APP_CONFIG?.VITE_API_URL) {
     return (window as any).APP_CONFIG.VITE_API_URL;
@@ -11,6 +11,7 @@ const getApiUrl = (): string => {
 };
 
 const API_URL = getApiUrl();
+export const API_BASE_URL = API_URL;
 
 const api = axios.create({
   baseURL: API_URL,

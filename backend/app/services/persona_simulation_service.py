@@ -92,7 +92,7 @@ CONVERSATION GUIDELINES:
 - Share insights and perspectives that reflect your unique experiences and viewpoint
 - Engage constructively with others while maintaining your persona's authentic voice
 - Be specific and concrete when possible, relating ideas to your personal experience
-- Keep responses focused and conversational (2-4 sentences typically, unless elaborating on a key point)
+- Keep responses focused and concise (1-3 sentences, ~60 words max)
 - Build on what others say, agree or respectfully disagree based on your persona's perspective
 - If you have expertise relevant to the topic, share it naturally
 - Express your frustrations and concerns when relevant to the discussion"""
@@ -206,7 +206,7 @@ Please share your initial thoughts on this topic, drawing from your personal exp
             # Prompt to continue the conversation
             conversation_context.append({
                 "role": "user",
-                "content": "Please continue the discussion by responding to what has been said. Share your perspective, agree or disagree, and add new insights based on your experience."
+                "content": "Please continue the discussion by responding to what has been said. Share your perspective, agree or disagree, and add new insights based on your experience. Keep it to 1-3 sentences."
             })
 
         # Generate response
@@ -218,7 +218,7 @@ Please share your initial thoughts on this topic, drawing from your personal exp
                     *conversation_context
                 ],
                 temperature=0.85,
-                max_tokens=500,  # Keep individual responses concise
+                max_tokens=180,  # Keep individual responses concise
                 presence_penalty=0.3,
                 frequency_penalty=0.3
             )
@@ -273,38 +273,39 @@ Please share your initial thoughts on this topic, drawing from your personal exp
         Uses a round-robin approach with some variation to keep
         the conversation dynamic.
         """
+        ordered_participants = list(participant_ids)
+
         if not messages:
             # First turn - pick first participant
-            return participant_ids[0]
+            return ordered_participants[0]
 
         # Get the last speaker
         last_speaker = messages[-1].persona_id if messages else None
 
         # Count messages per participant
-        message_counts = {pid: 0 for pid in participant_ids}
+        message_counts = {pid: 0 for pid in ordered_participants}
         for msg in messages:
             if msg.persona_id in message_counts:
                 message_counts[msg.persona_id] += 1
 
-        # Find participants who have spoken least
+        # Prefer least-spoken, but maintain a strict rotation order
         min_count = min(message_counts.values())
-        least_spoken = [pid for pid, count in message_counts.items() if count == min_count]
+        if last_speaker in ordered_participants:
+            last_idx = ordered_participants.index(last_speaker)
+            rotation = ordered_participants[last_idx + 1:] + ordered_participants[:last_idx + 1]
+        else:
+            rotation = ordered_participants
 
-        # Prefer someone who hasn't spoken recently and has spoken least
-        if last_speaker in least_spoken and len(least_spoken) > 1:
-            least_spoken.remove(last_speaker)
-
-        # Pick from least spoken, avoiding the last speaker if possible
-        for pid in least_spoken:
-            if pid != last_speaker:
+        rotation_without_last = [pid for pid in rotation if pid != last_speaker]
+        for pid in rotation_without_last:
+            if message_counts[pid] == min_count:
                 return pid
 
-        # If all have equal counts, just pick next in rotation
-        if last_speaker in participant_ids:
-            idx = participant_ids.index(last_speaker)
-            return participant_ids[(idx + 1) % len(participant_ids)]
+        # Fallback: next in rotation, avoiding immediate repeat if possible
+        if rotation_without_last:
+            return rotation_without_last[0]
 
-        return participant_ids[0]
+        return ordered_participants[0]
 
     async def run_full_simulation(
         self,
@@ -449,11 +450,29 @@ Respond in JSON format:
             return
 
         if simulation.current_turn >= simulation.max_turns:
-            yield {"type": "complete", "reason": "max_turns_reached"}
+            simulation.status = "completed"
+            simulation.completed_at = datetime.now(timezone.utc)
+            await session.commit()
+            yield {
+                "type": "complete",
+                "reason": "max_turns_reached",
+                "simulation_status": simulation.status,
+                "current_turn": simulation.current_turn,
+                "tokens_used": simulation.tokens_used
+            }
             return
 
         if simulation.tokens_used >= simulation.max_tokens:
-            yield {"type": "complete", "reason": "max_tokens_reached"}
+            simulation.status = "completed"
+            simulation.completed_at = datetime.now(timezone.utc)
+            await session.commit()
+            yield {
+                "type": "complete",
+                "reason": "max_tokens_reached",
+                "simulation_status": simulation.status,
+                "current_turn": simulation.current_turn,
+                "tokens_used": simulation.tokens_used
+            }
             return
 
         # Get participants
@@ -503,7 +522,7 @@ Please share your initial thoughts on this topic, drawing from your personal exp
         else:
             conversation_context.append({
                 "role": "user",
-                "content": "Please continue the discussion by responding to what has been said."
+                "content": "Please continue the discussion by responding to what has been said. Keep it to 1-3 sentences."
             })
 
         # Stream response
@@ -516,7 +535,7 @@ Please share your initial thoughts on this topic, drawing from your personal exp
                     *conversation_context
                 ],
                 temperature=0.85,
-                max_tokens=500,
+                max_tokens=180,
                 stream=True
             )
 

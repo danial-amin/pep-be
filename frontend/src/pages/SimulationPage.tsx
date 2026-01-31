@@ -15,7 +15,7 @@ import {
   Loader2,
   Sparkles
 } from 'lucide-react';
-import { simulationsApi, personasApi } from '../services/api';
+import { simulationsApi, personasApi, API_BASE_URL } from '../services/api';
 import { Simulation, SimulationMessage, PersonaSet, Persona, SimulationListItem } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 
@@ -145,6 +145,9 @@ export default function SimulationPage() {
   const navigate = useNavigate();
   const { simulationId } = useParams<{ simulationId: string }>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<EventSource | null>(null);
+  const autoContinueRef = useRef(true);
+  const streamingMessageRef = useRef<SimulationMessage | null>(null);
 
   // State
   const [personaSets, setPersonaSets] = useState<PersonaSet[]>([]);
@@ -153,6 +156,9 @@ export default function SimulationPage() {
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState<SimulationMessage | null>(null);
+  const [autoContinue, setAutoContinue] = useState(true);
+  const [streamingEnabled, setStreamingEnabled] = useState(true);
 
   // Setup form state
   const [showSetup, setShowSetup] = useState(!simulationId);
@@ -176,7 +182,24 @@ export default function SimulationPage() {
   // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentSimulation?.messages]);
+  }, [currentSimulation?.messages, streamingMessage?.content]);
+
+  useEffect(() => {
+    autoContinueRef.current = autoContinue;
+  }, [autoContinue]);
+
+  useEffect(() => {
+    streamingMessageRef.current = streamingMessage;
+  }, [streamingMessage]);
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.close();
+        streamRef.current = null;
+      }
+    };
+  }, []);
 
   const loadPersonaSets = async () => {
     try {
@@ -197,6 +220,11 @@ export default function SimulationPage() {
   };
 
   const loadSimulation = async (id: number) => {
+    if (streamRef.current) {
+      streamRef.current.close();
+      streamRef.current = null;
+    }
+    setStreamingMessage(null);
     setLoading(true);
     try {
       const data = await simulationsApi.getById(id);
@@ -223,6 +251,106 @@ export default function SimulationPage() {
     const newSelected = new Map(selectedPersonas);
     newSelected.set(personaId, role);
     setSelectedPersonas(newSelected);
+  };
+
+  const closeStream = () => {
+    if (streamRef.current) {
+      streamRef.current.close();
+      streamRef.current = null;
+    }
+  };
+
+  const startStreamingTurn = (shouldAutoContinue: boolean) => {
+    if (!currentSimulation) return;
+
+    closeStream();
+    setRunning(true);
+    setStreamingMessage(null);
+
+    const eventSource = new EventSource(
+      `${API_BASE_URL}/simulations/${currentSimulation.id}/stream`
+    );
+    streamRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'start') {
+        const personaImageUrl = currentSimulation.participants.find(
+          p => p.persona_id === data.persona_id
+        )?.persona_image_url;
+
+        setCurrentSimulation(prev =>
+          prev ? { ...prev, status: 'running' } : prev
+        );
+
+        setStreamingMessage({
+          id: -1,
+          persona_id: data.persona_id,
+          persona_name: data.persona_name,
+          persona_image_url: personaImageUrl,
+          content: '',
+          turn_number: data.turn_number,
+          tokens: 0,
+          is_moderator_message: false,
+          created_at: new Date().toISOString()
+        });
+        return;
+      }
+
+      if (data.type === 'chunk') {
+        setStreamingMessage(prev =>
+          prev ? { ...prev, content: prev.content + data.content } : prev
+        );
+        return;
+      }
+
+      if (data.type === 'complete') {
+        const finalized = streamingMessageRef.current
+          ? {
+              ...streamingMessageRef.current,
+              id: data.message_id ?? streamingMessageRef.current.id,
+              tokens: data.tokens ?? streamingMessageRef.current.tokens
+            }
+          : null;
+
+        setCurrentSimulation(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            status: data.simulation_status ?? prev.status,
+            current_turn: data.current_turn ?? prev.current_turn,
+            tokens_used: data.tokens_used ?? prev.tokens_used,
+            messages: finalized ? [...prev.messages, finalized] : prev.messages
+          };
+        });
+
+        setStreamingMessage(null);
+        setRunning(false);
+        closeStream();
+        loadSimulations();
+
+        if (
+          shouldAutoContinue &&
+          autoContinueRef.current &&
+          data.simulation_status === 'running'
+        ) {
+          setTimeout(() => startStreamingTurn(true), 400);
+        }
+        return;
+      }
+
+      if (data.type === 'error') {
+        alert(data.message || 'Streaming error');
+        setRunning(false);
+        closeStream();
+      }
+    };
+
+    eventSource.onerror = () => {
+      setRunning(false);
+      closeStream();
+    };
   };
 
   const handleCreateSimulation = async () => {
@@ -265,6 +393,11 @@ export default function SimulationPage() {
   const handleStartSimulation = async (autoContinue: boolean = true) => {
     if (!currentSimulation) return;
 
+    if (streamingEnabled) {
+      startStreamingTurn(autoContinue);
+      return;
+    }
+
     setRunning(true);
     try {
       const updated = await simulationsApi.start(currentSimulation.id, autoContinue);
@@ -279,6 +412,11 @@ export default function SimulationPage() {
 
   const handleNextTurn = async () => {
     if (!currentSimulation) return;
+
+    if (streamingEnabled) {
+      startStreamingTurn(false);
+      return;
+    }
 
     setRunning(true);
     try {
@@ -295,6 +433,11 @@ export default function SimulationPage() {
 
   const handleStopSimulation = async () => {
     if (!currentSimulation) return;
+
+    closeStream();
+    setStreamingMessage(null);
+    setRunning(false);
+    setAutoContinue(false);
 
     try {
       await simulationsApi.stop(currentSimulation.id);
@@ -322,6 +465,8 @@ export default function SimulationPage() {
   };
 
   const handleNewSimulation = () => {
+    closeStream();
+    setStreamingMessage(null);
     setCurrentSimulation(null);
     setShowSetup(true);
     setSelectedPersonas(new Map());
@@ -332,6 +477,10 @@ export default function SimulationPage() {
   };
 
   const selectedSet = personaSets.find(s => s.id === selectedSetId);
+  const displayMessages =
+    currentSimulation && streamingMessage
+      ? [...currentSimulation.messages, streamingMessage]
+      : currentSimulation?.messages || [];
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -630,7 +779,7 @@ export default function SimulationPage() {
                 {currentSimulation.status === 'pending' && (
                   <>
                     <button
-                      onClick={() => handleStartSimulation(true)}
+                      onClick={() => handleStartSimulation(autoContinue)}
                       disabled={running}
                       className="px-4 py-2 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-500 hover:to-emerald-600 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
                     >
@@ -669,6 +818,27 @@ export default function SimulationPage() {
                   </>
                 )}
 
+                <div className="flex items-center gap-4 text-sm text-white/70">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={streamingEnabled}
+                      onChange={(e) => setStreamingEnabled(e.target.checked)}
+                      className="accent-white"
+                    />
+                    Stream responses
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={autoContinue}
+                      onChange={(e) => setAutoContinue(e.target.checked)}
+                      className="accent-white"
+                    />
+                    Auto-continue turns
+                  </label>
+                </div>
+
                 {(currentSimulation.status === 'completed' || currentSimulation.status === 'stopped') &&
                   currentSimulation.messages.length > 0 && !currentSimulation.summary && (
                   <button
@@ -684,7 +854,7 @@ export default function SimulationPage() {
 
               {/* Messages */}
               <div className="glass-card rounded-2xl p-4 pastel-pink min-h-[400px] max-h-[600px] overflow-y-auto">
-                {currentSimulation.messages.length === 0 ? (
+                {displayMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-64 text-white/60">
                     <div className="text-center">
                       <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -693,7 +863,7 @@ export default function SimulationPage() {
                   </div>
                 ) : (
                   <>
-                    {currentSimulation.messages.map((msg, idx) => (
+                    {displayMessages.map((msg, idx) => (
                       <MessageBubble
                         key={msg.id}
                         message={msg}
