@@ -147,13 +147,14 @@ class AnalyticsService:
         if not persona_set.personas:
             raise ValueError("Persona set has no personas")
         
-        # Get interview documents
-        interview_result = await session.execute(
-            select(Document).where(Document.document_type == DocumentType.INTERVIEW)
-        )
+        # Get interview documents (scope by project when persona set is linked to a project)
+        interview_query = select(Document).where(Document.document_type == DocumentType.INTERVIEW)
+        if persona_set.project_id is not None:
+            interview_query = interview_query.where(Document.project_id == persona_set.project_id)
+        interview_result = await session.execute(interview_query)
         interviews = list(interview_result.scalars().all())
         
-        # If no interview documents, use dummy validation
+        # If no interview documents for this scope, use dummy validation
         use_dummy_validation = not interviews
         
         if use_dummy_validation:
@@ -205,30 +206,45 @@ class AnalyticsService:
                 })
             else:
                 # Real validation with interview documents
-                # Create text representation of persona
                 persona_text = f"{persona.name} {persona.persona_data.get('basic_description', '')} {persona.persona_data.get('detailed_description', '')}"
-                
-                # Query vector DB for similar interview chunks
-                # The vector DB will handle embedding creation internally
+                filter_metadata = {"document_type": "interview"}
+                if persona_set.project_id is not None:
+                    filter_metadata["project_id"] = str(persona_set.project_id)
+
                 query_results = await vector_db.query_documents(
                     query_texts=[persona_text],
                     n_results=10,
-                    filter_metadata={"document_type": "interview"}
+                    filter_metadata=filter_metadata
                 )
-                
-                # Calculate similarity with retrieved chunks
+
                 similarities = []
-                # Pinecone returns cosine similarity in "distances" (higher = more similar).
-                # ChromaDB may return distance; vector_db abstraction uses same key for scores.
                 if query_results.get("distances") and len(query_results["distances"]) > 0:
                     scores = query_results["distances"][0]
-                    # Use scores as similarity (Pinecone cosine = similarity). Handle None.
+                    if not isinstance(scores, list):
+                        scores = [scores] if scores is not None else []
                     similarities = [float(s) if s is not None else 0.0 for s in scores]
-                elif query_results.get("documents") and len(query_results["documents"]) > 0:
-                    # If we don't have distances, we can calculate similarity from embeddings
-                    # For now, use a default similarity based on number of matches
+
+                # If no matches and we filtered by project_id, retry without project_id
+                if not similarities and filter_metadata.get("project_id") is not None:
+                    fallback_filter = {"document_type": "interview"}
+                    query_results = await vector_db.query_documents(
+                        query_texts=[persona_text],
+                        n_results=10,
+                        filter_metadata=fallback_filter
+                    )
+                    if query_results.get("distances") and len(query_results["distances"]) > 0:
+                        scores = query_results["distances"][0]
+                        if not isinstance(scores, list):
+                            scores = [scores] if scores is not None else []
+                        similarities = [float(s) if s is not None else 0.0 for s in scores]
+                    logger.info(
+                        "Validate: no vector matches for project_id=%s; used unscoped interview filter",
+                        filter_metadata["project_id"],
+                    )
+
+                if not similarities and query_results.get("documents") and len(query_results["documents"]) > 0:
                     num_matches = len(query_results["documents"][0])
-                    similarities = [0.7] * num_matches  # Default similarity for matched documents
+                    similarities = [0.7] * num_matches
                 
                 # Calculate average similarity
                 if HAS_SCIKIT and similarities:
@@ -288,7 +304,8 @@ class AnalyticsService:
     async def validate_persona_attributes(
         session: AsyncSession,
         persona_id: int,
-        cs_threshold: float = DEFAULT_CS_THRESHOLD
+        cs_threshold: float = DEFAULT_CS_THRESHOLD,
+        project_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Validate individual persona attributes against source data (PEP paper methodology).
@@ -302,6 +319,7 @@ class AnalyticsService:
             session: Database session
             persona_id: ID of the persona to validate
             cs_threshold: Cosine similarity threshold (default 0.8 per paper)
+            project_id: Optional project ID for scoping vector queries (same as verify)
 
         Returns:
             Dictionary with per-attribute validation scores and flags
@@ -346,23 +364,41 @@ class AnalyticsService:
             if not attr_text.strip():
                 continue
 
-            # Query vector DB for similar source chunks
+            # Query vector DB for similar source chunks (scope by project when provided)
+            filter_metadata = {"document_type": "interview"}
+            if project_id is not None:
+                filter_metadata["project_id"] = str(project_id)
+
             query_results = await vector_db.query_documents(
                 query_texts=[attr_text],
                 n_results=5,
-                filter_metadata={"document_type": "interview"}
+                filter_metadata=filter_metadata
             )
 
-            # Calculate similarity (Pinecone returns cosine similarity in "distances", not distance)
             similarities = []
             source_chunks = []
-
             if query_results.get("distances") and len(query_results["distances"]) > 0:
                 scores = query_results["distances"][0]
+                if not isinstance(scores, list):
+                    scores = [scores] if scores is not None else []
                 similarities = [float(s) if s is not None else 0.0 for s in scores]
 
+            # If no matches and we filtered by project_id, retry without project_id
+            if not similarities and filter_metadata.get("project_id") is not None:
+                fallback_filter = {"document_type": "interview"}
+                query_results = await vector_db.query_documents(
+                    query_texts=[attr_text],
+                    n_results=5,
+                    filter_metadata=fallback_filter
+                )
+                if query_results.get("distances") and len(query_results["distances"]) > 0:
+                    scores = query_results["distances"][0]
+                    if not isinstance(scores, list):
+                        scores = [scores] if scores is not None else []
+                    similarities = [float(s) if s is not None else 0.0 for s in scores]
+
             if query_results.get("documents") and len(query_results["documents"]) > 0:
-                source_chunks = query_results["documents"][0][:3]  # Top 3 chunks
+                source_chunks = query_results["documents"][0][:3]
 
             # Calculate average similarity for this attribute
             if similarities:
@@ -450,7 +486,7 @@ class AnalyticsService:
 
         for persona in persona_set.personas:
             result = await AnalyticsService.validate_persona_attributes(
-                session, persona.id, cs_threshold
+                session, persona.id, cs_threshold, project_id=persona_set.project_id
             )
             validation_results.append(result)
             total_validated += len(result["validated_attributes"])

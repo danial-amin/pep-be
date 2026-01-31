@@ -406,72 +406,94 @@ class PersonaVerificationService:
         Calculate direct semantic similarity between attribute text and source chunks.
 
         Queries the vector DB and returns cosine similarity scores.
+        If filter includes project_id and returns 0 matches, retries without project_id
+        so scores are still returned when project has no indexed docs but others do.
         """
-        try:
-            # Query vector DB for similar source chunks
-            query_results = await vector_db.query_documents(
-                query_texts=[attr_text],
-                n_results=top_k,
-                filter_metadata=metadata_filter
-            )
+        used_unscoped_fallback = False
 
-            # Extract similarities from distances
+        def _parse_results(query_results: Dict[str, Any]) -> Tuple[List[float], List[str]]:
+            """Parse query_results into similarities list and source_chunks list."""
             similarities = []
             source_chunks = []
-
             if query_results.get("distances") and len(query_results["distances"]) > 0:
                 scores = query_results["distances"][0]
-                # Pinecone returns cosine similarity (higher = more similar). Handle None.
+                # Ensure we iterate over a list (Pinecone/Chroma return list of lists)
+                if not isinstance(scores, list):
+                    scores = [scores] if scores is not None else []
                 for s in scores:
                     if s is None:
-                        continue  # Skip None values instead of adding 0.0
+                        continue
                     elif s > 1:
-                        # Likely a distance metric (e.g. from ChromaDB)
                         sim = max(0.0, 1.0 - float(s))
                         if sim > 0:
                             similarities.append(sim)
                     else:
                         sim = float(s)
-                        if sim > 0:  # Only include positive similarities
+                        if sim > 0:
                             similarities.append(sim)
-
             if query_results.get("documents") and len(query_results["documents"]) > 0:
-                source_chunks = query_results["documents"][0]
-
+                source_chunks = list(query_results["documents"][0]) or []
             # Use relevance scores from reranker if available
             if query_results.get("relevance_scores") and len(query_results["relevance_scores"]) > 0:
                 rerank_scores = query_results["relevance_scores"][0]
-                # Filter out None and zero values from relevance scores too
                 valid_rerank_scores = [float(s) for s in rerank_scores if s is not None and s > 0]
                 if valid_rerank_scores:
                     similarities = valid_rerank_scores
+            return similarities, source_chunks
 
-            # Calculate average similarity only from valid scores
+        try:
+            # Query vector DB with full filter first
+            query_results = await vector_db.query_documents(
+                query_texts=[attr_text],
+                n_results=top_k,
+                filter_metadata=metadata_filter
+            )
+            similarities, source_chunks = _parse_results(query_results)
+
+            # If no matches and we filtered by project_id, retry without project_id
+            if not similarities and metadata_filter.get("project_id") is not None:
+                fallback_filter = {k: v for k, v in metadata_filter.items() if k != "project_id"}
+                if fallback_filter:
+                    logger.info(
+                        "No vector matches for project_id=%s; retrying with document_type only",
+                        metadata_filter["project_id"],
+                    )
+                    query_results = await vector_db.query_documents(
+                        query_texts=[attr_text],
+                        n_results=top_k,
+                        filter_metadata=fallback_filter
+                    )
+                    similarities, source_chunks = _parse_results(query_results)
+                    used_unscoped_fallback = bool(similarities)
+
+            # Calculate weighted similarity
             if similarities:
                 avg_similarity = sum(similarities) / len(similarities)
                 max_similarity = max(similarities)
-                # Use weighted combination: favor max but include average
                 weighted_sim = max_similarity * 0.6 + avg_similarity * 0.4
             else:
                 avg_similarity = 0.0
                 max_similarity = 0.0
                 weighted_sim = 0.0
 
-            return {
+            result = {
                 "similarity": weighted_sim,
                 "average_similarity": avg_similarity,
                 "max_similarity": max_similarity,
                 "all_similarities": similarities,
                 "source_chunks": source_chunks,
-                "num_matches": len(similarities)
+                "num_matches": len(similarities),
             }
+            if used_unscoped_fallback:
+                result["used_unscoped_fallback"] = True
+            return result
 
         except Exception as e:
             logger.error(f"Error calculating direct similarity: {e}")
             return {
                 "similarity": 0.0,
                 "error": str(e),
-                "source_chunks": []
+                "source_chunks": [],
             }
 
     @staticmethod
@@ -489,12 +511,30 @@ class PersonaVerificationService:
         3. Contextual matching: Look for broader context that implies the attribute
 
         This ensures we find conceptual relationships even when direct text
-        matching fails.
+        matching fails. Uses same project_id fallback as direct similarity.
         """
         if not HAS_NUMPY:
             return {"similarity": 0.0, "path": [], "error": "numpy not available"}
 
         try:
+            # If filter has project_id and first query returns nothing, use fallback (no project_id)
+            effective_filter = dict(metadata_filter)
+            if metadata_filter.get("project_id") is not None:
+                probe = await vector_db.query_documents(
+                    query_texts=[attr_text[:200]],
+                    n_results=1,
+                    filter_metadata=metadata_filter,
+                )
+                scores_0 = probe.get("distances") and len(probe["distances"]) > 0 and probe["distances"][0]
+                if isinstance(scores_0, list):
+                    has_matches = len(scores_0) > 0
+                else:
+                    has_matches = scores_0 is not None
+                if not has_matches:
+                    effective_filter = {k: v for k, v in metadata_filter.items() if k != "project_id"}
+                    if effective_filter:
+                        logger.info("Indirect similarity: using unscoped filter (no project_id) after empty project filter.")
+
             best_indirect_similarity = 0.0
             best_path = []
             all_concept_scores = []
@@ -507,12 +547,13 @@ class PersonaVerificationService:
                     variant_results = await vector_db.query_documents(
                         query_texts=[query_variant],
                         n_results=5,
-                        filter_metadata=metadata_filter
+                        filter_metadata=effective_filter
                     )
 
                     if variant_results.get("distances") and variant_results["distances"][0]:
                         scores = variant_results["distances"][0]
-                        # Filter out None values and convert to float
+                        if not isinstance(scores, list):
+                            scores = [scores] if scores is not None else []
                         valid_scores = [float(s) for s in scores if s is not None and s > 0]
                         if valid_scores:
                             max_score = max(valid_scores)
@@ -538,7 +579,7 @@ class PersonaVerificationService:
                     concept_results = await vector_db.query_documents(
                         query_texts=[concept],
                         n_results=3,
-                        filter_metadata=metadata_filter
+                        filter_metadata=effective_filter
                     )
 
                     if concept_results.get("distances") and concept_results["distances"][0]:
@@ -564,7 +605,7 @@ class PersonaVerificationService:
                 context_results = await vector_db.query_documents(
                     query_texts=[context_query],
                     n_results=5,
-                    filter_metadata=metadata_filter
+                    filter_metadata=effective_filter
                 )
 
                 if context_results.get("distances") and context_results["distances"][0]:
