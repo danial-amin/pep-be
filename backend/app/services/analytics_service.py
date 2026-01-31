@@ -218,12 +218,12 @@ class AnalyticsService:
                 
                 # Calculate similarity with retrieved chunks
                 similarities = []
-                # Vector DB returns results with distances or similarities
-                # For Pinecone/ChromaDB, we get distances which we convert to similarities
+                # Pinecone returns cosine similarity in "distances" (higher = more similar).
+                # ChromaDB may return distance; vector_db abstraction uses same key for scores.
                 if query_results.get("distances") and len(query_results["distances"]) > 0:
-                    # Convert distances to similarities (for cosine distance: similarity = 1 - distance)
-                    distances = query_results["distances"][0]
-                    similarities = [max(0, 1 - d) for d in distances]  # Ensure non-negative
+                    scores = query_results["distances"][0]
+                    # Use scores as similarity (Pinecone cosine = similarity). Handle None.
+                    similarities = [float(s) if s is not None else 0.0 for s in scores]
                 elif query_results.get("documents") and len(query_results["documents"]) > 0:
                     # If we don't have distances, we can calculate similarity from embeddings
                     # For now, use a default similarity based on number of matches
@@ -353,13 +353,13 @@ class AnalyticsService:
                 filter_metadata={"document_type": "interview"}
             )
 
-            # Calculate similarity
+            # Calculate similarity (Pinecone returns cosine similarity in "distances", not distance)
             similarities = []
             source_chunks = []
 
             if query_results.get("distances") and len(query_results["distances"]) > 0:
-                distances = query_results["distances"][0]
-                similarities = [max(0, 1 - d) for d in distances]  # Convert distance to similarity
+                scores = query_results["distances"][0]
+                similarities = [float(s) if s is not None else 0.0 for s in scores]
 
             if query_results.get("documents") and len(query_results["documents"]) > 0:
                 source_chunks = query_results["documents"][0][:3]  # Top 3 chunks

@@ -318,7 +318,8 @@ class PineconeVectorDB:
             metadata = {k: v for k, v in match.metadata.items() if k != "text"}
             metadatas.append(metadata)
 
-            distances.append(match.score)
+            # Pinecone cosine metric returns similarity (0-1). Use 0.0 if score is None.
+            distances.append(match.score if match.score is not None else 0.0)
             ids.append(match.id)
 
         # Apply Cohere reranking if enabled and available

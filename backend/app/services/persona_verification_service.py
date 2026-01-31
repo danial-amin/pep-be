@@ -400,17 +400,16 @@ class PersonaVerificationService:
             source_chunks = []
 
             if query_results.get("distances") and len(query_results["distances"]) > 0:
-                distances = query_results["distances"][0]
-                # Pinecone returns cosine similarity directly (higher = more similar)
-                # If using distance metric, convert: similarity = 1 - distance
-                for d in distances:
-                    # Handle both similarity scores (0-1) and distance scores
-                    if d > 1:
-                        # Likely a distance metric
-                        similarities.append(max(0, 1 - d))
+                scores = query_results["distances"][0]
+                # Pinecone returns cosine similarity (higher = more similar). Handle None.
+                for s in scores:
+                    if s is None:
+                        similarities.append(0.0)
+                    elif s > 1:
+                        # Likely a distance metric (e.g. from ChromaDB)
+                        similarities.append(max(0.0, 1.0 - float(s)))
                     else:
-                        # Already a similarity score
-                        similarities.append(d)
+                        similarities.append(float(s))
 
             if query_results.get("documents") and len(query_results["documents"]) > 0:
                 source_chunks = query_results["documents"][0]

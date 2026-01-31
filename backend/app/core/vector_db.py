@@ -123,7 +123,12 @@ else:
                 n_results=n_results,
                 where=where
             )
-            
+            # ChromaDB returns cosine distance (0=same, 2=opposite). Normalize to similarity (0-1, higher=more similar).
+            if results.get("distances"):
+                results["distances"] = [
+                    [max(0.0, 1.0 - (d if d is not None else 0.0)) for d in row]
+                    for row in results["distances"]
+                ]
             return results
         
         async def update_document_metadata(
