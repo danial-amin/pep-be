@@ -134,9 +134,10 @@ class PersonaVerificationService:
             # Calculate indirect similarity if enabled and direct is below threshold
             indirect_result = None
             if use_indirect_similarity and direct_result["similarity"] < similarity_threshold:
+                indirect_filter = direct_result.get("effective_metadata_filter") or metadata_filter
                 indirect_result = await PersonaVerificationService._calculate_indirect_similarity(
                     attr_text=attr_text,
-                    metadata_filter=metadata_filter,
+                    metadata_filter=indirect_filter,
                     max_hops=2
                 )
 
@@ -157,7 +158,8 @@ class PersonaVerificationService:
                 "verified": is_verified,
                 "threshold": similarity_threshold,
                 "source_chunks": direct_result.get("source_chunks", [])[:3],
-                "indirect_path": indirect_result.get("path") if indirect_result else None
+                "indirect_path": indirect_result.get("path") if indirect_result else None,
+                "source_document_type": direct_result.get("source_document_type", "interview")
             }
 
             # Track metrics
@@ -442,6 +444,9 @@ class PersonaVerificationService:
             return similarities, source_chunks
 
         try:
+            effective_filter = dict(metadata_filter)
+            source_document_type = metadata_filter.get("document_type", "interview")
+
             # Query vector DB with full filter first
             query_results = await vector_db.query_documents(
                 query_texts=[attr_text],
@@ -464,7 +469,38 @@ class PersonaVerificationService:
                         filter_metadata=fallback_filter
                     )
                     similarities, source_chunks = _parse_results(query_results)
-                    used_unscoped_fallback = bool(similarities)
+                    if similarities:
+                        used_unscoped_fallback = True
+                        effective_filter = fallback_filter
+
+            # If still no matches (e.g. no interview vectors), try context documents
+            if not similarities and (metadata_filter.get("document_type") or "interview") == "interview":
+                context_filter = {"document_type": "context"}
+                if metadata_filter.get("project_id") is not None:
+                    context_filter["project_id"] = metadata_filter["project_id"]
+                logger.info(
+                    "No interview vector matches; retrying with document_type=context"
+                )
+                query_results = await vector_db.query_documents(
+                    query_texts=[attr_text],
+                    n_results=top_k,
+                    filter_metadata=context_filter
+                )
+                similarities, source_chunks = _parse_results(query_results)
+                if similarities:
+                    source_document_type = "context"
+                    effective_filter = context_filter
+                elif context_filter.get("project_id") is not None:
+                    context_filter_no_project = {"document_type": "context"}
+                    query_results = await vector_db.query_documents(
+                        query_texts=[attr_text],
+                        n_results=top_k,
+                        filter_metadata=context_filter_no_project
+                    )
+                    similarities, source_chunks = _parse_results(query_results)
+                    if similarities:
+                        source_document_type = "context"
+                        effective_filter = context_filter_no_project
 
             # Calculate weighted similarity
             if similarities:
@@ -483,9 +519,12 @@ class PersonaVerificationService:
                 "all_similarities": similarities,
                 "source_chunks": source_chunks,
                 "num_matches": len(similarities),
+                "effective_metadata_filter": effective_filter,
             }
             if used_unscoped_fallback:
                 result["used_unscoped_fallback"] = True
+            if source_document_type == "context":
+                result["source_document_type"] = "context"
             return result
 
         except Exception as e:

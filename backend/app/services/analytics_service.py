@@ -154,8 +154,19 @@ class AnalyticsService:
         interview_result = await session.execute(interview_query)
         interviews = list(interview_result.scalars().all())
         
-        # If no interview documents for this scope, use dummy validation
-        use_dummy_validation = not interviews
+        # If no interview documents for this scope, fall back to context docs
+        use_dummy_validation = False
+        fallback_document_type = None
+        if not interviews:
+            context_query = select(Document).where(Document.document_type == DocumentType.CONTEXT)
+            if persona_set.project_id is not None:
+                context_query = context_query.where(Document.project_id == persona_set.project_id)
+            context_result = await session.execute(context_query)
+            contexts = list(context_result.scalars().all())
+            if contexts:
+                fallback_document_type = "context"
+            else:
+                use_dummy_validation = True
         
         if use_dummy_validation:
             logger.info("No interview documents found. Using dummy validation scores.")
@@ -207,7 +218,7 @@ class AnalyticsService:
             else:
                 # Real validation with interview documents
                 persona_text = f"{persona.name} {persona.persona_data.get('basic_description', '')} {persona.persona_data.get('detailed_description', '')}"
-                filter_metadata = {"document_type": "interview"}
+                filter_metadata = {"document_type": fallback_document_type or "interview"}
                 if persona_set.project_id is not None:
                     filter_metadata["project_id"] = str(persona_set.project_id)
 
@@ -264,7 +275,8 @@ class AnalyticsService:
                     "min": min_similarity,
                     "scores": similarities,
                     "num_matches": len(similarities),
-                    "dummy": False
+                    "dummy": False,
+                    "source_document_type": fallback_document_type or "interview"
                 }
                 persona.validation_status = "validated" if avg_similarity > 0.7 else "pending"
                 
@@ -275,7 +287,8 @@ class AnalyticsService:
                     "max_similarity": max_similarity,
                     "min_similarity": min_similarity,
                     "validation_status": persona.validation_status,
-                    "dummy": False
+                    "dummy": False,
+                    "source_document_type": fallback_document_type or "interview"
                 })
         
         # Update persona set validation scores
@@ -377,6 +390,7 @@ class AnalyticsService:
 
             similarities = []
             source_chunks = []
+            source_document_type = "interview"
             if query_results.get("distances") and len(query_results["distances"]) > 0:
                 scores = query_results["distances"][0]
                 if not isinstance(scores, list):
@@ -397,6 +411,38 @@ class AnalyticsService:
                         scores = [scores] if scores is not None else []
                     similarities = [float(s) if s is not None else 0.0 for s in scores]
 
+            # If still no matches, try context documents
+            if not similarities and filter_metadata.get("document_type") == "interview":
+                context_filter = {"document_type": "context"}
+                if project_id is not None:
+                    context_filter["project_id"] = str(project_id)
+                query_results = await vector_db.query_documents(
+                    query_texts=[attr_text],
+                    n_results=5,
+                    filter_metadata=context_filter
+                )
+                if query_results.get("distances") and len(query_results["distances"]) > 0:
+                    scores = query_results["distances"][0]
+                    if not isinstance(scores, list):
+                        scores = [scores] if scores is not None else []
+                    similarities = [float(s) if s is not None else 0.0 for s in scores]
+                    if similarities:
+                        source_document_type = "context"
+                if not similarities and project_id is not None:
+                    context_filter_no_project = {"document_type": "context"}
+                    query_results = await vector_db.query_documents(
+                        query_texts=[attr_text],
+                        n_results=5,
+                        filter_metadata=context_filter_no_project
+                    )
+                    if query_results.get("distances") and len(query_results["distances"]) > 0:
+                        scores = query_results["distances"][0]
+                        if not isinstance(scores, list):
+                            scores = [scores] if scores is not None else []
+                        similarities = [float(s) if s is not None else 0.0 for s in scores]
+                        if similarities:
+                            source_document_type = "context"
+
             if query_results.get("documents") and len(query_results["documents"]) > 0:
                 source_chunks = query_results["documents"][0][:3]
 
@@ -416,7 +462,8 @@ class AnalyticsService:
                 "max_similarity": round(max_similarity, 3),
                 "validated": is_validated,
                 "threshold": cs_threshold,
-                "source_chunks": source_chunks[:2] if source_chunks else []  # Include top 2 sources
+                "source_chunks": source_chunks[:2] if source_chunks else [],  # Include top 2 sources
+                "source_document_type": source_document_type if similarities else "interview"
             }
 
             if is_validated:
