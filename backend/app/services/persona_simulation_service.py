@@ -142,17 +142,21 @@ CONVERSATION GUIDELINES:
         if simulation.status == "completed" or simulation.status == "stopped":
             return None
 
+        # Check turn limit
         if simulation.current_turn >= simulation.max_turns:
             simulation.status = "completed"
             simulation.completed_at = datetime.now(timezone.utc)
             await session.commit()
             return None
 
-        if simulation.tokens_used >= simulation.max_tokens:
-            simulation.status = "completed"
-            simulation.completed_at = datetime.now(timezone.utc)
-            await session.commit()
-            return None
+        # Check duration limit
+        if simulation.started_at and simulation.max_duration_seconds:
+            elapsed = (datetime.now(timezone.utc) - simulation.started_at).total_seconds()
+            if elapsed >= simulation.max_duration_seconds:
+                simulation.status = "completed"
+                simulation.completed_at = datetime.now(timezone.utc)
+                await session.commit()
+                return None
 
         # Get participants and their personas
         participants = {}
@@ -309,6 +313,10 @@ Please share your initial thoughts on this topic, drawing from your personal exp
     ) -> List[SimulationMessage]:
         """
         Run the entire simulation until completion or limits are reached.
+
+        Stops when either:
+        - max_turns is reached
+        - max_duration_seconds has elapsed
         """
         messages = []
 
@@ -319,6 +327,15 @@ Please share your initial thoughts on this topic, drawing from your personal exp
 
         try:
             while simulation.status == "running":
+                # Check duration limit before each turn
+                if simulation.max_duration_seconds:
+                    elapsed = (datetime.now(timezone.utc) - simulation.started_at).total_seconds()
+                    if elapsed >= simulation.max_duration_seconds:
+                        simulation.status = "completed"
+                        simulation.completed_at = datetime.now(timezone.utc)
+                        await session.commit()
+                        break
+
                 # Refresh to get latest state
                 await session.refresh(simulation, ["messages", "participants"])
 

@@ -44,24 +44,23 @@ class SimulationCreateRequest(BaseModel):
         description="List of personas to participate (2-8 personas)"
     )
 
-    # Constraints
-    max_duration_seconds: int = Field(
-        default=300,
-        ge=60,
-        le=1800,
-        description="Maximum duration in seconds (1-30 minutes)"
-    )
-    max_tokens: int = Field(
-        default=4000,
-        ge=1000,
-        le=16000,
-        description="Maximum total tokens for the conversation"
-    )
+    # Constraints - simulation stops when EITHER limit is reached
     max_turns: int = Field(
-        default=20,
-        ge=4,
+        default=10,
+        ge=2,
         le=50,
-        description="Maximum number of conversation turns"
+        description="Maximum number of conversation turns (each persona speaking counts as 1 turn)"
+    )
+    max_duration_seconds: int = Field(
+        default=120,
+        ge=30,
+        le=600,
+        description="Maximum duration in seconds (30s - 10 minutes). Simulation stops after this time."
+    )
+    # Token tracking (for reference, not a hard limit)
+    max_tokens: Optional[int] = Field(
+        default=None,
+        description="Optional soft limit for total tokens (for cost tracking)"
     )
 
     # Project scoping

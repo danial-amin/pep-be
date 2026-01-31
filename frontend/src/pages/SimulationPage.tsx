@@ -163,8 +163,8 @@ export default function SimulationPage() {
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [goalContext, setGoalContext] = useState('');
-  const [maxTurns, setMaxTurns] = useState(20);
-  const [maxTokens, setMaxTokens] = useState(8000);
+  const [maxTurns, setMaxTurns] = useState(10);
+  const [maxDurationSeconds, setMaxDurationSeconds] = useState(120);
 
   // Load data on mount
   useEffect(() => {
@@ -250,7 +250,7 @@ export default function SimulationPage() {
         goal_context: goalContext || undefined,
         participants,
         max_turns: maxTurns,
-        max_tokens: maxTokens
+        max_duration_seconds: maxDurationSeconds
       });
 
       setCurrentSimulation(simulation);
@@ -464,37 +464,50 @@ export default function SimulationPage() {
                 />
               </div>
 
-              {/* Limits */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-white/90 mb-2">
-                    <MessageSquare className="w-4 h-4 inline mr-1" />
-                    Max Turns
-                  </label>
-                  <input
-                    type="number"
-                    value={maxTurns}
-                    onChange={(e) => setMaxTurns(parseInt(e.target.value) || 20)}
-                    min={4}
-                    max={50}
-                    className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50"
-                  />
+              {/* Limits - simulation stops when either limit is reached */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-white/90 mb-3">
+                  Simulation Limits (stops when either is reached)
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-white/70 mb-2">
+                      <MessageSquare className="w-4 h-4 inline mr-1" />
+                      Number of Turns
+                    </label>
+                    <select
+                      value={maxTurns}
+                      onChange={(e) => setMaxTurns(parseInt(e.target.value))}
+                      className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+                    >
+                      <option value={5}>5 turns</option>
+                      <option value={10}>10 turns</option>
+                      <option value={15}>15 turns</option>
+                      <option value={20}>20 turns</option>
+                      <option value={30}>30 turns</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/70 mb-2">
+                      <Clock className="w-4 h-4 inline mr-1" />
+                      Time Limit
+                    </label>
+                    <select
+                      value={maxDurationSeconds}
+                      onChange={(e) => setMaxDurationSeconds(parseInt(e.target.value))}
+                      className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+                    >
+                      <option value={60}>1 minute</option>
+                      <option value={120}>2 minutes</option>
+                      <option value={180}>3 minutes</option>
+                      <option value={300}>5 minutes</option>
+                      <option value={600}>10 minutes</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-white/90 mb-2">
-                    <Zap className="w-4 h-4 inline mr-1" />
-                    Max Tokens
-                  </label>
-                  <input
-                    type="number"
-                    value={maxTokens}
-                    onChange={(e) => setMaxTokens(parseInt(e.target.value) || 8000)}
-                    min={1000}
-                    max={16000}
-                    step={1000}
-                    className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50"
-                  />
-                </div>
+                <p className="text-xs text-white/50 mt-2">
+                  Conversation will stop when either the turn limit or time limit is reached
+                </p>
               </div>
 
               {/* Persona Selection */}
@@ -592,8 +605,8 @@ export default function SimulationPage() {
                         {currentSimulation.current_turn} / {currentSimulation.max_turns} turns
                       </div>
                       <div className="text-xs text-white/60">
-                        <Zap className="w-3 h-3 inline mr-1" />
-                        {currentSimulation.tokens_used.toLocaleString()} / {currentSimulation.max_tokens.toLocaleString()} tokens
+                        <Clock className="w-3 h-3 inline mr-1" />
+                        {Math.floor(currentSimulation.max_duration_seconds / 60)}:{(currentSimulation.max_duration_seconds % 60).toString().padStart(2, '0')} limit
                       </div>
                     </div>
                   </div>
