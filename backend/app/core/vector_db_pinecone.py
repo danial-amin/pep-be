@@ -369,6 +369,38 @@ class PineconeVectorDB:
             result["relevance_scores"] = [relevance_scores]
 
         return result
+
+    async def delete_documents(
+        self,
+        ids: Optional[List[str]] = None,
+        filter_metadata: Optional[dict] = None,
+        collection_name: str = "persona_documents"
+    ) -> bool:
+        """
+        Delete vectors from Pinecone by ids or metadata filter.
+        """
+        # Build filter if provided
+        filter_dict = None
+        if filter_metadata:
+            filter_dict = {}
+            for key, value in filter_metadata.items():
+                if isinstance(value, dict):
+                    filter_dict[key] = value
+                else:
+                    filter_dict[key] = {"$eq": value}
+
+        try:
+            if ids:
+                self.index.delete(ids=ids)
+            elif filter_dict:
+                self.index.delete(filter=filter_dict)
+            else:
+                logger.warning("delete_documents called with no ids or filter.")
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting documents from Pinecone: {e}")
+            return False
     
     async def update_document_metadata(
         self,

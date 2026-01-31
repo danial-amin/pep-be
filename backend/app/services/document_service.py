@@ -141,6 +141,26 @@ class DocumentService:
             select(Document).where(Document.id == document_id)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def delete_document(
+        session: AsyncSession,
+        document_id: int
+    ) -> bool:
+        """Delete a document and its vectors."""
+        result = await session.execute(
+            select(Document).where(Document.id == document_id)
+        )
+        document = result.scalar_one_or_none()
+        if not document:
+            return False
+
+        # Delete vectors by document_id metadata (removes all chunks)
+        await vector_db.delete_documents(filter_metadata={"document_id": str(document.id)})
+
+        await session.delete(document)
+        await session.flush()
+        return True
     
     @staticmethod
     def _chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:

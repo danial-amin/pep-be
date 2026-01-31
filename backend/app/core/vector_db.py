@@ -130,6 +130,37 @@ else:
                     for row in results["distances"]
                 ]
             return results
+
+        async def delete_documents(
+            self,
+            ids: Optional[List[str]] = None,
+            filter_metadata: Optional[dict] = None,
+            collection_name: str = "persona_documents"
+        ) -> bool:
+            """Delete documents from the vector database."""
+            collection = self.get_or_create_collection(collection_name)
+
+            where = None
+            if filter_metadata:
+                where = {}
+                for key, value in filter_metadata.items():
+                    if isinstance(value, dict) and "$in" in value:
+                        where[key] = {"$in": value["$in"]}
+                    else:
+                        where[key] = value
+
+            try:
+                if ids:
+                    collection.delete(ids=ids)
+                elif where:
+                    collection.delete(where=where)
+                else:
+                    logger.warning("delete_documents called with no ids or filter.")
+                    return False
+                return True
+            except Exception as e:
+                logger.error(f"Error deleting documents from ChromaDB: {e}")
+                return False
         
         async def update_document_metadata(
             self,

@@ -140,6 +140,20 @@ async def get_documents(
     return [DocumentResponse.model_validate(doc) for doc in documents]
 
 
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a document and its vectors from the vector DB."""
+    success = await DocumentService.delete_document(db, document_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document {document_id} not found"
+        )
+
+
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: int,
