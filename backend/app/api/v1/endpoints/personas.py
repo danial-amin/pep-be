@@ -668,6 +668,7 @@ async def measure_diversity(
 @router.post("/{persona_set_id}/validate")
 async def validate_personas(
     persona_set_id: int,
+    force: bool = Query(default=False, description="Force re-run validation even if cached results exist"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -676,7 +677,7 @@ async def validate_personas(
     Calculates cosine similarity between personas and real interview data.
     """
     try:
-        validation = await AnalyticsService.validate_personas(db, persona_set_id)
+        validation = await AnalyticsService.validate_personas(db, persona_set_id, force=force)
         return validation
     except ValueError as e:
         raise HTTPException(
@@ -854,7 +855,8 @@ async def verify_persona_similarity(
             similarity_threshold=request.similarity_threshold,
             use_indirect_similarity=request.use_indirect_similarity,
             filter_low_similarity=request.filter_low_similarity,
-            project_id=request.project_id
+            project_id=request.project_id,
+            force=request.force
         )
         return result
     except ValueError as e:
@@ -909,7 +911,8 @@ async def verify_persona_set_similarity(
             similarity_threshold=request.similarity_threshold,
             use_indirect_similarity=request.use_indirect_similarity,
             filter_low_similarity=request.filter_low_similarity,
-            project_id=request.project_id
+            project_id=request.project_id,
+            force=request.force
         )
         return result
     except ValueError as e:

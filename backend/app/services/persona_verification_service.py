@@ -67,7 +67,8 @@ class PersonaVerificationService:
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         use_indirect_similarity: bool = True,
         filter_low_similarity: bool = True,
-        project_id: Optional[int] = None
+        project_id: Optional[int] = None,
+        force: bool = False
     ) -> Dict[str, Any]:
         """
         Verify a persona's attributes against source data using semantic similarity.
@@ -97,6 +98,39 @@ class PersonaVerificationService:
 
         if not persona:
             raise ValueError(f"Persona {persona_id} not found")
+
+        # If cached results exist and not forced, return cached response
+        if (
+            not force
+            and persona.attribute_validation
+            and persona.similarity_score
+        ):
+            cached_results = persona.attribute_validation
+            # Build filtered persona data by dropping unverified attributes
+            filtered_persona_data = dict(persona.persona_data)
+            for attr_name, result in cached_results.items():
+                if isinstance(result, dict) and not result.get("verified", False):
+                    filtered_persona_data.pop(attr_name, None)
+
+            return {
+                "persona_id": persona_id,
+                "persona_name": persona.name,
+                "verification_results": cached_results,
+                "original_persona_data": persona.persona_data,
+                "filtered_persona_data": filtered_persona_data,
+                "metrics": {
+                    "average_direct_similarity": persona.similarity_score.get("average_direct", 0.0),
+                    "average_indirect_similarity": persona.similarity_score.get("average_indirect", 0.0),
+                    "verification_rate": persona.similarity_score.get("verification_rate", 0.0),
+                    "verified_attributes": persona.similarity_score.get("verified_count", 0),
+                    "filtered_attributes": persona.similarity_score.get("filtered_count", 0),
+                    "total_attributes": len(cached_results),
+                    "threshold": similarity_threshold,
+                },
+                "source_references": persona.source_references or {},
+                "validation_status": persona.validation_status or "partial",
+                "cached": True,
+            }
 
         # Build metadata filter for vector DB
         metadata_filter = {"document_type": "interview"}
@@ -242,7 +276,8 @@ class PersonaVerificationService:
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         use_indirect_similarity: bool = True,
         filter_low_similarity: bool = True,
-        project_id: Optional[int] = None
+        project_id: Optional[int] = None,
+        force: bool = False
     ) -> Dict[str, Any]:
         """
         Verify all personas in a set and return aggregated results.
@@ -291,7 +326,8 @@ class PersonaVerificationService:
                     similarity_threshold=similarity_threshold,
                     use_indirect_similarity=use_indirect_similarity,
                     filter_low_similarity=filter_low_similarity,
-                    project_id=effective_project_id
+                    project_id=effective_project_id,
+                    force=force
                 )
                 persona_results.append(result)
                 successful_verifications += 1

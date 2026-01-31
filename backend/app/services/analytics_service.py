@@ -123,7 +123,8 @@ class AnalyticsService:
     @staticmethod
     async def validate_personas(
         session: AsyncSession,
-        persona_set_id: int
+        persona_set_id: int,
+        force: bool = False
     ) -> Dict[str, Any]:
         """
         Validate personas against actual interview transcripts using cosine similarity.
@@ -146,6 +147,21 @@ class AnalyticsService:
         
         if not persona_set.personas:
             raise ValueError("Persona set has no personas")
+
+        # Return cached results if available and not forced
+        if not force and persona_set.validation_scores and persona_set.status == "validated":
+            overall_avg = 0.0
+            if persona_set.validation_scores:
+                scores = [r.get("average_similarity", 0.0) for r in persona_set.validation_scores]
+                overall_avg = float(np.mean(scores)) if HAS_SCIKIT and scores else (sum(scores) / len(scores) if scores else 0.0)
+            return {
+                "persona_set_id": persona_set_id,
+                "validation_results": persona_set.validation_scores,
+                "overall_average": overall_avg,
+                "validated_count": sum(1 for r in persona_set.validation_scores if r.get("validation_status") == "validated"),
+                "dummy_validation": any(r.get("dummy") for r in persona_set.validation_scores),
+                "cached": True
+            }
         
         # Get interview documents (scope by project when persona set is linked to a project)
         interview_query = select(Document).where(Document.document_type == DocumentType.INTERVIEW)

@@ -231,6 +231,10 @@ class VerificationRequest(BaseModel):
         default=None,
         description="Optional project ID for scoping vector DB queries"
     )
+    force: bool = Field(
+        default=False,
+        description="Force re-run verification even if cached results exist"
+    )
 
 
 class AttributeVerificationResult(BaseModel):
