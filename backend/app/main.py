@@ -65,6 +65,19 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            # Human intervention support on simulation_messages
+            await conn.execute(text("""
+                DO $$ 
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='simulation_messages') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                       WHERE table_name='simulation_messages' AND column_name='is_human_message') THEN
+                            ALTER TABLE simulation_messages ADD COLUMN is_human_message BOOLEAN DEFAULT false;
+                        END IF;
+                        ALTER TABLE simulation_messages ALTER COLUMN persona_id DROP NOT NULL;
+                    END IF;
+                END $$;
+            """))
             await conn.execute(text("""
                 DO $$ 
                 BEGIN
@@ -239,13 +252,33 @@ app.add_middleware(
 )
 
 
+def _cors_headers(origin: str | None = None) -> dict:
+    """Build CORS headers so error responses don't trigger browser CORS errors."""
+    origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else [settings.CORS_ORIGINS]
+    if not origins or (len(origins) == 1 and not str(origins[0]).strip()):
+        origins = ["*"]
+    if origins == ["*"]:
+        allow_origin = origin or "*"
+    else:
+        allow_origin = (origin if origin in origins else (origins[0] if origins else "*"))
+    return {
+        "Access-Control-Allow-Origin": allow_origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+    }
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Ensure 500 and other unhandled errors return JSON with CORS headers applied."""
+    """Ensure 500 and other unhandled errors return JSON with CORS headers so browser shows real error."""
     logger.exception("Unhandled exception: %s", exc)
+    origin = request.headers.get("origin")
+    headers = _cors_headers(origin)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
+        headers=headers,
     )
 
 # Include API routes
