@@ -145,7 +145,7 @@ export default function SimulationPage() {
   const navigate = useNavigate();
   const { simulationId } = useParams<{ simulationId: string }>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const streamRef = useRef<EventSource | null>(null);
+  const streamRef = useRef<AbortController | null>(null);
   const autoContinueRef = useRef(true);
   const streamingMessageRef = useRef<SimulationMessage | null>(null);
 
@@ -195,7 +195,7 @@ export default function SimulationPage() {
   useEffect(() => {
     return () => {
       if (streamRef.current) {
-        streamRef.current.close();
+        streamRef.current.abort();
         streamRef.current = null;
       }
     };
@@ -221,7 +221,7 @@ export default function SimulationPage() {
 
   const loadSimulation = async (id: number) => {
     if (streamRef.current) {
-      streamRef.current.close();
+      streamRef.current.abort();
       streamRef.current = null;
     }
     setStreamingMessage(null);
@@ -255,7 +255,7 @@ export default function SimulationPage() {
 
   const closeStream = () => {
     if (streamRef.current) {
-      streamRef.current.close();
+      streamRef.current.abort();
       streamRef.current = null;
     }
   };
@@ -267,90 +267,136 @@ export default function SimulationPage() {
     setRunning(true);
     setStreamingMessage(null);
 
-    const eventSource = new EventSource(
-      `${API_BASE_URL}/simulations/${currentSimulation.id}/stream`
-    );
-    streamRef.current = eventSource;
-
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-
-      if (data.type === 'start') {
-        const personaImageUrl = currentSimulation.participants.find(
-          p => p.persona_id === data.persona_id
-        )?.persona_image_url;
-
-        setCurrentSimulation(prev =>
-          prev ? { ...prev, status: 'running' } : prev
-        );
-
-        setStreamingMessage({
-          id: -1,
-          persona_id: data.persona_id,
-          persona_name: data.persona_name,
-          persona_image_url: personaImageUrl,
-          content: '',
-          turn_number: data.turn_number,
-          tokens: 0,
-          is_moderator_message: false,
-          created_at: new Date().toISOString()
-        });
-        return;
-      }
-
-      if (data.type === 'chunk') {
-        setStreamingMessage(prev =>
-          prev ? { ...prev, content: prev.content + data.content } : prev
-        );
-        return;
-      }
-
-      if (data.type === 'complete') {
-        const finalized = streamingMessageRef.current
-          ? {
-              ...streamingMessageRef.current,
-              id: data.message_id ?? streamingMessageRef.current.id,
-              tokens: data.tokens ?? streamingMessageRef.current.tokens
-            }
-          : null;
-
-        setCurrentSimulation(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            status: data.simulation_status ?? prev.status,
-            current_turn: data.current_turn ?? prev.current_turn,
-            tokens_used: data.tokens_used ?? prev.tokens_used,
-            messages: finalized ? [...prev.messages, finalized] : prev.messages
-          };
-        });
-
-        setStreamingMessage(null);
-        setRunning(false);
-        closeStream();
-        loadSimulations();
-
-        if (
-          shouldAutoContinue &&
-          autoContinueRef.current &&
-          data.simulation_status === 'running'
-        ) {
-          setTimeout(() => startStreamingTurn(true), 400);
+    const streamUrl = `${API_BASE_URL}/simulations/${currentSimulation.id}/stream`;
+    
+    // Use fetch with ReadableStream for better error handling and CORS support
+    const abortController = new AbortController();
+    
+    fetch(streamUrl, {
+      signal: abortController.signal,
+      headers: {
+        'Accept': 'text/event-stream',
+      },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-        return;
-      }
 
-      if (data.type === 'error') {
-        alert(data.message || 'Streaming error');
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        if (!reader) {
+          throw new Error('No response body');
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                if (data.type === 'start') {
+                  setCurrentSimulation(prev => {
+                    if (!prev) return prev;
+                    const personaImageUrl = prev.participants.find(
+                      p => p.persona_id === data.persona_id
+                    )?.persona_image_url;
+
+                    setStreamingMessage({
+                      id: -1,
+                      persona_id: data.persona_id,
+                      persona_name: data.persona_name,
+                      persona_image_url: personaImageUrl,
+                      content: '',
+                      turn_number: data.turn_number,
+                      tokens: 0,
+                      is_moderator_message: false,
+                      created_at: new Date().toISOString()
+                    });
+
+                    return { ...prev, status: 'running' };
+                  });
+                  continue;
+                }
+
+                if (data.type === 'chunk') {
+                  setStreamingMessage(prev =>
+                    prev ? { ...prev, content: prev.content + data.content } : prev
+                  );
+                  continue;
+                }
+
+                if (data.type === 'complete') {
+                  const finalized = streamingMessageRef.current
+                    ? {
+                        ...streamingMessageRef.current,
+                        id: data.message_id ?? streamingMessageRef.current.id,
+                        tokens: data.tokens ?? streamingMessageRef.current.tokens
+                      }
+                    : null;
+
+                  setCurrentSimulation(prev => {
+                    if (!prev) return prev;
+                    return {
+                      ...prev,
+                      status: data.simulation_status ?? prev.status,
+                      current_turn: data.current_turn ?? prev.current_turn,
+                      tokens_used: data.tokens_used ?? prev.tokens_used,
+                      messages: finalized ? [...prev.messages, finalized] : prev.messages
+                    };
+                  });
+
+                  setStreamingMessage(null);
+                  setRunning(false);
+                  closeStream();
+                  loadSimulations();
+
+                  if (
+                    shouldAutoContinue &&
+                    autoContinueRef.current &&
+                    data.simulation_status === 'running'
+                  ) {
+                    setTimeout(() => startStreamingTurn(true), 400);
+                  }
+                  return;
+                }
+
+                if (data.type === 'error') {
+                  console.error('Streaming error:', data.message);
+                  alert(data.message || 'Streaming error');
+                  setRunning(false);
+                  closeStream();
+                  return;
+                }
+              } catch (parseError) {
+                console.error('Failed to parse SSE data:', parseError, line);
+              }
+            }
+          }
+        }
+      })
+      .catch((error) => {
+        if (error.name === 'AbortError') {
+          // Stream was intentionally closed
+          return;
+        }
+        console.error('Streaming fetch error:', error);
+        alert(`Failed to stream simulation: ${error.message}`);
         setRunning(false);
         closeStream();
-      }
-    };
+      });
 
-    eventSource.onerror = () => {
-      setRunning(false);
-      closeStream();
-    };
+    // Store abort controller for cleanup
+    streamRef.current = abortController;
   };
 
   const handleCreateSimulation = async () => {
