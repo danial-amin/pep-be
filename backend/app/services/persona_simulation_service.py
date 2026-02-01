@@ -28,7 +28,12 @@ class PersonaSimulationService:
     def __init__(self):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-    def _build_persona_system_prompt(self, persona: Persona, role: Optional[str] = None) -> str:
+    def _build_persona_system_prompt(
+        self,
+        persona: Persona,
+        role: Optional[str] = None,
+        facilitator_must_address: Optional[str] = None,
+    ) -> str:
         """Build a system prompt that infuses the LLM with the persona's personality."""
         persona_data = persona.persona_data or {}
 
@@ -97,7 +102,34 @@ CONVERSATION GUIDELINES:
 - If you have expertise relevant to the topic, share it naturally
 - Express your frustrations and concerns when relevant to the discussion"""
 
+        if facilitator_must_address:
+            system_prompt += f"""
+
+CRITICAL - FACILITATOR INTERVENTION (you must obey this):
+A human facilitator has just intervened and said: "{facilitator_must_address}"
+You MUST address this directly in your very next response and let it change the course of your reply. Do not ignore it or continue the previous thread without first acknowledging and responding to the facilitator. Your response should visibly shift to incorporate their direction."""
+
         return system_prompt
+
+    def _get_facilitator_context(
+        self, messages: List[SimulationMessage]
+    ) -> tuple[Optional[str], bool]:
+        """
+        Returns (last_facilitator_content, is_last_message_facilitator).
+        Used to steer the simulation when a human has intervened.
+        """
+        msgs = sorted(messages, key=lambda m: (m.turn_number, m.id))
+        if not msgs:
+            return None, False
+        last_facilitator_content = None
+        for m in msgs:
+            if getattr(m, "is_human_message", False) or m.persona_id is None:
+                last_facilitator_content = m.content
+        last = msgs[-1]
+        is_last_facilitator = (
+            getattr(last, "is_human_message", False) or last.persona_id is None
+        )
+        return last_facilitator_content, is_last_facilitator
 
     def _build_conversation_context(
         self,
@@ -193,14 +225,28 @@ CONVERSATION GUIDELINES:
         next_persona = participants[next_speaker_id]
         next_role = participant_roles.get(next_speaker_id)
 
-        # Build system prompt for this persona
-        system_prompt = self._build_persona_system_prompt(next_persona, next_role)
+        # Facilitator context: so the next turn actually changes course when human intervened
+        messages_ordered = sorted(
+            simulation.messages,
+            key=lambda m: (m.turn_number, getattr(m, "id", 0)),
+        )
+        last_facilitator_content, is_last_facilitator = self._get_facilitator_context(
+            messages_ordered
+        )
+
+        # Build system prompt: inject facilitator directive when they just intervened
+        facilitator_must_address = (
+            last_facilitator_content if is_last_facilitator else None
+        )
+        system_prompt = self._build_persona_system_prompt(
+            next_persona, next_role, facilitator_must_address=facilitator_must_address
+        )
 
         # Build conversation context
         conversation_context = self._build_conversation_context(
-            list(simulation.messages),
+            messages_ordered,
             participants,
-            next_speaker_id
+            next_speaker_id,
         )
 
         # Add the goal and initial prompt if this is the first turn
@@ -212,19 +258,23 @@ CONVERSATION GUIDELINES:
 Please share your initial thoughts on this topic, drawing from your personal experience and perspective. Be authentic to who you are."""
             conversation_context.append({"role": "user", "content": goal_prompt})
         else:
-            # If the last message was a human facilitator intervention, stress addressing it
-            last_msg = list(simulation.messages)[-1] if simulation.messages else None
-            is_last_human = (
-                last_msg
-                and (getattr(last_msg, "is_human_message", False) or last_msg.persona_id is None)
-            )
-            if is_last_human and last_msg:
-                continue_prompt = f"""The facilitator has just intervened: "{last_msg.content}"
+            # When facilitator just intervened: strong prompt so the simulation changes course
+            if is_last_facilitator and last_facilitator_content:
+                continue_prompt = f"""The facilitator has just intervened: "{last_facilitator_content}"
 
-Please address this directly in your response and give it strong weight. Acknowledge or respond to what the facilitator said, then add your perspective. Keep it to 1-3 sentences."""
+Your response MUST:
+1. First, directly acknowledge and respond to what the facilitator said.
+2. Then, let their direction change the course of your reply (e.g. shift focus, address their question, or incorporate their suggestion).
+Keep it to 1-3 sentences but make the course change visible."""
+            elif last_facilitator_content:
+                # Recent facilitator intervention (not last message): remind to keep that direction
+                continue_prompt = f"""Continue the discussion. The facilitator recently said: "{last_facilitator_content}" — keep this direction in mind and let it influence your response. Share your perspective in 1-3 sentences."""
             else:
                 continue_prompt = "Please continue the discussion by responding to what has been said. Share your perspective, agree or disagree, and add new insights based on your experience. Keep it to 1-3 sentences."
             conversation_context.append({"role": "user", "content": continue_prompt})
+
+        # Slightly lower temperature when facilitator just intervened so model follows instructions
+        temperature = 0.65 if is_last_facilitator else 0.85
 
         # Generate response
         try:
@@ -234,7 +284,7 @@ Please address this directly in your response and give it strong weight. Acknowl
                     {"role": "system", "content": system_prompt},
                     *conversation_context
                 ],
-                temperature=0.85,
+                temperature=temperature,
                 max_tokens=180,  # Keep individual responses concise
                 presence_penalty=0.3,
                 frequency_penalty=0.3
@@ -529,12 +579,26 @@ Respond in JSON format:
             "turn_number": simulation.current_turn + 1
         }
 
-        # Build prompts
-        system_prompt = self._build_persona_system_prompt(next_persona, next_role)
+        # Facilitator context: so the next turn actually changes course when human intervened
+        messages_ordered = sorted(
+            simulation.messages,
+            key=lambda m: (m.turn_number, getattr(m, "id", 0)),
+        )
+        last_facilitator_content, is_last_facilitator = self._get_facilitator_context(
+            messages_ordered
+        )
+        facilitator_must_address = (
+            last_facilitator_content if is_last_facilitator else None
+        )
+
+        # Build prompts: inject facilitator directive when they just intervened
+        system_prompt = self._build_persona_system_prompt(
+            next_persona, next_role, facilitator_must_address=facilitator_must_address
+        )
         conversation_context = self._build_conversation_context(
-            list(simulation.messages),
+            messages_ordered,
             participants,
-            next_speaker_id
+            next_speaker_id,
         )
 
         if simulation.current_turn == 0:
@@ -545,18 +609,18 @@ Respond in JSON format:
 Please share your initial thoughts on this topic, drawing from your personal experience and perspective."""
             conversation_context.append({"role": "user", "content": goal_prompt})
         else:
-            last_msg = list(simulation.messages)[-1] if simulation.messages else None
-            is_last_human = (
-                last_msg
-                and (getattr(last_msg, "is_human_message", False) or last_msg.persona_id is None)
-            )
-            if is_last_human and last_msg:
-                continue_prompt = f"""The facilitator has just intervened: "{last_msg.content}"
+            if is_last_facilitator and last_facilitator_content:
+                continue_prompt = f"""The facilitator has just intervened: "{last_facilitator_content}"
 
-Please address this directly in your response and give it strong weight. Acknowledge or respond to what the facilitator said. Keep it to 1-3 sentences."""
+Your response MUST: 1) First, directly acknowledge and respond to what the facilitator said. 2) Let their direction change the course of your reply. Keep it to 1-3 sentences but make the course change visible."""
+            elif last_facilitator_content:
+                continue_prompt = f"""Continue the discussion. The facilitator recently said: "{last_facilitator_content}" — keep this direction in mind. Share your perspective in 1-3 sentences."""
             else:
                 continue_prompt = "Please continue the discussion by responding to what has been said. Keep it to 1-3 sentences."
             conversation_context.append({"role": "user", "content": continue_prompt})
+
+        # Slightly lower temperature when facilitator just intervened
+        temperature = 0.65 if is_last_facilitator else 0.85
 
         # Stream response
         full_content = ""
@@ -567,7 +631,7 @@ Please address this directly in your response and give it strong weight. Acknowl
                     {"role": "system", "content": system_prompt},
                     *conversation_context
                 ],
-                temperature=0.85,
+                temperature=temperature,
                 max_tokens=180,
                 stream=True
             )
