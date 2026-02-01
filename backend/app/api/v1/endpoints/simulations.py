@@ -18,6 +18,7 @@ from app.models.persona import Persona
 from app.schemas.simulation import (
     SimulationCreateRequest,
     SimulationStartRequest,
+    HumanInterventionRequest,
     SimulationResponse,
     SimulationListResponse,
     SimulationMessageResponse,
@@ -32,6 +33,19 @@ router = APIRouter()
 
 def _build_message_response(msg: SimulationMessage, persona: Optional[Persona]) -> SimulationMessageResponse:
     """Build a message response with persona details."""
+    if getattr(msg, "is_human_message", False) or msg.persona_id is None:
+        return SimulationMessageResponse(
+            id=msg.id,
+            persona_id=None,
+            persona_name="Facilitator",
+            persona_image_url=None,
+            content=msg.content,
+            turn_number=msg.turn_number,
+            tokens=msg.tokens,
+            is_moderator_message=msg.is_moderator_message,
+            is_human_message=True,
+            created_at=msg.created_at
+        )
     return SimulationMessageResponse(
         id=msg.id,
         persona_id=msg.persona_id,
@@ -41,6 +55,7 @@ def _build_message_response(msg: SimulationMessage, persona: Optional[Persona]) 
         turn_number=msg.turn_number,
         tokens=msg.tokens,
         is_moderator_message=msg.is_moderator_message,
+        is_human_message=getattr(msg, "is_human_message", False),
         created_at=msg.created_at
     )
 
@@ -349,6 +364,57 @@ async def next_turn(
         turns_remaining=simulation.max_turns - simulation.current_turn,
         is_complete=simulation.status == "completed"
     )
+
+
+@router.post("/{simulation_id}/intervene", response_model=SimulationMessageResponse, status_code=status.HTTP_201_CREATED)
+async def human_intervene(
+    simulation_id: int,
+    request: HumanInterventionRequest,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Add a human facilitator intervention to the simulation.
+
+    The next persona turn will be prompted to address this intervention
+    and give it strong weight in the conversation.
+    """
+    result = await session.execute(
+        select(Simulation)
+        .options(
+            selectinload(Simulation.participants),
+            selectinload(Simulation.messages)
+        )
+        .where(Simulation.id == simulation_id)
+    )
+    simulation = result.scalar_one_or_none()
+
+    if not simulation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Simulation with ID {simulation_id} not found"
+        )
+
+    if simulation.status not in ["pending", "running"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot intervene: simulation is already {simulation.status}"
+        )
+
+    # Turn number: place after last message in order
+    last_turn = max((m.turn_number for m in simulation.messages), default=0)
+    message = SimulationMessage(
+        simulation_id=simulation.id,
+        persona_id=None,
+        content=request.content.strip(),
+        turn_number=last_turn + 1,
+        tokens=0,
+        is_human_message=True
+    )
+    session.add(message)
+    await session.commit()
+    await session.refresh(message)
+
+    return _build_message_response(message, None)
 
 
 @router.post("/{simulation_id}/stop")

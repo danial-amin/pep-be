@@ -207,13 +207,14 @@ export interface SimulationCreateRequest {
 
 export interface SimulationMessage {
   id: number;
-  persona_id: number;
+  persona_id?: number;  // null for human facilitator interventions
   persona_name: string;
   persona_image_url?: string;
   content: string;
   turn_number: number;
   tokens: number;
   is_moderator_message: boolean;
+  is_human_message?: boolean;
   created_at: string;
 }
 

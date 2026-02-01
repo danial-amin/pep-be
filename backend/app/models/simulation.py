@@ -85,12 +85,13 @@ class SimulationParticipant(Base):
 class SimulationMessage(Base):
     """
     Single message in a simulation conversation.
+    Persona messages have persona_id set; human interventions have is_human_message=True and persona_id=None.
     """
     __tablename__ = "simulation_messages"
 
     id = Column(Integer, primary_key=True, index=True)
     simulation_id = Column(Integer, ForeignKey("simulations.id"), nullable=False)
-    persona_id = Column(Integer, ForeignKey("personas.id"), nullable=False)
+    persona_id = Column(Integer, ForeignKey("personas.id"), nullable=True)  # None for human interventions
 
     # Message content
     content = Column(Text, nullable=False)
@@ -101,6 +102,7 @@ class SimulationMessage(Base):
 
     # Message metadata
     is_moderator_message = Column(Boolean, default=False)  # System/moderator messages
+    is_human_message = Column(Boolean, default=False)  # Human facilitator intervention
     responding_to_id = Column(Integer, ForeignKey("simulation_messages.id"), nullable=True)
 
     # Relationships

@@ -238,6 +238,12 @@ export const simulationsApi = {
     return response.data;
   },
 
+  /** Add a human facilitator intervention; next persona turn will address it with strong weight */
+  intervene: async (id: number, content: string) => {
+    const response = await api.post(`/simulations/${id}/intervene`, { content });
+    return response.data;
+  },
+
   stop: async (id: number) => {
     const response = await api.post(`/simulations/${id}/stop`);
     return response.data;

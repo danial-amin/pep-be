@@ -78,16 +78,22 @@ class SimulationStartRequest(BaseModel):
     )
 
 
+class HumanInterventionRequest(BaseModel):
+    """Request to add a human facilitator intervention to the simulation."""
+    content: str = Field(..., min_length=1, description="The facilitator's message or directive")
+
+
 class SimulationMessageResponse(BaseModel):
     """Response for a single simulation message."""
     id: int
-    persona_id: int
+    persona_id: Optional[int] = None  # None for human interventions
     persona_name: str
     persona_image_url: Optional[str] = None
     content: str
     turn_number: int
     tokens: int
     is_moderator_message: bool = False
+    is_human_message: bool = False
     created_at: datetime
 
     class Config:

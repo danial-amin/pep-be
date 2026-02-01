@@ -109,6 +109,15 @@ CONVERSATION GUIDELINES:
         context = []
 
         for msg in messages:
+            is_human = getattr(msg, "is_human_message", False) or msg.persona_id is None
+            if is_human:
+                # Human facilitator intervention - always as user message, highlighted
+                context.append({
+                    "role": "user",
+                    "content": f"[Facilitator]: {msg.content}"
+                })
+                continue
+
             persona = participants.get(msg.persona_id)
             persona_name = persona.name if persona else "Unknown"
 
@@ -203,11 +212,19 @@ CONVERSATION GUIDELINES:
 Please share your initial thoughts on this topic, drawing from your personal experience and perspective. Be authentic to who you are."""
             conversation_context.append({"role": "user", "content": goal_prompt})
         else:
-            # Prompt to continue the conversation
-            conversation_context.append({
-                "role": "user",
-                "content": "Please continue the discussion by responding to what has been said. Share your perspective, agree or disagree, and add new insights based on your experience. Keep it to 1-3 sentences."
-            })
+            # If the last message was a human facilitator intervention, stress addressing it
+            last_msg = list(simulation.messages)[-1] if simulation.messages else None
+            is_last_human = (
+                last_msg
+                and (getattr(last_msg, "is_human_message", False) or last_msg.persona_id is None)
+            )
+            if is_last_human and last_msg:
+                continue_prompt = f"""The facilitator has just intervened: "{last_msg.content}"
+
+Please address this directly in your response and give it strong weight. Acknowledge or respond to what the facilitator said, then add your perspective. Keep it to 1-3 sentences."""
+            else:
+                continue_prompt = "Please continue the discussion by responding to what has been said. Share your perspective, agree or disagree, and add new insights based on your experience. Keep it to 1-3 sentences."
+            conversation_context.append({"role": "user", "content": continue_prompt})
 
         # Generate response
         try:
@@ -271,20 +288,25 @@ Please share your initial thoughts on this topic, drawing from your personal exp
         Select the next persona to speak.
 
         Uses a round-robin approach with some variation to keep
-        the conversation dynamic.
+        the conversation dynamic. Human interventions are ignored
+        for speaker selection (only persona messages count).
         """
         ordered_participants = list(participant_ids)
+        persona_messages = [
+            m for m in messages
+            if not (getattr(m, "is_human_message", False) or m.persona_id is None)
+        ]
 
-        if not messages:
-            # First turn - pick first participant
+        if not persona_messages:
+            # First turn or only human messages so far - pick first participant
             return ordered_participants[0]
 
-        # Get the last speaker
-        last_speaker = messages[-1].persona_id if messages else None
+        # Get the last persona speaker (ignore human interventions)
+        last_speaker = persona_messages[-1].persona_id
 
-        # Count messages per participant
+        # Count messages per participant (persona messages only)
         message_counts = {pid: 0 for pid in ordered_participants}
-        for msg in messages:
+        for msg in persona_messages:
             if msg.persona_id in message_counts:
                 message_counts[msg.persona_id] += 1
 
@@ -380,8 +402,11 @@ Please share your initial thoughts on this topic, drawing from your personal exp
         # Build conversation transcript
         transcript_parts = []
         for msg in simulation.messages:
-            persona = participants.get(msg.persona_id)
-            name = persona.name if persona else "Unknown"
+            if getattr(msg, "is_human_message", False) or msg.persona_id is None:
+                name = "Facilitator"
+            else:
+                persona = participants.get(msg.persona_id)
+                name = persona.name if persona else "Unknown"
             transcript_parts.append(f"{name}: {msg.content}")
 
         transcript = "\n\n".join(transcript_parts)
@@ -520,10 +545,18 @@ Respond in JSON format:
 Please share your initial thoughts on this topic, drawing from your personal experience and perspective."""
             conversation_context.append({"role": "user", "content": goal_prompt})
         else:
-            conversation_context.append({
-                "role": "user",
-                "content": "Please continue the discussion by responding to what has been said. Keep it to 1-3 sentences."
-            })
+            last_msg = list(simulation.messages)[-1] if simulation.messages else None
+            is_last_human = (
+                last_msg
+                and (getattr(last_msg, "is_human_message", False) or last_msg.persona_id is None)
+            )
+            if is_last_human and last_msg:
+                continue_prompt = f"""The facilitator has just intervened: "{last_msg.content}"
+
+Please address this directly in your response and give it strong weight. Acknowledge or respond to what the facilitator said. Keep it to 1-3 sentences."""
+            else:
+                continue_prompt = "Please continue the discussion by responding to what has been said. Keep it to 1-3 sentences."
+            conversation_context.append({"role": "user", "content": continue_prompt})
 
         # Stream response
         full_content = ""

@@ -60,6 +60,25 @@ function PersonaAvatar({
 
 // Message Bubble Component
 function MessageBubble({ message, isLeft }: { message: SimulationMessage; isLeft: boolean }) {
+  const isHuman = message.is_human_message ?? (message.persona_id == null);
+  const displayName = isHuman ? 'Facilitator (you)' : message.persona_name;
+
+  if (isHuman) {
+    return (
+      <div className="flex justify-center mb-4">
+        <div className="flex items-start gap-3 max-w-[85%]">
+          <div className="rounded-2xl px-4 py-3 bg-amber-500/40 border border-amber-400/50 shadow-lg">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-semibold text-amber-200">{displayName}</span>
+              <span className="text-xs text-amber-200/60">Intervention</span>
+            </div>
+            <p className="text-white/95 text-sm leading-relaxed">{message.content}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex ${isLeft ? 'justify-start' : 'justify-end'} mb-4`}>
       <div className={`flex ${isLeft ? 'flex-row' : 'flex-row-reverse'} items-start gap-3 max-w-[80%]`}>
@@ -159,6 +178,8 @@ export default function SimulationPage() {
   const [streamingMessage, setStreamingMessage] = useState<SimulationMessage | null>(null);
   const [autoContinue, setAutoContinue] = useState(true);
   const [streamingEnabled, setStreamingEnabled] = useState(true);
+  const [interventionText, setInterventionText] = useState('');
+  const [intervening, setIntervening] = useState(false);
 
   // Setup form state
   const [showSetup, setShowSetup] = useState(!simulationId);
@@ -453,6 +474,21 @@ export default function SimulationPage() {
       alert(`Failed to start simulation: ${error.response?.data?.detail || error.message}`);
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleIntervene = async () => {
+    if (!currentSimulation || !interventionText.trim()) return;
+    setIntervening(true);
+    try {
+      await simulationsApi.intervene(currentSimulation.id, interventionText.trim());
+      setInterventionText('');
+      const updated = await simulationsApi.getById(currentSimulation.id);
+      setCurrentSimulation(updated);
+    } catch (error: any) {
+      alert(`Failed to add intervention: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setIntervening(false);
     }
   };
 
@@ -897,6 +933,37 @@ export default function SimulationPage() {
                   </button>
                 )}
               </div>
+
+              {/* Human intervention - when simulation is running or pending */}
+              {(currentSimulation.status === 'running' || currentSimulation.status === 'pending') && (
+                <div className="glass-card rounded-2xl p-4 pastel-purple border border-amber-400/30">
+                  <label className="block text-sm font-medium text-amber-200/90 mb-2">
+                    Facilitator intervention
+                  </label>
+                  <p className="text-xs text-white/70 mb-2">
+                    Add a message as the human facilitator. The next persona turn will address it and give it strong weight.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={interventionText}
+                      onChange={(e) => setInterventionText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleIntervene()}
+                      placeholder="e.g., Let's focus on cost implications..."
+                      className="flex-1 px-4 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      disabled={intervening}
+                    />
+                    <button
+                      onClick={handleIntervene}
+                      disabled={intervening || !interventionText.trim()}
+                      className="px-4 py-2 bg-amber-500/60 hover:bg-amber-500/80 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                    >
+                      {intervening ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                      Intervene
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Messages */}
               <div className="glass-card rounded-2xl p-4 pastel-pink min-h-[400px] max-h-[600px] overflow-y-auto">
