@@ -1,123 +1,103 @@
 """
 Document processing endpoints.
+
+Upload returns immediately; chunking, LLM processing, and vector storage run in the background.
 """
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-import os
 import uuid
 from pathlib import Path
 import aiofiles
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.models.document import Document, DocumentType
-from app.schemas.document import DocumentProcessRequest, DocumentProcessResponse, DocumentResponse
+from app.models.document import Document, DocumentType, ProcessingStatus
+from app.schemas.document import DocumentProcessResponse, DocumentResponse
 from app.services.document_service import DocumentService
-from app.utils.file_processing import extract_text_from_file
 
 router = APIRouter()
 
-# Create uploads directory if it doesn't exist
+# Create uploads directory if it doesn't exist (persisted until background processing completes)
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 @router.post("/process", response_model=DocumentProcessResponse, status_code=status.HTTP_201_CREATED)
 async def process_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     document_type: DocumentType = Form(...),
     project_id: int = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Process a document (context or interview).
-    
-    - Uploads the file
-    - Extracts text content
-    - Processes with LLM
-    - Creates embeddings and stores in vector DB
-    - Saves document metadata in database
+    Upload a document (context or interview). Returns immediately after storing the file.
+
+    Post-processing (text extraction, LLM processing, chunking, embeddings) runs in the background.
+    Poll GET /documents or GET /documents/{id} to check processing_status (pending | processing | completed | failed).
     """
-    # Validate file extension
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in settings.ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_EXTENSIONS)}"
         )
-    
-    # Validate file size
+
     file_content = await file.read()
     if len(file_content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE / 1024 / 1024}MB"
         )
-    
-    # Save file temporarily
+
+    # Create pending document first so we have an id for the stored file path
     file_id = str(uuid.uuid4())
-    file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
-    
+    stored_name = f"{file_id}_{file.filename}"
+    file_path = UPLOAD_DIR / stored_name
+
     try:
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
+        async with aiofiles.open(file_path, "wb") as f:
             await f.write(file_content)
-        
-        # Extract text from file based on type
-        try:
-            content = await extract_text_from_file(str(file_path), file_ext)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
-            )
-        
-        # Process document
-        try:
-            document = await DocumentService.process_document(
-                session=db,
-                file_path=str(file_path),
-                filename=file.filename,
-                document_type=document_type,
-                content=content,
-                project_id=project_id
-            )
-            
-            # Check if vector storage was successful
-            if document.vector_id is None:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Document saved to database but vector storage failed. Check logs for details."
-                )
-            
-            return DocumentProcessResponse(
-                id=document.id,
-                filename=document.filename,
-                document_type=document.document_type,
-                processed=True,
-                vector_id=document.vector_id,
-                created_at=document.created_at
-            )
-        except ValueError as e:
-            # This catches vector storage failures
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=str(e)
-            )
-    
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing document: {str(e)}"
+            detail=f"Failed to store file: {str(e)}"
         )
-    
-    finally:
-        # Clean up temporary file
-        if file_path.exists():
-            file_path.unlink()
+
+    try:
+        document = await DocumentService.create_pending_document(
+            session=db,
+            file_path=str(file_path),
+            filename=file.filename,
+            document_type=document_type,
+            project_id=project_id,
+        )
+        await db.commit()
+        await db.refresh(document)
+    except Exception as e:
+        try:
+            if file_path.exists():
+                file_path.unlink()
+        except OSError:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create document record: {str(e)}"
+        )
+
+    background_tasks.add_task(DocumentService.process_document_background, document.id)
+
+    return DocumentProcessResponse(
+        id=document.id,
+        filename=document.filename,
+        document_type=document.document_type,
+        processed=False,
+        processing_status=document.processing_status,
+        processing_error=document.processing_error,
+        vector_id=document.vector_id,
+        created_at=document.created_at,
+    )
 
 
 @router.get("/", response_model=List[DocumentResponse])

@@ -1,12 +1,16 @@
 export type DocumentType = 'context' | 'interview';
 
+export type DocumentProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
 export interface Document {
   id: number;
   filename: string;
   document_type: DocumentType;
-  content: string;
-  processed_content?: string;
-  vector_id?: string;
+  content?: string | null;  // null until background processing completes
+  processed_content?: string | null;
+  vector_id?: string | null;
+  processing_status?: DocumentProcessingStatus;
+  processing_error?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -16,7 +20,9 @@ export interface DocumentProcessResponse {
   filename: string;
   document_type: DocumentType;
   processed: boolean;
-  vector_id?: string;
+  processing_status?: DocumentProcessingStatus;
+  processing_error?: string | null;
+  vector_id?: string | null;
   created_at: string;
 }
 

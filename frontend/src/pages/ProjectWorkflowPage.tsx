@@ -79,15 +79,17 @@ export default function ProjectWorkflowPage() {
     try {
       const response = await documentsApi.process(file, documentType, parseInt(projectId));
       await loadDocuments();
-      if (response.vector_id) {
-        alert('Document processed and stored in vector database successfully!');
+      if (response.processing_status === 'completed' && response.vector_id) {
+        alert('Document uploaded and processed successfully!');
+      } else if (response.processing_status === 'failed' && response.processing_error) {
+        alert(`Document uploaded but processing failed: ${response.processing_error}`);
       } else {
-        alert('Document saved but vector storage failed. Check backend logs for details.');
+        alert('Document uploaded. Processing runs in the background; the list will update when ready.');
       }
     } catch (error: any) {
       const errorMsg = error.response?.data?.detail || error.message;
-      alert(`Failed to process document: ${errorMsg}`);
-      console.error('Document processing error:', error);
+      alert(`Failed to upload document: ${errorMsg}`);
+      console.error('Document upload error:', error);
     } finally {
       setUploading(false);
     }

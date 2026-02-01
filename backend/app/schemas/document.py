@@ -14,14 +14,16 @@ class DocumentProcessRequest(BaseModel):
 
 
 class DocumentProcessResponse(BaseModel):
-    """Response schema for document processing."""
+    """Response schema for document processing (upload returns immediately; processing runs in background)."""
     id: int
     filename: str
     document_type: DocumentType
-    processed: bool
+    processed: bool  # True when processing_status is completed
+    processing_status: str = "pending"  # pending | processing | completed | failed
+    processing_error: Optional[str] = None
     vector_id: Optional[str] = None
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -31,12 +33,14 @@ class DocumentResponse(BaseModel):
     id: int
     filename: str
     document_type: DocumentType
-    content: str
+    content: Optional[str] = None  # None until background processing completes
     processed_content: Optional[str] = None
     vector_id: Optional[str] = None
+    processing_status: str = "completed"
+    processing_error: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 

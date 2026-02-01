@@ -160,6 +160,27 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            # Document background processing: file_path, processing_status, processing_error; content nullable
+            await conn.execute(text("""
+                DO $$ 
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='documents') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                       WHERE table_name='documents' AND column_name='file_path') THEN
+                            ALTER TABLE documents ADD COLUMN file_path VARCHAR(512);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                       WHERE table_name='documents' AND column_name='processing_status') THEN
+                            ALTER TABLE documents ADD COLUMN processing_status VARCHAR(20) NOT NULL DEFAULT 'completed';
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                       WHERE table_name='documents' AND column_name='processing_error') THEN
+                            ALTER TABLE documents ADD COLUMN processing_error TEXT;
+                        END IF;
+                        ALTER TABLE documents ALTER COLUMN content DROP NOT NULL;
+                    END IF;
+                END $$;
+            """))
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
