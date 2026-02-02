@@ -934,63 +934,62 @@ export default function SimulationPage() {
                 )}
               </div>
 
-              {/* Human intervention - when simulation is running or pending */}
-              {(currentSimulation.status === 'running' || currentSimulation.status === 'pending') && (
-                <div className="glass-card rounded-2xl p-4 pastel-purple border border-amber-400/30">
-                  <label className="block text-sm font-medium text-amber-200/90 mb-2">
-                    Facilitator intervention
-                  </label>
-                  <p className="text-xs text-white/70 mb-2">
-                    Add a message as the human facilitator. The next persona turn will address it and give it strong weight.
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={interventionText}
-                      onChange={(e) => setInterventionText(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleIntervene()}
-                      placeholder="e.g., Let's focus on cost implications..."
-                      className="flex-1 px-4 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                      disabled={intervening}
-                    />
-                    <button
-                      onClick={handleIntervene}
-                      disabled={intervening || !interventionText.trim()}
-                      className="px-4 py-2 bg-amber-500/60 hover:bg-amber-500/80 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
-                    >
-                      {intervening ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                      Intervene
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Messages */}
-              <div className="glass-card rounded-2xl p-4 pastel-pink min-h-[400px] max-h-[600px] overflow-y-auto">
-                {displayMessages.length === 0 ? (
-                  <div className="flex items-center justify-center h-64 text-white/60">
-                    <div className="text-center">
-                      <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>No messages yet. Start the simulation to begin the conversation.</p>
+              {/* Chat area: messages scrollable, intervention box fixed at bottom */}
+              <div className="glass-card rounded-2xl overflow-hidden pastel-pink flex flex-col min-h-[480px] max-h-[70vh]">
+                {/* Messages - scrollable, takes remaining space */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-4">
+                  {displayMessages.length === 0 ? (
+                    <div className="flex items-center justify-center h-64 text-white/60">
+                      <div className="text-center">
+                        <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                        <p>No messages yet. Start the simulation to begin the conversation.</p>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    {displayMessages.map((msg, idx) => (
-                      <MessageBubble
-                        key={msg.id}
-                        message={msg}
-                        isLeft={idx % 2 === 0}
-                      />
-                    ))}
-                    <div ref={messagesEndRef} />
-                  </>
-                )}
+                  ) : (
+                    <>
+                      {displayMessages.map((msg, idx) => (
+                        <MessageBubble
+                          key={msg.id}
+                          message={msg}
+                          isLeft={idx % 2 === 0}
+                        />
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </>
+                  )}
+                  {running && (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-6 h-6 text-white/60 animate-spin" />
+                      <span className="ml-2 text-white/60">Generating response...</span>
+                    </div>
+                  )}
+                </div>
 
-                {running && (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="w-6 h-6 text-white/60 animate-spin" />
-                    <span className="ml-2 text-white/60">Generating response...</span>
+                {/* Intervention box - fixed at bottom under the chat */}
+                {(currentSimulation.status === 'running' || currentSimulation.status === 'pending') && (
+                  <div className="flex-shrink-0 p-4 pt-0 border-t border-white/20">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={interventionText}
+                        onChange={(e) => setInterventionText(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleIntervene()}
+                        placeholder="Facilitator intervention (e.g., Let's focus on cost...)"
+                        className="flex-1 px-4 py-2.5 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        disabled={intervening}
+                      />
+                      <button
+                        onClick={handleIntervene}
+                        disabled={intervening || !interventionText.trim()}
+                        className="px-4 py-2.5 bg-amber-500/60 hover:bg-amber-500/80 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                      >
+                        {intervening ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                        Intervene
+                      </button>
+                    </div>
+                    <p className="text-xs text-white/60 mt-1.5">
+                      Next persona turn will address your message and give it strong weight.
+                    </p>
                   </div>
                 )}
               </div>

@@ -15,6 +15,7 @@ import logging
 import asyncio
 
 from app.core.config import settings
+from app.core.vector_db import vector_db
 from app.models.simulation import Simulation, SimulationParticipant, SimulationMessage
 from app.models.persona import Persona
 from app.utils.token_utils import estimate_tokens
@@ -110,6 +111,63 @@ A human facilitator has just intervened and said: "{facilitator_must_address}"
 You MUST address this directly in your very next response and let it change the course of your reply. Do not ignore it or continue the previous thread without first acknowledging and responding to the facilitator. Your response should visibly shift to incorporate their direction."""
 
         return system_prompt
+
+    async def _get_rag_grounding(
+        self,
+        simulation: Simulation,
+        messages_ordered: List[SimulationMessage],
+        participants: Dict[int, Persona],
+    ) -> str:
+        """
+        Retrieve relevant document chunks from RAG so simulation responses are grounded in project data.
+        Returns a single string of concatenated chunks to inject into the prompt; empty if none.
+        """
+        # Build query from goal + context + last few persona messages for relevance
+        query_parts = [simulation.goal]
+        if simulation.goal_context:
+            query_parts.append(simulation.goal_context)
+        persona_msgs = [
+            m for m in messages_ordered
+            if not (getattr(m, "is_human_message", False) or m.persona_id is None)
+        ]
+        for m in persona_msgs[-3:]:  # last 3 persona messages
+            p = participants.get(m.persona_id)
+            name = p.name if p else "Unknown"
+            query_parts.append(f"{name}: {m.content}")
+        query_text = " ".join(query_parts).strip() or simulation.goal
+        if not query_text:
+            return ""
+
+        filter_metadata = None
+        if getattr(simulation, "project_id", None) is not None:
+            filter_metadata = {"project_id": str(simulation.project_id)}
+
+        try:
+            result = await vector_db.query_documents(
+                query_texts=[query_text],
+                n_results=10,
+                filter_metadata=filter_metadata,
+            )
+            docs = result.get("documents")
+            if not docs or not docs[0]:
+                return ""
+            chunks = docs[0]
+            # Dedupe and join with clear separators; cap total length for context window
+            seen = set()
+            unique = []
+            total = 0
+            max_chars = 6000
+            for c in chunks:
+                if c and c not in seen and total + len(c) <= max_chars:
+                    seen.add(c)
+                    unique.append(c)
+                    total += len(c)
+            if not unique:
+                return ""
+            return "\n\n---\n\n".join(unique)
+        except Exception as e:
+            logger.warning(f"RAG grounding failed for simulation {simulation.id}: {e}", exc_info=True)
+            return ""
 
     def _get_facilitator_context(
         self, messages: List[SimulationMessage]
@@ -241,6 +299,17 @@ You MUST address this directly in your very next response and let it change the 
         system_prompt = self._build_persona_system_prompt(
             next_persona, next_role, facilitator_must_address=facilitator_must_address
         )
+
+        # RAG grounding: inject evidence from project documents so responses are grounded, not made up
+        rag_grounding = await self._get_rag_grounding(
+            simulation, messages_ordered, participants
+        )
+        if rag_grounding:
+            system_prompt += (
+                "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (you must use this):\n"
+                + rag_grounding
+                + "\n\nYour response must be grounded in the above evidence. Do not invent facts; base your reply on this project data when relevant."
+            )
 
         # Build conversation context
         conversation_context = self._build_conversation_context(
@@ -595,6 +664,16 @@ Respond in JSON format:
         system_prompt = self._build_persona_system_prompt(
             next_persona, next_role, facilitator_must_address=facilitator_must_address
         )
+        # RAG grounding: evidence from project documents
+        rag_grounding = await self._get_rag_grounding(
+            simulation, messages_ordered, participants
+        )
+        if rag_grounding:
+            system_prompt += (
+                "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (you must use this):\n"
+                + rag_grounding
+                + "\n\nYour response must be grounded in the above evidence. Do not invent facts; base your reply on this project data when relevant."
+            )
         conversation_context = self._build_conversation_context(
             messages_ordered,
             participants,
