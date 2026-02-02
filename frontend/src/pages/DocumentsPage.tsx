@@ -1,9 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
-import { Upload, FileText, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Upload, FileText, Loader2, CheckCircle, XCircle, Clock, RefreshCw, Info } from 'lucide-react';
 import { documentsApi } from '../services/api';
 import { Document, DocumentType } from '../types';
 
 const POLL_INTERVAL_MS = 3000;
+
+/** Normalize status for display (backend may omit for legacy docs). */
+function getDisplayStatus(doc: Document): 'pending' | 'processing' | 'completed' | 'failed' {
+  const s = doc.processing_status;
+  if (s === 'pending' || s === 'processing' || s === 'failed') return s;
+  return 'completed'; // completed or legacy (no status)
+}
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -12,8 +19,7 @@ export default function DocumentsPage() {
   const [filter, setFilter] = useState<'all' | DocumentType>('all');
   const [dragActive, setDragActive] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     setLoading(true);
     try {
       const data = await documentsApi.getAll(
@@ -26,16 +32,19 @@ export default function DocumentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
 
   useEffect(() => {
     loadDocuments();
-  }, [filter]);
+  }, [loadDocuments]);
 
-  // Poll when any document is pending or processing
   const hasProcessing = documents.some(
-    (d) => d.processing_status === 'pending' || d.processing_status === 'processing'
+    (d) => getDisplayStatus(d) === 'pending' || getDisplayStatus(d) === 'processing'
   );
+  const processingCount = documents.filter(
+    (d) => getDisplayStatus(d) === 'pending' || getDisplayStatus(d) === 'processing'
+  ).length;
+
   useEffect(() => {
     if (!hasProcessing) {
       if (pollRef.current) {
@@ -48,7 +57,7 @@ export default function DocumentsPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [hasProcessing]);
+  }, [hasProcessing, loadDocuments]);
 
   const handleFileUpload = async (file: File, documentType: DocumentType) => {
     setUploading(true);
@@ -92,7 +101,30 @@ export default function DocumentsPage() {
       <div className="mb-6">
         <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Documents</h2>
         <p className="text-white/80 text-lg">Upload and manage context and interview documents</p>
+        <p className="text-white/60 text-sm mt-1 flex items-center gap-1">
+          <Info className="h-4 w-4" />
+          Files are stored immediately; chunking and indexing run in the background. Status updates automatically.
+        </p>
       </div>
+
+      {/* Banner when something is still processing */}
+      {hasProcessing && (
+        <div className="mb-6 flex items-center justify-between gap-4 rounded-xl bg-blue-500/20 border border-blue-400/40 px-4 py-3 text-blue-100">
+          <span className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin flex-shrink-0" />
+            <span>
+              {processingCount} document{processingCount !== 1 ? 's' : ''} being processed. List updates every few seconds.
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => loadDocuments()}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-sm font-medium"
+          >
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </button>
+        </div>
+      )}
 
       {/* Upload Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -161,11 +193,22 @@ export default function DocumentsPage() {
         </div>
       </div>
 
-      {/* Filter and Documents List */}
+      {/* Documents list with clear status */}
       <div className="glass-card rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-white/20">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Processed Documents</h3>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-white">Documents</h3>
+              <button
+                type="button"
+                onClick={() => loadDocuments()}
+                disabled={loading}
+                className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-50"
+                title="Refresh list"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
             <div className="flex space-x-2">
               <button
                 onClick={() => setFilter('all')}
@@ -209,64 +252,60 @@ export default function DocumentsPage() {
               No documents found. Upload your first document above.
             </div>
           ) : (
-            documents.map((doc) => (
-              <div key={doc.id} className="px-6 py-4 hover:bg-white/10 transition-all duration-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <FileText className="h-8 w-8 text-white/90 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-sm font-medium text-white">{doc.filename}</h4>
-                      <p className="text-sm text-white/70">
-                        {doc.document_type} • {new Date(doc.created_at).toLocaleDateString()}
-                        {doc.processing_status && doc.processing_status !== 'completed' && (
-                          <span className="ml-2">
-                            • {doc.processing_status === 'pending' && 'Queued'}
-                            {doc.processing_status === 'processing' && 'Processing…'}
-                            {doc.processing_status === 'failed' && 'Failed'}
-                          </span>
-                        )}
-                      </p>
-                      {doc.processing_error && (
-                        <p className="text-xs text-red-300/90 mt-1 truncate max-w-md" title={doc.processing_error}>
-                          {doc.processing_error}
+            documents.map((doc) => {
+              const status = getDisplayStatus(doc);
+              return (
+                <div key={doc.id} className="px-6 py-4 hover:bg-white/10 transition-all duration-200">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center space-x-4 min-w-0">
+                      <FileText className="h-8 w-8 text-white/90 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-medium text-white truncate">{doc.filename}</h4>
+                        <p className="text-sm text-white/70">
+                          {doc.document_type} • {new Date(doc.created_at).toLocaleDateString()}
                         </p>
+                        {doc.processing_error && (
+                          <p className="text-xs text-red-300/90 mt-1 truncate max-w-md" title={doc.processing_error}>
+                            Error: {doc.processing_error}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {status === 'pending' && (
+                        <span className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-amber-500/40 text-amber-100 border border-amber-400/50">
+                          <Clock className="h-3.5 w-3.5" /> Queued
+                        </span>
                       )}
+                      {status === 'processing' && (
+                        <span className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-blue-500/40 text-blue-100 border border-blue-400/50">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing
+                        </span>
+                      )}
+                      {status === 'completed' && (
+                        <span className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-green-500/40 text-green-100 border border-green-400/50">
+                          <CheckCircle className="h-3.5 w-3.5" /> Ready
+                        </span>
+                      )}
+                      {status === 'failed' && (
+                        <span className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-red-500/40 text-red-100 border border-red-400/50">
+                          <XCircle className="h-3.5 w-3.5" /> Failed
+                        </span>
+                      )}
+                      <span
+                        className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                          doc.document_type === 'context'
+                            ? 'bg-purple-400/30 text-white border border-purple-300/50'
+                            : 'bg-pink-400/30 text-white border border-pink-300/50'
+                        }`}
+                      >
+                        {doc.document_type}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {doc.processing_status === 'pending' && (
-                      <span className="flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-amber-500/30 text-amber-200">
-                        <Clock className="h-3 w-3" /> Pending
-                      </span>
-                    )}
-                    {doc.processing_status === 'processing' && (
-                      <span className="flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-blue-500/30 text-blue-200">
-                        <Loader2 className="h-3 w-3 animate-spin" /> Processing
-                      </span>
-                    )}
-                    {doc.processing_status === 'completed' && doc.vector_id && (
-                      <span className="flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-green-500/30 text-green-200">
-                        <CheckCircle className="h-3 w-3" /> Ready
-                      </span>
-                    )}
-                    {doc.processing_status === 'failed' && (
-                      <span className="flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-red-500/30 text-red-200">
-                        <XCircle className="h-3 w-3" /> Failed
-                      </span>
-                    )}
-                    <span
-                      className={`px-3 py-1 text-xs font-medium rounded-full ${
-                        doc.document_type === 'context'
-                          ? 'bg-purple-400/30 text-white border border-purple-300/50'
-                          : 'bg-pink-400/30 text-white border border-pink-300/50'
-                      }`}
-                    >
-                      {doc.document_type}
-                    </span>
-                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

@@ -1,6 +1,7 @@
 """
 Main FastAPI application entry point.
 """
+import asyncio
 import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -245,7 +246,31 @@ async def lifespan(app: FastAPI):
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Could not load default personas on startup: {e}", exc_info=True)
                 await session.rollback()
-    
+
+    # Resume any documents that were pending when the server was last stopped (no Celery — in-process only)
+    async def process_pending_documents_on_startup():
+        try:
+            from sqlalchemy import select
+            from app.models.document import Document, ProcessingStatus
+            from app.core.database import AsyncSessionLocal
+            from app.services.document_service import DocumentService
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(Document).where(
+                        Document.processing_status == ProcessingStatus.PENDING,
+                        Document.file_path.isnot(None),
+                    )
+                )
+                pending = list(result.scalars().all())
+            for doc in pending:
+                asyncio.create_task(DocumentService.process_document_background(doc.id))
+            if pending:
+                logger.info("Queued %d pending document(s) for background processing on startup", len(pending))
+        except Exception as e:
+            logger.warning("Could not queue pending documents on startup: %s", e, exc_info=True)
+
+    asyncio.create_task(process_pending_documents_on_startup())
+
     yield
     # Shutdown
     pass
