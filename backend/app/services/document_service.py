@@ -308,6 +308,63 @@ class DocumentService:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def retry_document_processing(
+        session: AsyncSession,
+        document_id: int,
+    ) -> Optional[str]:
+        """
+        Retry processing for a document that has a file (e.g. stuck in pending/processing).
+        Uses extract_text_from_file (pdfplumber for PDF) → LLM → chunk → vector upsert.
+        Returns None on success, or an error message string on failure.
+        """
+        from app.utils.file_processing import extract_text_from_file
+
+        document = await DocumentService.get_document(session, document_id)
+        if not document:
+            return "Document not found"
+        if not document.file_path:
+            return "No file path; cannot retry from file. Re-upload the document or use /reprocess if content exists."
+        fp = Path(document.file_path)
+        if not fp.exists():
+            document.processing_status = ProcessingStatus.FAILED
+            document.processing_error = "Stored file not found (retry)"
+            await session.flush()
+            return "Stored file not found. Re-upload the document."
+        file_ext = fp.suffix.lower()
+        try:
+            content = await extract_text_from_file(str(fp), file_ext)
+        except Exception as e:
+            document.processing_status = ProcessingStatus.FAILED
+            document.processing_error = str(e)
+            await session.flush()
+            return f"Text extraction failed: {e}"
+        if not (content and content.strip()):
+            document.processing_status = ProcessingStatus.FAILED
+            document.processing_error = "No text extracted from file"
+            await session.flush()
+            return "No text extracted from file"
+        document.processing_status = ProcessingStatus.PROCESSING
+        await session.flush()
+        try:
+            # Remove existing vectors for this document so we don't duplicate
+            await vector_db.delete_documents(filter_metadata={"document_id": str(document.id)})
+            await DocumentService.process_document_content_into_existing(session, document, content)
+            document.processing_status = ProcessingStatus.COMPLETED
+            document.processing_error = None
+            document.file_path = None
+            await session.flush()
+            try:
+                fp.unlink()
+            except OSError:
+                pass
+            return None
+        except Exception as e:
+            document.processing_status = ProcessingStatus.FAILED
+            document.processing_error = str(e)
+            await session.flush()
+            return str(e)
+
+    @staticmethod
     async def reprocess_documents(
         session: AsyncSession,
         document_ids: Optional[List[int]] = None,

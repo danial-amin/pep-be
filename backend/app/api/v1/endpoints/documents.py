@@ -194,6 +194,27 @@ async def reprocess_documents(
     )
 
 
+@router.post("/{document_id}/retry", response_model=DocumentResponse)
+async def retry_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retry processing for a document stuck in pending/processing.
+    Re-extracts text from the stored file (pdfplumber for PDF), then chunks and upserts to the vector DB.
+    Use when a document never completes; requires the file to still exist (e.g. on a Volume).
+    """
+    err = await DocumentService.retry_document_processing(db, document_id)
+    if err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=err,
+        )
+    await db.commit()
+    document = await DocumentService.get_document(db, document_id)
+    return DocumentResponse.model_validate(document)
+
+
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: int,
