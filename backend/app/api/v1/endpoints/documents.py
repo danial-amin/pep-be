@@ -18,9 +18,14 @@ from app.services.document_service import DocumentService
 
 router = APIRouter()
 
-# Create uploads directory if it doesn't exist (persisted until background processing completes)
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Upload directory: use config so Railway can point to a Volume (e.g. /data/uploads)
+def _upload_dir() -> Path:
+    p = Path(settings.UPLOAD_DIR).resolve()
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+UPLOAD_DIR = _upload_dir()
 
 
 @router.post("/process", response_model=DocumentProcessResponse, status_code=status.HTTP_201_CREATED)
@@ -51,10 +56,10 @@ async def process_document(
             detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE / 1024 / 1024}MB"
         )
 
-    # Create pending document first so we have an id for the stored file path
+    # Create pending document first so we have an id for the stored file path (absolute path for worker)
     file_id = str(uuid.uuid4())
     stored_name = f"{file_id}_{file.filename}"
-    file_path = UPLOAD_DIR / stored_name
+    file_path = (UPLOAD_DIR / stored_name).resolve()
 
     try:
         async with aiofiles.open(file_path, "wb") as f:

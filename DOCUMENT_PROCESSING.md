@@ -5,39 +5,48 @@
 Document upload and processing are **decoupled**:
 
 1. **Upload (fast)**  
-   `POST /api/v1/documents/process` stores the file on disk, creates a document row with `processing_status=pending`, and returns immediately. The client gets a 201 with `processing_status: "pending"`.
+   `POST /api/v1/documents/process` stores the file on disk (or a shared Volume on Railway), creates a document row with `processing_status=pending`, and returns immediately. The client gets a 201 with `processing_status: "pending"`.
 
 2. **Processing (background)**  
-   Heavy work (text extraction, LLM processing, chunking, embeddings, vector DB) runs **in-process** via FastAPI’s **BackgroundTasks**, not Celery or a separate worker.  
-   - After the response is sent, the same process runs `DocumentService.process_document_background(document_id)`.  
-   - The task uses its own DB session, reads the file from disk, runs the pipeline, updates the document (`processing_status=completed` or `failed`), then deletes the file.
+   Heavy work (text extraction, LLM processing, chunking, embeddings, vector DB) can run in two ways:
+   - **In-process**: FastAPI’s **BackgroundTasks** run `DocumentService.process_document_background(document_id)` after the response is sent. This works as long as the same process stays alive.
+   - **Worker (Railway)**: A separate process runs `python -m app.document_worker`, which polls for `pending` documents and processes them. Use this on Railway so uploads are processed even when the web process restarts or doesn’t finish BackgroundTasks.
 
 3. **Status**  
    The frontend polls `GET /api/v1/documents` (or `GET /api/v1/documents/{id}`). Each document has:
    - `processing_status`: `pending` | `processing` | `completed` | `failed`
    - `processing_error`: set when `processing_status === "failed"`
 
-So you **do not need Celery or Redis**. Everything runs inside the FastAPI process.
+You **do not need Celery or Redis**. Use the in-process background task locally, and the **document worker** on Railway (see below).
+
+## Railway deployment (recommended)
+
+On Railway, the web container’s filesystem is ephemeral and the process may restart before BackgroundTasks finish, so **pending documents often never get processed**. To fix this:
+
+1. **Railway Volume** – Create a Volume and mount it at `/data` on both the **Backend** and a **Document worker** service.
+2. **Backend** – Set `UPLOAD_DIR=/data/uploads` so uploads are stored on the Volume.
+3. **Document worker** – New service, same repo, Root Directory `backend`, Start Command: `python -m app.document_worker`. Mount the same Volume at `/data` and set `UPLOAD_DIR=/data/uploads`.
+
+The worker polls every 20 seconds (configurable via `DOCUMENT_WORKER_POLL_SECONDS`), picks up pending documents, and processes them into vectors. No Redis or Celery. See [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md#document-processing-on-railway) for step-by-step setup.
 
 ## Trade-offs
 
-| Aspect | In-process (current) | Celery / worker |
-|--------|----------------------|------------------|
-| Setup | None | Redis + worker process |
-| After server restart | Pending docs re-queued on startup (see below) | Survives restarts if broker persists |
-| Scale | Limited by one process | Can scale workers |
-| Retries | None built-in | Configurable retries |
+| Aspect | In-process (current) | Document worker (Railway) | Celery / worker |
+|--------|-----------------------|----------------------------|------------------|
+| Setup | None | Volume + second service | Redis + worker process |
+| After server restart | Pending re-queued on startup if file still on disk | Worker keeps polling; file on Volume | Survives if broker persists |
+| Scale | One process | One worker + web | Can scale workers |
 
-For moderate upload volume and single-instance deployment, in-process background tasks are usually enough.
+For **local/dev**, in-process BackgroundTasks are enough. For **Railway**, use the document worker + Volume so uploads are always processed.
 
-## After a server restart
+## After a server restart (without worker)
 
-If the server stops while some documents are still `pending`, those rows remain in the DB with `file_path` set. On **startup**, the app:
+If you don’t run the worker and the server stops while some documents are still `pending`, those rows remain in the DB with `file_path` set. On **startup**, the app:
 
 1. Selects all documents with `processing_status=pending` and non-null `file_path`.
 2. Schedules `process_document_background(doc.id)` for each (via `asyncio.create_task`).
 
-So pending documents are resumed automatically after deploy or restart; no separate queue or broker is required.
+So pending documents are resumed **only if the file still exists** (e.g. same container, or uploads on a Volume). On Railway without a Volume, the file is usually gone after a restart, so processing will fail with “Stored file not found”. Use a Volume + worker for reliable processing on Railway.
 
 ## Frontend: how to see if a document is processed
 

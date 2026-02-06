@@ -24,10 +24,11 @@ If you see build errors about missing files, it means Railway is building from t
 
 ## Overview
 
-Railway deployment requires three services:
+Railway deployment uses at least three services:
 1. **Backend API** - FastAPI application (in `backend/` directory)
 2. **Frontend** - React application served via nginx (in `frontend/` directory)
 3. **PostgreSQL Database** - Railway managed PostgreSQL service
+4. **Document worker** (recommended) - Processes uploaded documents into vectors; see [Document processing on Railway](#document-processing-on-railway) below.
 
 ## Prerequisites
 
@@ -89,6 +90,12 @@ ENVIRONMENT=production
 CORS_ORIGINS=<your-frontend-url>
 LOG_LEVEL=INFO
 ```
+
+**For document processing (uploads → vectors):** use a **Railway Volume** and a **worker service** so uploads are processed reliably (see [Document processing on Railway](#document-processing-on-railway)):
+```
+UPLOAD_DIR=/data/uploads
+```
+Mount the same Volume at `/data` on both the backend and the document worker service.
 
 **Getting DATABASE_URL from Railway:**
 - Click on your PostgreSQL service
@@ -162,6 +169,33 @@ CORS_ORIGINS=*
 
 **Note**: The application will automatically parse any of these formats. For production, use Option 1 or 2 with your specific frontend URL(s).
 
+### Document processing on Railway (uploads → vectors)
+
+On Railway, the web process may restart or not finish FastAPI `BackgroundTasks` before the request ends, so **uploaded documents can stay in "pending" and never get processed into vectors**. To fix this without Celery:
+
+1. **Add a Railway Volume** (persistent storage for uploads)
+   - In your Railway project: **New** → **Volume**
+   - Create a volume (e.g. name `uploads`)
+   - Mount path: `/data`
+
+2. **Mount the Volume on the Backend service**
+   - Open your **Backend** service → **Settings** → **Volumes**
+   - Add volume: select the volume, mount path `/data`
+   - Set env var: `UPLOAD_DIR=/data/uploads` (so uploads go to the volume)
+
+3. **Add a Document Worker service** (polls for pending documents and processes them)
+   - **New** → **GitHub Repo** (same repo)
+   - **Root Directory**: `backend` (same as backend)
+   - **Start Command**: `python -m app.document_worker`
+   - **Volumes**: Add the **same** volume, mount path `/data` (so the worker can read files the backend wrote)
+   - **Environment variables**: Copy the same vars as the Backend (e.g. `DATABASE_URL`, `OPENAI_API_KEY`, `PINECONE_*`, `UPLOAD_DIR=/data/uploads`)
+
+The worker runs in a loop (every 20s by default), picks up documents with `processing_status=pending` and a `file_path`, and runs text extraction → LLM → chunking → embeddings → vector DB. No Redis or Celery required.
+
+Optional env for the worker:
+- `DOCUMENT_WORKER_POLL_SECONDS=20` – how often to check for pending documents
+- `DOCUMENT_WORKER_BATCH_DELAY=2` – delay in seconds between processing each document
+
 ### Step 6: Run Database Migrations
 
 After the backend is deployed, you need to run Alembic migrations:
@@ -218,9 +252,10 @@ railway logs
 | `PINECONE_ENVIRONMENT` | Yes | Pinecone environment/region | - |
 | `PINECONE_INDEX_NAME` | No | Pinecone index name | `pep-documents` |
 | `VECTOR_DB_TYPE` | No | Vector DB type (`pinecone` or `chroma`) | `pinecone` |
-| `ENVIRONMENT` | No | Environment (`development` or `production`) | `development` |
+| `ENVIRONMENT` | No | Environment (`development`, `deployment`, or `production`) | `development` |
 | `CORS_ORIGINS` | No | CORS allowed origins (single URL, comma-separated, or JSON array) | `*` |
 | `LOG_LEVEL` | No | Logging level | `INFO` |
+| `UPLOAD_DIR` | No | Directory for uploaded files; on Railway use `/data/uploads` with a Volume | `uploads` |
 
 ### Frontend Service
 

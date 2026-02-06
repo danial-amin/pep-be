@@ -68,7 +68,8 @@ class Settings(BaseSettings):
             return [v.strip()]
         return ["*"]
     
-    # File Upload
+    # File Upload (use absolute path on Railway e.g. /data/uploads when using a Volume)
+    UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE: int = 100 * 1024 * 1024  # 100MB
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt", ".md"]
     
