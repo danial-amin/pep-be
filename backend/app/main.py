@@ -75,7 +75,11 @@ async def lifespan(app: FastAPI):
                                        WHERE table_name='simulation_messages' AND column_name='is_human_message') THEN
                             ALTER TABLE simulation_messages ADD COLUMN is_human_message BOOLEAN DEFAULT false;
                         END IF;
-                        ALTER TABLE simulation_messages ALTER COLUMN persona_id DROP NOT NULL;
+                        IF EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='simulation_messages' AND column_name='persona_id'
+                                   AND is_nullable = 'NO') THEN
+                            ALTER TABLE simulation_messages ALTER COLUMN persona_id DROP NOT NULL;
+                        END IF;
                     END IF;
                 END $$;
             """))
