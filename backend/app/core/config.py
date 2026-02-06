@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # Image Generation
     IMAGE_GENERATION_SERVICE: str = "openai"
     
-    # Application
+    # Application (e.g. "development" | "deployment" | "production"; only "development" enables DB query logging)
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: Union[str, List[str]] = ["*"]
