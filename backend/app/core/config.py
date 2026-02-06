@@ -69,7 +69,7 @@ class Settings(BaseSettings):
         return ["*"]
     
     # File Upload
-    MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
+    MAX_UPLOAD_SIZE: int = 100 * 1024 * 1024  # 100MB
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt", ".md"]
     
     # Document Processing

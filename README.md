@@ -221,7 +221,7 @@ Key configuration options in `.env`:
 - `OPENAI_API_KEY`: OpenAI API key (required)
 - `OPENAI_MODEL`: LLM model (default: gpt-4-turbo-preview)
 - `OPENAI_EMBEDDING_MODEL`: Embedding model (default: text-embedding-3-large)
-- `MAX_UPLOAD_SIZE`: Maximum file upload size (default: 10MB)
+- `MAX_UPLOAD_SIZE`: Maximum file upload size (default: 100MB)
 - `ALLOWED_EXTENSIONS`: Allowed file extensions
 
 ## Scaling and Enhancement
