@@ -202,53 +202,55 @@ async def lifespan(app: FastAPI):
         logger = logging.getLogger(__name__)
         logger.warning(f"Could not create default documents: {e}", exc_info=True)
     
-    # Load default personas if they don't exist
-    from app.utils.load_default_personas import load_default_personas, convert_persona_to_db_format
+    # Load default persona sets from default_personas/ (e.g. CB, finland, molt) — idempotent; you can attach sets to projects yourself
+    from app.utils.load_default_personas import (
+        load_default_personas,
+        list_available_persona_sets,
+        convert_persona_to_db_format,
+    )
     from app.models.persona import PersonaSet, Persona
     from sqlalchemy import select
-    
+
+    # Only load from default_personas/*.json (e.g. CB, finland, molt); do not fall back to default_personas.json
+    available_sets = list_available_persona_sets()
     async with AsyncSessionLocal() as session:
-        # Check if default persona set already exists (handle multiple results)
-        result = await session.execute(
-            select(PersonaSet).where(PersonaSet.name == "Default Persona Set").limit(1)
-        )
-        existing_set = result.scalar_one_or_none()
-        
-        if not existing_set:
+        for set_info in available_sets:
+            set_name = set_info.get("name") or set_info.get("filename", "").replace(".json", "")
+            if not set_name or set_name == "default" or set_name == "Default Persona Set":
+                continue
+            # Idempotent: skip if a persona set with this name already exists
+            result = await session.execute(
+                select(PersonaSet).where(PersonaSet.name == set_name).limit(1)
+            )
+            if result.scalar_one_or_none():
+                continue
             try:
-                # Load personas from JSON
-                default_data = load_default_personas()
+                default_data = load_default_personas(set_name=set_name)
                 personas_data = default_data.get("personas", [])
-                
-                if personas_data:
-                    # Create persona set
-                    persona_set = PersonaSet(
-                        name="Default Persona Set",
-                        description=default_data.get("metadata", {}).get("context", "Default personas loaded from JSON"),
-                        status="generated",
-                        generation_cycle=1
+                if not personas_data:
+                    continue
+                description = default_data.get("metadata", {}).get("context") or f"Default personas from {set_name}"
+                persona_set = PersonaSet(
+                    name=set_name,
+                    description=description,
+                    status="generated",
+                    generation_cycle=1,
+                    project_id=None,
+                )
+                session.add(persona_set)
+                await session.flush()
+                for persona_data in personas_data:
+                    db_persona_data = convert_persona_to_db_format(persona_data)
+                    persona = Persona(
+                        persona_set_id=persona_set.id,
+                        name=db_persona_data["name"],
+                        persona_data=db_persona_data,
                     )
-                    session.add(persona_set)
-                    await session.flush()
-                    
-                    # Create personas
-                    for persona_data in personas_data:
-                        db_persona_data = convert_persona_to_db_format(persona_data)
-                        persona = Persona(
-                            persona_set_id=persona_set.id,
-                            name=db_persona_data["name"],
-                            persona_data=db_persona_data
-                        )
-                        session.add(persona)
-                    
-                    await session.commit()
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"Loaded {len(personas_data)} default personas on startup")
+                    session.add(persona)
+                await session.commit()
+                logger.info("Loaded default persona set %s (%d personas); attach to a project in the UI if needed", set_name, len(personas_data))
             except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Could not load default personas on startup: {e}", exc_info=True)
+                logger.warning("Could not load default persona set %s: %s", set_name, e, exc_info=True)
                 await session.rollback()
 
     # Resume any documents that were pending when the server was last stopped (no Celery — in-process only)
@@ -277,7 +279,8 @@ async def lifespan(app: FastAPI):
 
     # Automatically reprocess documents that have content but no vectors (old records → vectors)
     async def reprocess_documents_on_startup():
-        _log = logging.getLogger(__name__)
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
         try:
             from app.core.database import AsyncSessionLocal
             from app.services.document_service import DocumentService
