@@ -245,20 +245,25 @@ class PineconeVectorDB:
         if metadatas is None:
             metadatas = [{}] * len(documents)
         
-        # Add text to metadata for retrieval
+        # Pinecone limit is 40960 bytes total per vector metadata; leave room for other keys
+        MAX_METADATA_TEXT_BYTES = 36000
+
+        def _truncate_text_bytes(s: str, max_bytes: int) -> str:
+            enc = s.encode("utf-8")
+            if len(enc) <= max_bytes:
+                return s
+            return enc[:max_bytes].decode("utf-8", errors="ignore").rstrip()
+
+        # Add text for retrieval; avoid storing chunk twice (text_content + text) to stay under 40KB
         vectors_to_upsert = []
         for i, (embedding, doc_text, metadata, doc_id) in enumerate(zip(embeddings, documents, metadatas, ids)):
-            # Pinecone metadata can store text (up to 40KB per vector)
-            # Store text in metadata for retrieval
-            metadata_with_text = {
-                **metadata,
-                "text": doc_text[:40000]  # Limit to 40KB
-            }
-            
+            # Drop text_content from metadata (we store one truncated "text" only)
+            meta = {k: v for k, v in metadata.items() if k != "text_content"}
+            meta["text"] = _truncate_text_bytes(doc_text, MAX_METADATA_TEXT_BYTES)
             vectors_to_upsert.append({
                 "id": doc_id,
                 "values": embedding,
-                "metadata": metadata_with_text
+                "metadata": meta
             })
         
         # Upsert in batches (Pinecone recommends batches of 100)
