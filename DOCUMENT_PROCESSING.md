@@ -62,6 +62,18 @@ So pending documents are resumed **only if the file still exists** (e.g. same co
 - **API**  
   `GET /api/v1/documents` returns `processing_status` and `processing_error` for each document so the UI can always show current state.
 
+## Old documents: convert vs re-upload
+
+- **Documents that have content in the DB but no vectors** (e.g. vector storage failed, or vectors were lost):  
+  Use **reprocess** to convert them without re-uploading.
+  - **API**: `POST /api/v1/documents/reprocess` with body `{}` (reprocess all with content and no vector_id), or `{ "document_ids": [1, 2], "force": false }`. Set `force: true` to re-vector even when vector_id exists.
+  - **CLI**: From `backend/`: `python scripts/reprocess_old_documents.py` (optional: `--project-id 1`, `--force`, `--dry-run`).
+
+- **Documents that are pending/failed and have no content** (file was lost, e.g. ephemeral disk on Railway):  
+  You must **re-upload** them. To see which ones:
+  - **API**: `GET /api/v1/documents/need-reupload` (optional: `?project_id=1`).
+  - **CLI**: `python scripts/reprocess_old_documents.py` prints the need-reupload list, then runs reprocess for the rest.
+
 ## Optional: moving to Celery later
 
 If you later need retries, multiple workers, or decoupling from the web process:

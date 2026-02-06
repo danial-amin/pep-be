@@ -95,6 +95,18 @@ else:
             )
             
             return ids
+
+        def get_index_stats(self):
+            """Return index stats (vector count) for ChromaDB."""
+            try:
+                coll = self.get_or_create_collection("persona_documents")
+                return {
+                    "vector_db": "chroma",
+                    "total_vector_count": coll.count(),
+                }
+            except Exception as e:
+                logger.warning("Could not get ChromaDB stats: %s", e)
+                return None
         
         async def query_documents(
             self,

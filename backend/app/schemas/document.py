@@ -2,7 +2,7 @@
 Document schemas for API requests/responses.
 """
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime
 from app.models.document import DocumentType
 
@@ -43,4 +43,42 @@ class DocumentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ReprocessRequest(BaseModel):
+    """Request to reprocess documents that have content but no/missing vectors."""
+    document_ids: Optional[List[int]] = Field(
+        None,
+        description="Specific document IDs to reprocess; omit to reprocess all that have content and no vector_id",
+    )
+    force: bool = Field(
+        False,
+        description="If true, re-vector even when vector_id exists (replaces existing vectors)",
+    )
+
+
+class ReprocessErrorItem(BaseModel):
+    document_id: int
+    error: str
+
+
+class ReprocessResponse(BaseModel):
+    """Response after reprocessing documents (content → vectors)."""
+    processed: List[int] = Field(description="Document IDs that were successfully reprocessed")
+    skipped: List[int] = Field(description="Document IDs skipped (e.g. no content or already has vectors)")
+    errors: List[ReprocessErrorItem] = Field(description="Document IDs that failed with error message")
+
+
+class NeedReuploadItem(BaseModel):
+    """Document that has no content and cannot be reprocessed; user should re-upload."""
+    id: int
+    filename: str
+    document_type: DocumentType
+    processing_status: str
+    processing_error: Optional[str] = None
+
+
+class NeedReuploadResponse(BaseModel):
+    """List of documents that need to be re-uploaded (file was lost or never processed)."""
+    documents: List[NeedReuploadItem]
 

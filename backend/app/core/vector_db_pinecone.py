@@ -185,7 +185,32 @@ class PineconeVectorDB:
     def index(self):
         """Get Pinecone index (lazy initialization)."""
         return self._get_index()
-    
+
+    def get_index_stats(self) -> Optional[Dict[str, Any]]:
+        """
+        Return index stats (vector count, namespaces). Use to verify upserts.
+        Pinecone stats can take a few seconds to reflect new vectors.
+        """
+        try:
+            raw = self.index.describe_index_stats()
+            # Handle both dict and object response
+            def _get(o, key, default=None):
+                if isinstance(o, dict):
+                    return o.get(key, default)
+                return getattr(o, key, default)
+
+            return {
+                "vector_db": "pinecone",
+                "index_name": settings.PINECONE_INDEX_NAME,
+                "dimension": _get(raw, "dimension"),
+                "total_vector_count": _get(raw, "total_vector_count"),
+                "namespaces": _get(raw, "namespaces") or {},
+                "note": "Index stats can take a few seconds to update after upsert.",
+            }
+        except Exception as e:
+            logger.warning("Could not get Pinecone index stats: %s", e)
+            return None
+
     async def add_documents(
         self,
         documents: List[str],
@@ -238,11 +263,19 @@ class PineconeVectorDB:
         
         # Upsert in batches (Pinecone recommends batches of 100)
         batch_size = 100
+        total_upserted = 0
         for i in range(0, len(vectors_to_upsert), batch_size):
             batch = vectors_to_upsert[i:i + batch_size]
-            self.index.upsert(vectors=batch)
-            logger.info(f"Upserted batch {i//batch_size + 1} ({len(batch)} vectors)")
-        
+            try:
+                resp = self.index.upsert(vectors=batch)
+                # Pinecone returns UpsertResponse with upserted_count
+                n = getattr(resp, "upserted_count", None) or len(batch)
+                total_upserted += n
+                logger.info(f"Upserted batch {i//batch_size + 1} ({len(batch)} vectors, total this call: {total_upserted})")
+            except Exception as e:
+                logger.exception("Pinecone upsert failed: %s", e)
+                raise
+        logger.info("Pinecone add_documents complete: %d vectors upserted (index stats may take a few seconds to update)", total_upserted)
         return ids
     
     async def query_documents(

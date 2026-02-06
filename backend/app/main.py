@@ -275,6 +275,31 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(process_pending_documents_on_startup())
 
+    # Automatically reprocess documents that have content but no vectors (old records → vectors)
+    async def reprocess_documents_on_startup():
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.services.document_service import DocumentService
+            async with AsyncSessionLocal() as session:
+                result = await DocumentService.reprocess_documents(
+                    session, document_ids=None, force=False
+                )
+                await session.commit()
+            processed, skipped, errors = result["processed"], result["skipped"], result["errors"]
+            if processed or errors:
+                logger.info(
+                    "Startup reprocess: %d processed, %d skipped, %d errors",
+                    len(processed),
+                    len(skipped),
+                    len(errors),
+                )
+                for e in errors:
+                    logger.warning("Reprocess error document_id=%s: %s", e["document_id"], e["error"])
+        except Exception as e:
+            logger.warning("Could not reprocess documents on startup: %s", e, exc_info=True)
+
+    asyncio.create_task(reprocess_documents_on_startup())
+
     yield
     # Shutdown
     pass

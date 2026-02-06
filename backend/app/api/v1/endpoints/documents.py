@@ -12,8 +12,17 @@ import aiofiles
 
 from app.core.database import get_db
 from app.core.config import settings
+from app.core.vector_db import vector_db
 from app.models.document import Document, DocumentType, ProcessingStatus
-from app.schemas.document import DocumentProcessResponse, DocumentResponse
+from app.schemas.document import (
+    DocumentProcessResponse,
+    DocumentResponse,
+    ReprocessRequest,
+    ReprocessResponse,
+    ReprocessErrorItem,
+    NeedReuploadResponse,
+    NeedReuploadItem,
+)
 from app.services.document_service import DocumentService
 
 router = APIRouter()
@@ -113,16 +122,76 @@ async def get_documents(
 ):
     """Get all documents, optionally filtered by project and type."""
     from sqlalchemy import select
-    
+
     query = select(Document)
     if project_id:
         query = query.where(Document.project_id == project_id)
     if document_type:
         query = query.where(Document.document_type == document_type)
-    
+
     result = await db.execute(query)
     documents = result.scalars().all()
     return [DocumentResponse.model_validate(doc) for doc in documents]
+
+
+@router.get("/need-reupload", response_model=NeedReuploadResponse)
+async def get_need_reupload(
+    project_id: int = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    List documents that need to be re-uploaded (pending/failed with no content; file was lost).
+    Use this to see which old uploads cannot be converted and must be re-uploaded.
+    """
+    docs = await DocumentService.get_need_reupload(db, project_id=project_id)
+    return NeedReuploadResponse(
+        documents=[
+            NeedReuploadItem(
+                id=doc.id,
+                filename=doc.filename,
+                document_type=doc.document_type,
+                processing_status=doc.processing_status,
+                processing_error=doc.processing_error,
+            )
+            for doc in docs
+        ]
+    )
+
+
+@router.get("/vector-stats")
+async def get_vector_stats():
+    """
+    Return vector index stats (total_vector_count, etc.) so you can verify upserts.
+    Pinecone stats can take a few seconds to reflect new vectors after upsert.
+    """
+    stats = vector_db.get_index_stats() if hasattr(vector_db, "get_index_stats") else None
+    if stats is None:
+        return {"detail": "Vector DB does not expose stats or stats unavailable"}
+    return stats
+
+
+@router.post("/reprocess", response_model=ReprocessResponse)
+async def reprocess_documents(
+    body: ReprocessRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Reprocess documents that have content but no/missing vectors (content → chunks → vector DB).
+    Use for old documents that were processed but vectors were lost or never stored.
+    - Omit document_ids to reprocess all documents that have content and no vector_id.
+    - Set force=true to re-vector even when vector_id exists (replaces existing vectors).
+    """
+    result = await DocumentService.reprocess_documents(
+        db,
+        document_ids=body.document_ids,
+        force=body.force,
+    )
+    await db.commit()
+    return ReprocessResponse(
+        processed=result["processed"],
+        skipped=result["skipped"],
+        errors=[ReprocessErrorItem(**e) for e in result["errors"]],
+    )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

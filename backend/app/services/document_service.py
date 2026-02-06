@@ -2,7 +2,7 @@
 Document processing service.
 """
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from typing import List, Optional
 from pathlib import Path
 import aiofiles
@@ -14,6 +14,7 @@ from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.utils.token_utils import chunk_text_by_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +306,108 @@ class DocumentService:
             select(Document).where(Document.id == document_id)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def reprocess_documents(
+        session: AsyncSession,
+        document_ids: Optional[List[int]] = None,
+        force: bool = False,
+    ) -> dict:
+        """
+        Reprocess documents that have content but no/missing vectors (content → chunks → vector DB).
+        Use for old documents that were processed but vectors were lost, or vector storage failed.
+        Returns { "processed": [ids], "skipped": [ids], "errors": [{"document_id": id, "error": str}] }.
+        """
+        query = select(Document).where(
+            Document.content.isnot(None),
+            Document.content != "",
+        )
+        if document_ids is not None:
+            query = query.where(Document.id.in_(document_ids))
+        if not force:
+            query = query.where(Document.vector_id.is_(None))
+        result = await session.execute(query)
+        candidates = list(result.scalars().all())
+
+        processed: List[int] = []
+        skipped: List[int] = []
+        errors: List[dict] = []
+
+        for doc in candidates:
+            content = (doc.content or "").strip()
+            if not content:
+                skipped.append(doc.id)
+                continue
+            if doc.vector_id and not force:
+                skipped.append(doc.id)
+                continue
+
+            try:
+                if force and doc.vector_id:
+                    await vector_db.delete_documents(
+                        filter_metadata={"document_id": str(doc.id)}
+                    )
+                chunks = chunk_text_by_tokens(
+                    content,
+                    max_tokens=8000,
+                    overlap_tokens=200,
+                )
+                if not chunks:
+                    errors.append({"document_id": doc.id, "error": "No chunks created"})
+                    continue
+                metadata_base = {
+                    "document_type": doc.document_type.value,
+                    "filename": doc.filename,
+                    "document_id": str(doc.id),
+                }
+                if doc.project_id is not None:
+                    metadata_base["project_id"] = str(doc.project_id)
+                metadatas = [
+                    {**metadata_base, "chunk_index": i, "text_content": chunks[i]}
+                    for i in range(len(chunks))
+                ]
+                vector_ids = await vector_db.add_documents(
+                    documents=chunks,
+                    metadatas=metadatas,
+                )
+                doc.vector_id = vector_ids[0] if vector_ids else None
+                doc.processing_status = ProcessingStatus.COMPLETED
+                doc.processing_error = None
+                await session.flush()
+                processed.append(doc.id)
+                logger.info(
+                    "Reprocessed document %s (%d chunks)",
+                    doc.id,
+                    len(vector_ids) if vector_ids else 0,
+                )
+            except Exception as e:
+                logger.exception("Reprocess failed for document %s: %s", doc.id, e)
+                errors.append({"document_id": doc.id, "error": str(e)})
+
+        return {"processed": processed, "skipped": skipped, "errors": errors}
+
+    @staticmethod
+    async def get_need_reupload(
+        session: AsyncSession,
+        project_id: Optional[int] = None,
+    ) -> List[Document]:
+        """
+        Return documents that are pending/failed and have no content (file was lost).
+        User should re-upload these.
+        """
+        query = select(Document).where(
+            Document.processing_status.in_(
+                [ProcessingStatus.PENDING, ProcessingStatus.FAILED]
+            ),
+            or_(
+                Document.content.is_(None),
+                Document.content == "",
+            ),
+        )
+        if project_id is not None:
+            query = query.where(Document.project_id == project_id)
+        result = await session.execute(query)
+        return list(result.scalars().all())
 
     @staticmethod
     async def delete_document(
