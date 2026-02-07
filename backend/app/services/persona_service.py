@@ -376,20 +376,18 @@ class PersonaService:
         # Strict merge: Only expand existing fields, remove any new fields
         merged_data = strict_deep_merge(original_normalized, expanded_normalized)
         
-        # Final validation: Ensure structure matches original
-        # If original had flat structure, ensure merged doesn't have nested demographics
-        original_has_flat_demographics = all(
-            key in persona.persona_data for key in ['age', 'gender', 'occupation']
-        ) and 'demographics' not in persona.persona_data
+        # Final validation: If original had flat demographics (no nested 'demographics' key),
+        # flatten merged demographics back to top-level so we don't lose age, gender, occupation, etc.
+        original_has_flat_demographics = 'demographics' not in persona.persona_data
         
         if original_has_flat_demographics and 'demographics' in merged_data:
-            logger.warning("Expansion tried to add nested 'demographics' but original has flat structure. Removing nested structure.")
-            # Remove nested demographics and keep flat structure
             if isinstance(merged_data['demographics'], dict):
-                # Extract flat fields from nested demographics if they exist
                 nested_demo = merged_data.pop('demographics')
-                # But don't add them back - keep original flat structure
-                logger.info("Removed nested demographics structure to preserve original flat structure")
+                # Restore flat demographic keys so we don't remove demographic components
+                for k, v in nested_demo.items():
+                    if v is not None and v != "":
+                        merged_data[k] = v
+                logger.debug("Flattened demographics back to top-level to preserve original structure")
         
         # Update persona with merged data
         persona.persona_data = merged_data
