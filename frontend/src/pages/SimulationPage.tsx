@@ -959,7 +959,8 @@ export default function SimulationPage() {
                 </div>
 
                 {(currentSimulation.status === 'completed' || currentSimulation.status === 'stopped') &&
-                  currentSimulation.messages.length > 0 && !currentSimulation.summary && (
+                  currentSimulation.messages.length > 0 &&
+                  !(currentSimulation.persona_summaries?.length) && !currentSimulation.summary && (
                   <button
                     onClick={handleGenerateSummary}
                     disabled={generatingSummary}
@@ -1031,8 +1032,8 @@ export default function SimulationPage() {
                 )}
               </div>
 
-              {/* Summary */}
-              {currentSimulation.summary && (
+              {/* Summary - per persona then key insights & action items as before */}
+              {(currentSimulation.persona_summaries?.length || currentSimulation.summary) && (
                 <div className="glass-card rounded-2xl p-6 pastel-purple">
                   <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <FileText className="w-5 h-5" />
@@ -1040,7 +1041,16 @@ export default function SimulationPage() {
                   </h4>
 
                   <div className="mb-4">
-                    <p className="text-white/90 leading-relaxed">{currentSimulation.summary}</p>
+                    {currentSimulation.persona_summaries?.length ? (
+                      currentSimulation.persona_summaries.map((entry) => (
+                        <p key={entry.persona_id} className="text-white/90 leading-relaxed mb-3">
+                          <span className="font-semibold text-white">{entry.persona_name}: </span>
+                          {entry.summary}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-white/90 leading-relaxed">{currentSimulation.summary}</p>
+                    )}
                   </div>
 
                   {currentSimulation.key_insights && currentSimulation.key_insights.length > 0 && (

@@ -234,6 +234,12 @@ export interface SimulationParticipant {
   tokens_used: number;
 }
 
+export interface PersonaSummaryEntry {
+  persona_id: number;
+  persona_name: string;
+  summary: string;
+}
+
 export interface Simulation {
   id: number;
   name: string;
@@ -248,6 +254,7 @@ export interface Simulation {
   started_at?: string;
   completed_at?: string;
   summary?: string;
+  persona_summaries?: PersonaSummaryEntry[];
   key_insights?: string[];
   action_items?: string[];
   participants: SimulationParticipant[];
@@ -284,7 +291,8 @@ export interface SimulationTurnResponse {
 
 export interface SimulationSummary {
   simulation_id: number;
-  summary: string;
+  persona_summaries: PersonaSummaryEntry[];
+  summary?: string;
   key_insights: string[];
   action_items: string[];
   total_turns: number;

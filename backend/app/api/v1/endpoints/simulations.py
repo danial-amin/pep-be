@@ -24,6 +24,7 @@ from app.schemas.simulation import (
     SimulationListResponse,
     SimulationMessageResponse,
     SimulationParticipantResponse,
+    PersonaSummaryEntry,
     SimulationTurnResponse,
     SimulationSummaryResponse
 )
@@ -98,6 +99,28 @@ async def _build_simulation_response(
         persona = personas_map.get(msg.persona_id)
         message_responses.append(_build_message_response(msg, persona))
 
+    # Parse summary: may be JSON array of persona summaries or legacy string
+    summary_raw = simulation.summary
+    summary_out: Optional[str] = None
+    persona_summaries_out: Optional[List[PersonaSummaryEntry]] = None
+    if summary_raw:
+        try:
+            parsed = json.loads(summary_raw)
+            if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+                if "persona_id" in parsed[0] and "summary" in parsed[0]:
+                    persona_summaries_out = [
+                        PersonaSummaryEntry(
+                            persona_id=e["persona_id"],
+                            persona_name=e.get("persona_name", ""),
+                            summary=e.get("summary", "")
+                        )
+                        for e in parsed
+                    ]
+        except (json.JSONDecodeError, TypeError):
+            pass
+        if persona_summaries_out is None:
+            summary_out = summary_raw
+
     return SimulationResponse(
         id=simulation.id,
         name=simulation.name,
@@ -111,7 +134,8 @@ async def _build_simulation_response(
         tokens_used=simulation.tokens_used,
         started_at=simulation.started_at,
         completed_at=simulation.completed_at,
-        summary=simulation.summary,
+        summary=summary_out,
+        persona_summaries=persona_summaries_out,
         key_insights=simulation.key_insights,
         action_items=simulation.action_items,
         participants=participant_responses,
@@ -323,11 +347,20 @@ async def _build_simulation_export(simulation: Simulation, session: AsyncSession
     }
 
     if simulation.summary or simulation.key_insights or simulation.action_items:
-        payload["summaries"] = _serialize_export_value({
-            "summary": simulation.summary or "",
-            "key_insights": simulation.key_insights or [],
-            "action_items": simulation.action_items or [],
-        })
+        summaries_payload = {"key_insights": simulation.key_insights or [], "action_items": simulation.action_items or []}
+        if simulation.summary:
+            try:
+                parsed = json.loads(simulation.summary)
+                if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict) and "persona_id" in parsed[0]:
+                    summaries_payload["persona_summaries"] = parsed
+                    summaries_payload["summary"] = ""
+                else:
+                    summaries_payload["summary"] = simulation.summary
+            except (json.JSONDecodeError, TypeError):
+                summaries_payload["summary"] = simulation.summary
+        else:
+            summaries_payload["summary"] = ""
+        payload["summaries"] = _serialize_export_value(summaries_payload)
 
     return payload
 
@@ -611,11 +644,16 @@ async def generate_summary(
     if simulation.started_at and simulation.completed_at:
         duration_seconds = int((simulation.completed_at - simulation.started_at).total_seconds())
 
+    persona_summaries = [
+        PersonaSummaryEntry(persona_id=e["persona_id"], persona_name=e["persona_name"], summary=e["summary"])
+        for e in summary_result.get("persona_summaries", [])
+    ]
     return SimulationSummaryResponse(
         simulation_id=simulation.id,
-        summary=summary_result["summary"],
-        key_insights=summary_result["key_insights"],
-        action_items=summary_result["action_items"],
+        persona_summaries=persona_summaries,
+        summary=None,
+        key_insights=summary_result.get("key_insights", []),
+        action_items=summary_result.get("action_items", []),
         total_turns=simulation.current_turn,
         total_tokens=simulation.tokens_used,
         duration_seconds=duration_seconds

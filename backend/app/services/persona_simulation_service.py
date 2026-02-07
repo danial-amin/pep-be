@@ -530,12 +530,18 @@ Keep it to 1-3 sentences but make the course change visible."""
 
         transcript = "\n\n".join(transcript_parts)
 
-        # Generate summary
+        # Persona names and ids for per-persona summary text
+        persona_entries = [
+            {"persona_id": pid, "persona_name": p.name}
+            for pid, p in participants.items()
+        ]
+
+        # Generate summary as before: per-persona summary text + overall key_insights and action_items
         summary_prompt = f"""Analyze this group discussion and provide:
 
-1. A concise summary (2-3 paragraphs) of the key points discussed
-2. 3-5 key insights that emerged from the conversation
-3. 3-5 actionable recommendations or next steps
+1. For each participant, a concise summary (2-3 sentences) of that person's key points and stance.
+2. 3-5 key insights that emerged from the conversation overall.
+3. 3-5 actionable recommendations or next steps overall.
 
 DISCUSSION GOAL: {simulation.goal}
 {f"CONTEXT: {simulation.goal_context}" if simulation.goal_context else ""}
@@ -545,7 +551,10 @@ TRANSCRIPT:
 
 Respond in JSON format:
 {{
-  "summary": "...",
+  "persona_summaries": [
+    {{ "persona_id": <number>, "persona_name": "<name>", "summary": "<2-3 sentences for this persona>" }},
+    ...
+  ],
   "key_insights": ["insight 1", "insight 2", ...],
   "action_items": ["action 1", "action 2", ...]
 }}"""
@@ -565,14 +574,26 @@ Respond in JSON format:
             )
 
             result = json.loads(response.choices[0].message.content)
+            persona_summaries = result.get("persona_summaries", [])
+            seen_ids = {s["persona_id"] for s in persona_summaries}
+            for e in persona_entries:
+                if e["persona_id"] not in seen_ids:
+                    persona_summaries.append({
+                        "persona_id": e["persona_id"],
+                        "persona_name": e["persona_name"],
+                        "summary": "No summary generated."
+                    })
 
-            # Update simulation with summary
-            simulation.summary = result.get("summary", "")
+            simulation.summary = json.dumps(persona_summaries)
             simulation.key_insights = result.get("key_insights", [])
             simulation.action_items = result.get("action_items", [])
             await session.commit()
 
-            return result
+            return {
+                "persona_summaries": persona_summaries,
+                "key_insights": simulation.key_insights,
+                "action_items": simulation.action_items,
+            }
 
         except Exception as e:
             logger.error(f"Error generating summary for simulation {simulation.id}: {e}", exc_info=True)

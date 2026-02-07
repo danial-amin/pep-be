@@ -114,6 +114,13 @@ class SimulationParticipantResponse(BaseModel):
         from_attributes = True
 
 
+class PersonaSummaryEntry(BaseModel):
+    """Per-persona summary for simulation summary response."""
+    persona_id: int
+    persona_name: str
+    summary: str
+
+
 class SimulationResponse(BaseModel):
     """Response for a simulation session."""
     id: int
@@ -137,6 +144,7 @@ class SimulationResponse(BaseModel):
 
     # Results
     summary: Optional[str] = None
+    persona_summaries: Optional[List[PersonaSummaryEntry]] = None
     key_insights: Optional[List[str]] = None
     action_items: Optional[List[str]] = None
 
@@ -188,9 +196,10 @@ class SimulationTurnResponse(BaseModel):
 class SimulationSummaryResponse(BaseModel):
     """Response for simulation summary generation."""
     simulation_id: int
-    summary: str
-    key_insights: List[str]
-    action_items: List[str]
+    persona_summaries: List[PersonaSummaryEntry] = []
+    summary: Optional[str] = None  # legacy
+    key_insights: List[str] = []
+    action_items: List[str] = []
     total_turns: int
     total_tokens: int
     duration_seconds: Optional[int] = None
