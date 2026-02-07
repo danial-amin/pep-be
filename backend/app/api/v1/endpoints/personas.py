@@ -303,18 +303,22 @@ async def save_persona_set(
 
 @router.get("/sets", response_model=List[PersonaSetResponse])
 async def get_all_persona_sets(
+    project_id: Optional[int] = Query(None, description="If set, return only persona sets affiliated with this project"),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get all saved persona sets.
+    Get saved persona sets.
     
-    Returns all persona sets in the database, including:
+    When project_id is provided, returns only persona sets affiliated to that project.
+    When project_id is omitted, returns all persona sets (global list).
+    
+    Returns:
     - Generated persona sets
     - Loaded default persona sets (from JSON files)
     - Each set appears as a separate, distinct entry with its own ID, name, and personas
     """
     try:
-        persona_sets = await PersonaService.get_all_persona_sets(db)
+        persona_sets = await PersonaService.get_all_persona_sets(db, project_id=project_id)
         # Sort by created_at (newest first) so recently loaded sets appear first
         persona_sets.sort(key=lambda x: x.created_at if x.created_at else x.id, reverse=True)
         return [PersonaSetResponse.model_validate(ps) for ps in persona_sets]

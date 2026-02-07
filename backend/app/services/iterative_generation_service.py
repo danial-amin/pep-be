@@ -282,10 +282,12 @@ class IterativeGenerationService:
         interview_texts = []
         context_texts = []
 
-        # Use RAG to retrieve relevant chunks
+        # Use RAG to retrieve relevant chunks (metadata includes project_id for project isolation)
         if interviews:
             interview_doc_ids = [str(doc.id) for doc in interviews]
             interview_filter = {"document_type": "interview"}
+            if project_id is not None:
+                interview_filter["project_id"] = str(project_id)
             if len(interview_doc_ids) == 1:
                 interview_filter["document_id"] = interview_doc_ids[0]
             elif len(interview_doc_ids) > 1:
@@ -307,6 +309,8 @@ class IterativeGenerationService:
         if contexts:
             context_doc_ids = [str(doc.id) for doc in contexts]
             context_filter = {"document_type": "context"}
+            if project_id is not None:
+                context_filter["project_id"] = str(project_id)
             if len(context_doc_ids) == 1:
                 context_filter["document_id"] = context_doc_ids[0]
             elif len(context_doc_ids) > 1:

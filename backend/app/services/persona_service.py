@@ -494,13 +494,15 @@ class PersonaService:
     
     @staticmethod
     async def get_all_persona_sets(
-        session: AsyncSession
+        session: AsyncSession,
+        project_id: Optional[int] = None
     ) -> List[PersonaSet]:
-        """Get all persona sets."""
+        """Get persona sets, optionally filtered by project (only sets affiliated to that project)."""
         from sqlalchemy.orm import selectinload
-        result = await session.execute(
-            select(PersonaSet).options(selectinload(PersonaSet.personas))
-        )
+        query = select(PersonaSet).options(selectinload(PersonaSet.personas))
+        if project_id is not None:
+            query = query.where(PersonaSet.project_id == project_id)
+        result = await session.execute(query)
         return list(result.scalars().all())
     
     @staticmethod
