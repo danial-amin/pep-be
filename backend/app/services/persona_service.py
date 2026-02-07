@@ -93,16 +93,22 @@ class PersonaService:
                 filter_metadata=interview_filter
             )
             
-            # Extract document texts from vector DB results
+            # Extract document texts from vector DB results (filter None; vector DB can return None)
             if interview_results.get("documents") and len(interview_results["documents"]) > 0:
-                # Flatten the results (ChromaDB returns lists of lists)
                 for doc_list in interview_results["documents"]:
-                    interview_texts.extend(doc_list)
+                    for t in doc_list:
+                        if t is not None:
+                            interview_texts.append(t if isinstance(t, str) else str(t))
             
             # If no results from vector DB, fall back to full documents (for backward compatibility)
             if not interview_texts:
                 logger.warning("No interview chunks found in vector DB, falling back to full documents")
-                interview_texts = [interview.content for interview in interviews]
+                interview_texts = [
+                    (c if isinstance(c, str) else str(c))
+                    for interview in interviews
+                    for c in [getattr(interview, "content", None)]
+                    if c is not None
+                ]
         
         # Process context if available
         if contexts:
@@ -126,15 +132,22 @@ class PersonaService:
                 filter_metadata=context_filter
             )
             
-            # Extract document texts from vector DB results
+            # Extract document texts from vector DB results (filter None; vector DB can return None)
             if context_results.get("documents") and len(context_results["documents"]) > 0:
                 for doc_list in context_results["documents"]:
-                    context_texts.extend(doc_list)
+                    for t in doc_list:
+                        if t is not None:
+                            context_texts.append(t if isinstance(t, str) else str(t))
             
             # If no results from vector DB, fall back to full documents
             if not context_texts:
                 logger.warning("No context chunks found in vector DB, falling back to full documents")
-                context_texts = [context.content for context in contexts]
+                context_texts = [
+                    (c if isinstance(c, str) else str(c))
+                    for context in contexts
+                    for c in [getattr(context, "content", None)]
+                    if c is not None
+                ]
         
         logger.info(f"Using {len(interview_texts)} interview chunks and {len(context_texts)} context chunks for persona generation")
         

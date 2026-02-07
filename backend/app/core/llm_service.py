@@ -314,6 +314,15 @@ Provide a comprehensive and accurate response based on the context provided."""
             has_interviews: Whether interview documents are available
             has_context: Whether context documents are available
         """
+        # Ensure no None in document lists (vector DB or fallback can return None and break join())
+        def _safe_doc_list(lst: Optional[List[str]]) -> List[str]:
+            if not lst:
+                return []
+            return [x if isinstance(x, str) else str(x) for x in lst if x is not None]
+
+        context_documents = _safe_doc_list(context_documents)
+        interview_documents = _safe_doc_list(interview_documents)
+
         # Determine which prompt template to use based on available data
         if has_interviews and has_context:
             # Both interviews and context available - use standard template

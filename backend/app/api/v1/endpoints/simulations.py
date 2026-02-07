@@ -5,11 +5,12 @@ Enables creating and running simulations where persona-infused LLMs
 converse with each other towards a common goal.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from typing import List, Optional
+from typing import List, Optional, Any
+from datetime import datetime
 import json
 
 from app.core.database import get_db
@@ -248,6 +249,127 @@ async def get_simulation(
         )
 
     return await _build_simulation_response(simulation, session)
+
+
+def _serialize_export_value(v: Any) -> Any:
+    """Serialize a value for JSON export (datetimes to ISO string)."""
+    if isinstance(v, datetime):
+        return v.isoformat()
+    if isinstance(v, list):
+        return [_serialize_export_value(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _serialize_export_value(x) for k, x in v.items()}
+    return v
+
+
+async def _build_simulation_export(simulation: Simulation, session: AsyncSession) -> dict:
+    """Build the full simulation export payload (setup, conversations, summaries)."""
+    personas_map = {}
+    for p in simulation.participants:
+        result = await session.execute(select(Persona).where(Persona.id == p.persona_id))
+        persona = result.scalar_one_or_none()
+        if persona:
+            personas_map[p.persona_id] = persona
+
+    setup = {
+        "name": simulation.name,
+        "goal": simulation.goal,
+        "goal_context": simulation.goal_context,
+        "max_duration_seconds": simulation.max_duration_seconds,
+        "max_tokens": simulation.max_tokens,
+        "max_turns": simulation.max_turns,
+        "status": simulation.status,
+        "current_turn": simulation.current_turn,
+        "tokens_used": simulation.tokens_used,
+        "project_id": simulation.project_id,
+        "created_at": simulation.created_at,
+        "updated_at": simulation.updated_at,
+        "started_at": simulation.started_at,
+        "completed_at": simulation.completed_at,
+        "participants": [
+            {
+                "id": p.id,
+                "persona_id": p.persona_id,
+                "persona_name": (persona.name if (persona := personas_map.get(p.persona_id)) else "Unknown"),
+                "role": p.role,
+                "messages_count": p.messages_count,
+                "tokens_used": p.tokens_used,
+            }
+            for p in simulation.participants
+        ],
+    }
+
+    conversations = []
+    for msg in simulation.messages:
+        persona = personas_map.get(msg.persona_id)
+        name = "Facilitator" if (getattr(msg, "is_human_message", False) or msg.persona_id is None) else (persona.name if persona else "Unknown")
+        conversations.append({
+            "id": msg.id,
+            "turn_number": msg.turn_number,
+            "persona_id": msg.persona_id,
+            "persona_name": name,
+            "content": msg.content,
+            "tokens": msg.tokens,
+            "is_moderator_message": msg.is_moderator_message,
+            "is_human_message": getattr(msg, "is_human_message", False),
+            "responding_to_id": msg.responding_to_id,
+            "created_at": msg.created_at,
+        })
+
+    payload = {
+        "simulation_id": simulation.id,
+        "setup": _serialize_export_value(setup),
+        "conversations": _serialize_export_value(conversations),
+    }
+
+    if simulation.summary or simulation.key_insights or simulation.action_items:
+        payload["summaries"] = _serialize_export_value({
+            "summary": simulation.summary or "",
+            "key_insights": simulation.key_insights or [],
+            "action_items": simulation.action_items or [],
+        })
+
+    return payload
+
+
+@router.get("/{simulation_id}/download")
+async def download_simulation(
+    simulation_id: int,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Download the simulation as JSON including setup, all conversations, and summaries (if generated).
+
+    Returns a JSON file with:
+    - setup: name, goal, constraints, participants, timestamps
+    - conversations: all messages in turn order with persona and content
+    - summaries: summary text, key_insights, action_items (only present if generated)
+    """
+    result = await session.execute(
+        select(Simulation)
+        .options(
+            selectinload(Simulation.participants),
+            selectinload(Simulation.messages)
+        )
+        .where(Simulation.id == simulation_id)
+    )
+    simulation = result.scalar_one_or_none()
+
+    if not simulation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Simulation with ID {simulation_id} not found"
+        )
+
+    payload = await _build_simulation_export(simulation, session)
+    filename = f"simulation-{simulation_id}.json"
+    return JSONResponse(
+        content=payload,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
 
 
 @router.post("/{simulation_id}/start", response_model=SimulationResponse)

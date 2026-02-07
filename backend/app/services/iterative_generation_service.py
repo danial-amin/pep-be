@@ -301,10 +301,17 @@ class IterativeGenerationService:
 
             if interview_results.get("documents") and len(interview_results["documents"]) > 0:
                 for doc_list in interview_results["documents"]:
-                    interview_texts.extend(doc_list)
+                    for t in doc_list:
+                        if t is not None:
+                            interview_texts.append(t if isinstance(t, str) else str(t))
 
             if not interview_texts:
-                interview_texts = [interview.content for interview in interviews]
+                interview_texts = [
+                    (c if isinstance(c, str) else str(c))
+                    for interview in interviews
+                    for c in [getattr(interview, "content", None)]
+                    if c is not None
+                ]
 
         if contexts:
             context_doc_ids = [str(doc.id) for doc in contexts]
@@ -324,10 +331,17 @@ class IterativeGenerationService:
 
             if context_results.get("documents") and len(context_results["documents"]) > 0:
                 for doc_list in context_results["documents"]:
-                    context_texts.extend(doc_list)
+                    for t in doc_list:
+                        if t is not None:
+                            context_texts.append(t if isinstance(t, str) else str(t))
 
             if not context_texts:
-                context_texts = [context.content for context in contexts]
+                context_texts = [
+                    (c if isinstance(c, str) else str(c))
+                    for context in contexts
+                    for c in [getattr(context, "content", None)]
+                    if c is not None
+                ]
 
         logger.info(f"Retrieved {len(interview_texts)} interview chunks and {len(context_texts)} context chunks")
         return interview_texts, context_texts

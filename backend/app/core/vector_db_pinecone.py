@@ -348,9 +348,9 @@ class PineconeVectorDB:
         ids = []
 
         for match in query_response.matches:
-            # Extract text from metadata
-            text = match.metadata.get("text", "")
-            documents.append(text)
+            # Extract text from metadata (ensure str; None breaks join() in persona generation)
+            text = match.metadata.get("text") or ""
+            documents.append(text if isinstance(text, str) else str(text))
 
             # Remove text from metadata for response (keep original metadata)
             metadata = {k: v for k, v in match.metadata.items() if k != "text"}
