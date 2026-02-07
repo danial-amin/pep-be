@@ -373,9 +373,9 @@ export default function PersonaDetailPage() {
                     : 'border-white/30 hover:border-white/50'
                 }`}
               >
-                {persona.image_url && !imageErrors.has(persona.id) ? (
+                {(persona.image_url || persona.id) && !imageErrors.has(persona.id) ? (
                   <img
-                    src={getPersonaImageUrl(persona.image_url) || ''}
+                    src={getPersonaImageUrl(persona.image_url, persona.id) || ''}
                     alt={persona.name}
                     className="w-full h-full object-cover"
                     onError={() => setImageErrors(prev => new Set(prev).add(persona.id))}
@@ -410,9 +410,9 @@ export default function PersonaDetailPage() {
           <div className="flex gap-4">
             {/* Persona Image */}
             <div className="flex-shrink-0">
-              {currentPersona.image_url && !imageErrors.has(currentPersona.id) ? (
+              {(currentPersona.image_url || currentPersona.id) && !imageErrors.has(currentPersona.id) ? (
                 <img
-                  src={getPersonaImageUrl(currentPersona.image_url) || ''}
+                  src={getPersonaImageUrl(currentPersona.image_url, currentPersona.id) || ''}
                   alt={currentPersona.name}
                   className="w-32 h-32 object-cover rounded-xl border-4 border-white/30 shadow-lg"
                   onError={() => setImageErrors(prev => new Set(prev).add(currentPersona.id))}

@@ -20,15 +20,17 @@ import { simulationsApi, personasApi, API_BASE_URL } from '../services/api';
 import { Simulation, SimulationMessage, PersonaSet, Persona, SimulationListItem } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 
-// Persona Avatar Component
+// Persona Avatar Component (use personaId when available so API serves from file or base64)
 function PersonaAvatar({
   name,
   imageUrl,
+  personaId,
   size = 'md',
   showBorder = true
 }: {
   name: string;
   imageUrl?: string | null;
+  personaId?: number;
   size?: 'sm' | 'md' | 'lg';
   showBorder?: boolean;
 }) {
@@ -38,11 +40,12 @@ function PersonaAvatar({
     md: 'w-12 h-12 text-lg',
     lg: 'w-16 h-16 text-xl'
   };
+  const src = getPersonaImageUrl(imageUrl, personaId);
 
-  if (imageUrl && !imageError) {
+  if (src && !imageError) {
     return (
       <img
-        src={getPersonaImageUrl(imageUrl) || ''}
+        src={src}
         alt={name}
         className={`${sizeClasses[size]} object-cover rounded-full ${showBorder ? 'border-2 border-white/30' : ''}`}
         onError={() => setImageError(true)}
@@ -86,6 +89,7 @@ function MessageBubble({ message, isLeft }: { message: SimulationMessage; isLeft
         <PersonaAvatar
           name={message.persona_name}
           imageUrl={message.persona_image_url}
+          personaId={message.persona_id ?? undefined}
           size="sm"
         />
         <div className={`${isLeft ? 'bg-white/20' : 'bg-purple-500/30'} rounded-2xl px-4 py-3`}>
@@ -130,6 +134,7 @@ function SelectablePersonaCard({
         <PersonaAvatar
           name={persona.name}
           imageUrl={persona.image_url}
+          personaId={persona.id}
           size="md"
         />
         <div className="flex-1 min-w-0">
@@ -879,7 +884,7 @@ export default function SimulationPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {currentSimulation.participants.map(p => (
                       <div key={p.id} className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
-                        <PersonaAvatar name={p.persona_name} imageUrl={p.persona_image_url} size="sm" showBorder={false} />
+                        <PersonaAvatar name={p.persona_name} imageUrl={p.persona_image_url} personaId={p.persona_id} size="sm" showBorder={false} />
                         <span className="text-sm text-white">{p.persona_name}</span>
                         {p.role && <span className="text-xs text-white/60">({p.role})</span>}
                       </div>

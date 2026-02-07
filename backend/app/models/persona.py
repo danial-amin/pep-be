@@ -69,9 +69,10 @@ class Persona(Base):
     name = Column(String(255), nullable=False)
     persona_data = Column(JSON, nullable=False)  # Full persona JSON
 
-    # Image generation
+    # Image generation (image_url = path for serving; image_data = base64 backup so images survive volume/restart)
     image_url = Column(String(500), nullable=True)
     image_prompt = Column(Text, nullable=True)
+    image_data = Column(Text, nullable=True)  # Base64-encoded PNG so image is retained without filesystem
 
     # Source traceability - links persona attributes to source chunks
     # Format: {"attribute_name": [{"chunk_id": "...", "text": "...", "similarity": 0.85}, ...]}

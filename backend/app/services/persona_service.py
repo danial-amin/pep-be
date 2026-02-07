@@ -486,16 +486,17 @@ class PersonaService:
         # Generate image (returns temporary DALL-E URL)
         dall_e_url = await llm_service.generate_image(image_prompt)
         
-        # Download and save the image locally
-        local_image_path = await download_and_save_image(dall_e_url, persona_id)
+        # Download and save the image locally; store base64 in DB so image survives volume/restart
+        local_image_path, image_base64 = await download_and_save_image(dall_e_url, persona_id)
         
         if not local_image_path:
             logger.warning(f"Failed to download image for persona {persona_id}, using DALL-E URL")
             local_image_path = dall_e_url
+            image_base64 = None
         
-        # Update persona with local image path
         persona.image_url = local_image_path
         persona.image_prompt = image_prompt
+        persona.image_data = image_base64
         await session.commit()
         await session.refresh(persona)
         

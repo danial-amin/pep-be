@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE: int = 100 * 1024 * 1024  # 100MB
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt", ".md"]
+
+    # Static files root (mount at /static). Use volume path e.g. /data/static to retain persona images across deploys.
+    STATIC_DIR: str = "/app/static"
+    # Persona images subdir under STATIC_DIR (so full path = STATIC_DIR + /images/personas)
+    PERSONA_IMAGES_DIR: str = "/app/static/images/personas"
     
     # Document Processing
     MAX_TOKENS_PER_CHUNK: int = 20000  # Max tokens per processing chunk (leaving room for prompt)

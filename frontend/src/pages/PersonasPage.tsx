@@ -15,9 +15,9 @@ function ExpandedPersonaCard({ persona }: { persona: Persona }) {
     <div className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue">
       {/* Persona Image and Name */}
       <div className="flex items-center gap-4 mb-4">
-        {persona.image_url && !imageError ? (
+        {(persona.image_url || persona.id) && !imageError ? (
           <img
-            src={getPersonaImageUrl(persona.image_url) || ''}
+            src={getPersonaImageUrl(persona.image_url, persona.id) || ''}
             alt={persona.name}
             className="w-20 h-20 object-cover rounded-xl border-4 border-white/30 shadow-lg flex-shrink-0"
             onError={() => setImageError(true)}

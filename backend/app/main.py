@@ -102,6 +102,10 @@ async def lifespan(app: FastAPI):
                                    WHERE table_name='personas' AND column_name='attribute_validation') THEN
                         ALTER TABLE personas ADD COLUMN attribute_validation JSONB;
                     END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='personas' AND column_name='image_data') THEN
+                        ALTER TABLE personas ADD COLUMN image_data TEXT;
+                    END IF;
                 END $$;
             """))
             # Create projects table first (before adding foreign keys)
@@ -237,10 +241,13 @@ async def lifespan(app: FastAPI):
                 await session.flush()
                 for persona_data in personas_data:
                     db_persona_data = convert_persona_to_db_format(persona_data)
+                    raw = persona_data if isinstance(persona_data, dict) else {}
                     persona = Persona(
                         persona_set_id=persona_set.id,
                         name=db_persona_data["name"],
                         persona_data=db_persona_data,
+                        image_url=raw.get("image_url"),
+                        image_data=raw.get("image_data"),
                     )
                     session.add(persona)
                 await session.commit()
@@ -359,8 +366,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
 
-# Mount static files for persona images
-static_dir = Path("/app/static")
+# Mount static files for persona images (use STATIC_DIR so volume e.g. /data/static can be used)
+static_dir = Path(settings.STATIC_DIR)
 static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

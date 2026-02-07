@@ -7,9 +7,12 @@ Implements the PEP paper methodology:
 - Source traceability and validation
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 from pathlib import Path
+import base64
 
 from app.core.database import get_db
 from app.schemas.persona import (
@@ -369,6 +372,40 @@ async def get_persona(
     return PersonaResponse.model_validate(persona)
 
 
+@router.get("/persona/{persona_id}/image")
+async def get_persona_image(
+    persona_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Return persona image as PNG. Uses file from static dir if present, otherwise
+    returns image from DB image_data (base64) so images are retained without filesystem.
+    """
+    from app.models.persona import Persona
+    from app.utils.image_utils import get_image_path
+
+    result = await db.execute(select(Persona).where(Persona.id == persona_id))
+    persona = result.scalar_one_or_none()
+    if not persona:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Persona not found")
+
+    # Prefer file on disk (fast)
+    filepath = get_image_path(persona_id)
+    if filepath.exists():
+        with open(filepath, "rb") as f:
+            return Response(content=f.read(), media_type="image/png")
+
+    # Fallback to base64 stored in DB
+    if persona.image_data:
+        try:
+            data = base64.b64decode(persona.image_data)
+            return Response(content=data, media_type="image/png")
+        except Exception:
+            pass
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No image for this persona")
+
+
 @router.post("/load-default-personas", response_model=PersonaSetResponse)
 async def load_default_personas(
     set_name: str = Query(None, description="Name of the persona set to load (e.g., 'finland', 'CB')"),
@@ -473,13 +510,16 @@ async def load_default_personas(
                         db.add(persona_set)
                         await db.flush()
                     
-                    # Create personas
+                    # Create personas (preserve image_url and image_data from export/API-style JSON)
                     for persona_data in personas_data:
                         db_persona_data = convert_persona_to_db_format(persona_data)
+                        raw = persona_data if isinstance(persona_data, dict) else {}
                         persona = Persona(
                             persona_set_id=persona_set.id,
                             name=db_persona_data["name"],
-                            persona_data=db_persona_data
+                            persona_data=db_persona_data,
+                            image_url=raw.get("image_url"),
+                            image_data=raw.get("image_data"),
                         )
                         db.add(persona)
                     
@@ -587,13 +627,16 @@ async def load_default_personas(
             db.add(persona_set)
             await db.flush()
         
-        # Create personas
+        # Create personas (preserve image_url and image_data from export/API-style JSON)
         for persona_data in personas_data:
             db_persona_data = convert_persona_to_db_format(persona_data)
+            raw = persona_data if isinstance(persona_data, dict) else {}
             persona = Persona(
                 persona_set_id=persona_set.id,
                 name=db_persona_data["name"],
-                persona_data=db_persona_data
+                persona_data=db_persona_data,
+                image_url=raw.get("image_url"),
+                image_data=raw.get("image_data"),
             )
             db.add(persona)
         

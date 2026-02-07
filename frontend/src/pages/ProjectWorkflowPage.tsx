@@ -466,9 +466,9 @@ export default function ProjectWorkflowPage() {
               {selectedSet.personas.map((persona) => (
                 <div key={persona.id} className="glass-card rounded-xl p-4 pastel-pink">
                   <div className="flex items-center space-x-4">
-                    {persona.image_url && (
+                    {(persona.image_url || persona.id) && (
                       <img
-                        src={getPersonaImageUrl(persona.image_url) || ''}
+                        src={getPersonaImageUrl(persona.image_url, persona.id) || ''}
                         alt={persona.name}
                         className="w-20 h-20 object-cover rounded-xl"
                       />
