@@ -254,6 +254,12 @@ export const simulationsApi = {
     return response.data;
   },
 
+  /** Get full simulation export (setup, conversations, summaries) for download as JSON */
+  getDownload: async (id: number) => {
+    const response = await api.get(`/simulations/${id}/download`);
+    return response.data;
+  },
+
   delete: async (id: number) => {
     await api.delete(`/simulations/${id}`);
   },

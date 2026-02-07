@@ -13,7 +13,8 @@ import {
   Plus,
   CheckCircle,
   Loader2,
-  Sparkles
+  Sparkles,
+  Download
 } from 'lucide-react';
 import { simulationsApi, personasApi, API_BASE_URL } from '../services/api';
 import { Simulation, SimulationMessage, PersonaSet, Persona, SimulationListItem } from '../types';
@@ -513,6 +514,24 @@ export default function SimulationPage() {
     }
   };
 
+  const handleDownloadSimulation = async () => {
+    if (!currentSimulation) return;
+    try {
+      const data = await simulationsApi.getDownload(currentSimulation.id);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `simulation-${currentSimulation.id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      alert(`Failed to download simulation: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
   const handleStopSimulation = async () => {
     if (!currentSimulation) return;
 
@@ -826,6 +845,19 @@ export default function SimulationPage() {
                     }`}>
                       {currentSimulation.status}
                     </span>
+
+                    {/* Download JSON - only when simulation is completed */}
+                    {currentSimulation.status === 'completed' && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadSimulation}
+                        className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-sm font-medium transition-all duration-200 flex items-center gap-2"
+                        title="Download simulation as JSON (setup, conversations, summaries)"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download JSON
+                      </button>
+                    )}
 
                     {/* Progress */}
                     <div className="text-right">
