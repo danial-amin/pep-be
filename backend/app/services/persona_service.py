@@ -1,6 +1,7 @@
 """
 Persona generation and management service.
 """
+import copy
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional, Dict, Any
@@ -287,7 +288,10 @@ class PersonaService:
             context_documents=context_texts,
             project_id=project_id
         )
-        
+
+        # Keep a copy of raw original so we can restore demographics if merge would empty them
+        raw_original = copy.deepcopy(persona.persona_data)
+
         # Demographic fields that must NEVER be changed (flat structure)
         DEMOGRAPHIC_FIELDS = {
             'name', 'age', 'gender', 'nationality', 'education_level', 'income_bracket',
@@ -319,10 +323,10 @@ class PersonaService:
             original_keys = set(original.keys())
             expanded_keys = set(expanded.keys())
             
-            # Log any new fields that were added
+            # Log any new fields that were added (informational; we intentionally ignore them)
             new_fields = expanded_keys - original_keys
             if new_fields:
-                logger.warning(f"Expansion added new fields {new_fields} which don't exist in original. These will be ignored.")
+                logger.info(f"Expansion added new fields {new_fields} which don't exist in original. These will be ignored.")
             
             for key in original_keys:
                 # If key doesn't exist in expanded, keep original (shouldn't happen, but be safe)
@@ -388,7 +392,41 @@ class PersonaService:
                     if v is not None and v != "":
                         merged_data[k] = v
                 logger.debug("Flattened demographics back to top-level to preserve original structure")
-        
+
+        # Never overwrite non-empty demographics with empty: if merged demographics are empty
+        # but the raw original had any demographic content, restore from raw.
+        def _has_demographic_content(data: dict) -> bool:
+            if not data:
+                return False
+            nested = data.get("demographics") if isinstance(data.get("demographics"), dict) else None
+            if nested:
+                if any(v is not None and v != "" for v in nested.values()):
+                    return True
+            flat_keys = ("age", "gender", "location", "occupation", "education", "nationality", "income_bracket", "relationship_status")
+            if any(data.get(k) not in (None, "") for k in flat_keys):
+                return True
+            return False
+
+        def _get_demographics_from_raw(data: dict) -> dict:
+            out = {}
+            nested = data.get("demographics") if isinstance(data.get("demographics"), dict) else {}
+            flat_keys = ("age", "gender", "location", "occupation", "education", "education_level", "nationality", "income_bracket", "relationship_status")
+            for k in flat_keys:
+                out[k] = data.get(k) if data.get(k) not in (None, "") else nested.get(k)
+            for k, v in (nested or {}).items():
+                if k not in out and v is not None and v != "":
+                    out[k] = v
+            return {k: v for k, v in out.items() if v is not None and v != ""}
+
+        merged_demo = merged_data.get("demographics") if isinstance(merged_data.get("demographics"), dict) else {}
+        merged_flat_has_demo = any(merged_data.get(k) not in (None, "") for k in ("age", "gender", "location", "occupation"))
+        merged_has_demo = bool(merged_demo and any(v not in (None, "") for v in merged_demo.values())) or merged_flat_has_demo
+        if not merged_has_demo and _has_demographic_content(raw_original):
+            restored = _get_demographics_from_raw(raw_original)
+            if restored:
+                merged_data["demographics"] = restored
+                logger.debug("Restored demographics from original so expansion does not remove them")
+
         # Update persona with merged data
         persona.persona_data = merged_data
 
