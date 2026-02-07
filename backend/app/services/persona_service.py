@@ -273,7 +273,8 @@ class PersonaService:
                 context_query = context_query.where(Document.project_id == persona_set.project_id)
             context_result = await session.execute(context_query)
             contexts = list(context_result.scalars().all())
-            context_texts = [context.content for context in contexts]
+            # Document.content can be NULL; only include non-empty content
+            context_texts = [c.content for c in contexts if c.content]
         
         logger.info(f"Using {len(context_texts)} context chunks for persona expansion")
         

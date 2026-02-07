@@ -187,8 +187,6 @@ async def lifespan(app: FastAPI):
                 END $$;
             """))
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(f"Could not add columns automatically: {e}. Run migrations manually if needed.", exc_info=True)
     
     # Create default documents
@@ -198,8 +196,6 @@ async def lifespan(app: FastAPI):
         async with AsyncSessionLocal() as session:
             await create_default_documents(session)
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.warning(f"Could not create default documents: {e}", exc_info=True)
     
     # Load default persona sets from default_personas/ (e.g. CB, finland, molt) — idempotent; you can attach sets to projects yourself

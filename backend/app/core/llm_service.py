@@ -544,8 +544,9 @@ Format as personas that can be used in interactive scenarios or simulations."""
     async def expand_persona(self, persona_basic: Dict[str, Any], context_documents: List[str], project_id: Optional[int] = None) -> Dict[str, Any]:
         """Expand a basic persona into a full-fledged persona."""
         try:
-            # Combine context and check size
-            context = "\n\n".join(context_documents)
+            # Combine context and check size (filter None/invalid entries; documents.content can be NULL)
+            context_documents = [d for d in context_documents if d is not None and isinstance(d, str)]
+            context = "\n\n".join(context_documents) if context_documents else ""
             persona_str = json.dumps(persona_basic, indent=2)
             
             full_text = f"Context Information:\n{context}\n\nBasic Persona:\n{persona_str}"
