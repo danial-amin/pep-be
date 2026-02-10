@@ -318,8 +318,9 @@ You MUST address this directly in your very next response and let it change the 
             next_speaker_id,
         )
 
-        # Add the goal and initial prompt if this is the first turn
-        if simulation.current_turn == 0:
+        # Add the goal and initial prompt if no persona has spoken yet (round 0)
+        persona_count_before = self._count_persona_messages(list(simulation.messages))
+        if persona_count_before == 0:
             goal_prompt = f"""The topic for this group discussion is: {simulation.goal}
 
 {simulation.goal_context if simulation.goal_context else ""}
@@ -362,18 +363,23 @@ Keep it to 1-3 sentences but make the course change visible."""
             content = response.choices[0].message.content
             tokens_used = response.usage.total_tokens if response.usage else estimate_tokens(content)
 
+            # One turn = all personas have spoken once; assign round-based turn number
+            persona_count = self._count_persona_messages(list(simulation.messages))
+            num_participants = len(participants)
+            turn_number = self._round_turn_number(persona_count, num_participants)
+
             # Create message
             message = SimulationMessage(
                 simulation_id=simulation.id,
                 persona_id=next_speaker_id,
                 content=content,
-                turn_number=simulation.current_turn + 1,
+                turn_number=turn_number,
                 tokens=tokens_used
             )
             session.add(message)
 
-            # Update simulation state
-            simulation.current_turn += 1
+            # Update simulation state: current_turn = round (1 turn = all personas spoke once)
+            simulation.current_turn = turn_number
             simulation.tokens_used += tokens_used
 
             # Update participant stats
@@ -396,6 +402,24 @@ Keep it to 1-3 sentences but make the course change visible."""
         except Exception as e:
             logger.error(f"Error generating turn for simulation {simulation.id}: {e}", exc_info=True)
             raise
+
+    @staticmethod
+    def _count_persona_messages(messages: List[SimulationMessage]) -> int:
+        """Count messages from personas only (exclude human interventions)."""
+        return sum(
+            1 for m in messages
+            if m.persona_id is not None and not getattr(m, "is_human_message", False)
+        )
+
+    @staticmethod
+    def _round_turn_number(persona_message_count: int, num_participants: int) -> int:
+        """
+        Compute turn (round) number: 1 turn = all personas have spoken once.
+        For the next persona message (the (persona_message_count+1)-th), returns which round it belongs to.
+        """
+        if num_participants <= 0:
+            return 1
+        return max(1, (persona_message_count + num_participants) // num_participants)
 
     def _select_next_speaker(
         self,
@@ -662,11 +686,16 @@ Respond in JSON format:
         next_persona = participants[next_speaker_id]
         next_role = participant_roles.get(next_speaker_id)
 
+        # One turn = all personas have spoken once
+        persona_count = self._count_persona_messages(list(simulation.messages))
+        num_participants = len(participants)
+        turn_number = self._round_turn_number(persona_count, num_participants)
+
         yield {
             "type": "start",
             "persona_id": next_speaker_id,
             "persona_name": next_persona.name,
-            "turn_number": simulation.current_turn + 1
+            "turn_number": turn_number
         }
 
         # Facilitator context: so the next turn actually changes course when human intervened
@@ -701,7 +730,7 @@ Respond in JSON format:
             next_speaker_id,
         )
 
-        if simulation.current_turn == 0:
+        if persona_count == 0:
             goal_prompt = f"""The topic for this group discussion is: {simulation.goal}
 
 {simulation.goal_context if simulation.goal_context else ""}
@@ -745,18 +774,18 @@ Your response MUST: 1) First, directly acknowledge and respond to what the facil
                         "content": content
                     }
 
-            # Save the message
+            # Save the message (turn_number already computed above)
             tokens_used = estimate_tokens(full_content)
             message = SimulationMessage(
                 simulation_id=simulation.id,
                 persona_id=next_speaker_id,
                 content=full_content,
-                turn_number=simulation.current_turn + 1,
+                turn_number=turn_number,
                 tokens=tokens_used
             )
             session.add(message)
 
-            simulation.current_turn += 1
+            simulation.current_turn = turn_number
             simulation.tokens_used += tokens_used
 
             for p in simulation.participants:

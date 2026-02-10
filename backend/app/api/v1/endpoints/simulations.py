@@ -555,13 +555,15 @@ async def human_intervene(
             detail=f"Cannot intervene: simulation is already {simulation.status}"
         )
 
-    # Turn number: place after last message in order
-    last_turn = max((m.turn_number for m in simulation.messages), default=0)
+    # Turn = round (all personas spoke once). Human message gets current round number.
+    persona_count = simulation_service._count_persona_messages(list(simulation.messages))
+    num_participants = max(1, len(simulation.participants))
+    current_round = max(1, (persona_count + num_participants - 1) // num_participants)
     message = SimulationMessage(
         simulation_id=simulation.id,
         persona_id=None,
         content=request.content.strip(),
-        turn_number=last_turn + 1,
+        turn_number=current_round,
         tokens=0,
         is_human_message=True
     )

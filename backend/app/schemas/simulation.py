@@ -49,7 +49,7 @@ class SimulationCreateRequest(BaseModel):
         default=10,
         ge=2,
         le=50,
-        description="Maximum number of conversation turns (each persona speaking counts as 1 turn)"
+        description="Maximum number of turns; 1 turn = all selected personas have spoken once (one full round)"
     )
     max_duration_seconds: int = Field(
         default=120,

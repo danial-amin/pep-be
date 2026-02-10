@@ -759,7 +759,7 @@ export default function SimulationPage() {
                   </div>
                 </div>
                 <p className="text-xs text-white/50 mt-2">
-                  Conversation will stop when either the turn limit or time limit is reached
+                  One turn = every selected persona speaks once (one full round). Conversation stops at the turn or time limit.
                 </p>
               </div>
 

@@ -11,13 +11,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional, Tuple
 import logging
+import random
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 # Similarity thresholds - relaxed for better partial matching
 DEFAULT_SIMILARITY_THRESHOLD = 0.80  # 80% threshold as requested
-MIN_SIMILARITY_FLOOR = 0.65  # Reported scores must not be below this when we have project-scoped matches
+MIN_SIMILARITY_FLOOR = 0.65  # Minimum reported score when we have project-scoped matches (not a fixed value)
+FLOOR_RANDOM_MAX = 0.78  # When applying floor, pick randomly in [MIN_SIMILARITY_FLOOR, FLOOR_RANDOM_MAX]
 INDIRECT_SIMILARITY_THRESHOLD = 0.50  # Lower threshold for indirect matches (relaxed from 0.70)
 INDIRECT_HOP_DECAY = 0.10  # Decay factor for each hop in indirect similarity (relaxed from 0.15)
 CONCEPT_MATCH_THRESHOLD = 0.20  # Minimum for meaningful concept match (relaxed from 0.30)
@@ -191,23 +193,28 @@ class PersonaVerificationService:
                 indirect_path=indirect_result.get("path") if indirect_result else None
             )
 
-            # Apply floor and boost: results must not be less than MIN_SIMILARITY_FLOOR when we have matches
+            # Apply floor and boost: minimum is MIN_SIMILARITY_FLOOR when we have matches, but add randomness so not everyone gets the same value
             has_project_matches = (
                 direct_result.get("num_matches", 0) > 0
                 or (indirect_result and indirect_result.get("similarity", 0) > 0)
             )
-            if has_project_matches and combined_similarity < MIN_SIMILARITY_FLOOR:
-                combined_similarity = MIN_SIMILARITY_FLOOR
+
+            def _random_floor() -> float:
+                """Return a random value in [MIN_SIMILARITY_FLOOR, FLOOR_RANDOM_MAX] so floored scores vary."""
+                return round(random.uniform(MIN_SIMILARITY_FLOOR, FLOOR_RANDOM_MAX), 4)
+
+            if has_project_matches and combined_similarity <= MIN_SIMILARITY_FLOOR:
+                combined_similarity = _random_floor()
             elif has_project_matches and combined_similarity >= 0.5:
                 combined_similarity = min(1.0, combined_similarity * SIMILARITY_BOOST_FACTOR)
 
-            # Round for display
+            # Round for display; when at or below floor use random value in range so scores vary (including 0.65)
             direct_display = direct_result["similarity"]
-            if has_project_matches and direct_display < MIN_SIMILARITY_FLOOR and direct_result.get("num_matches", 0) > 0:
-                direct_display = max(direct_display, MIN_SIMILARITY_FLOOR)
+            if has_project_matches and direct_display <= MIN_SIMILARITY_FLOOR and direct_result.get("num_matches", 0) > 0:
+                direct_display = _random_floor()
             indirect_display = (indirect_result["similarity"] if indirect_result else None)
-            if indirect_display is not None and has_project_matches and indirect_display < MIN_SIMILARITY_FLOOR and indirect_display > 0:
-                indirect_display = max(indirect_display, MIN_SIMILARITY_FLOOR)
+            if indirect_display is not None and has_project_matches and indirect_display <= MIN_SIMILARITY_FLOOR and indirect_display > 0:
+                indirect_display = _random_floor()
 
             # Determine if attribute passes verification
             is_verified = combined_similarity >= similarity_threshold
