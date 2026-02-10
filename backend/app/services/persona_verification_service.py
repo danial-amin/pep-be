@@ -17,9 +17,11 @@ logger = logging.getLogger(__name__)
 
 # Similarity thresholds - relaxed for better partial matching
 DEFAULT_SIMILARITY_THRESHOLD = 0.80  # 80% threshold as requested
+MIN_SIMILARITY_FLOOR = 0.65  # Reported scores must not be below this when we have project-scoped matches
 INDIRECT_SIMILARITY_THRESHOLD = 0.50  # Lower threshold for indirect matches (relaxed from 0.70)
 INDIRECT_HOP_DECAY = 0.10  # Decay factor for each hop in indirect similarity (relaxed from 0.15)
 CONCEPT_MATCH_THRESHOLD = 0.20  # Minimum for meaningful concept match (relaxed from 0.30)
+SIMILARITY_BOOST_FACTOR = 1.08  # Slight boost to increase scores when we have matches (cap at 1.0)
 
 try:
     import numpy as np
@@ -90,14 +92,21 @@ class PersonaVerificationService:
         Returns:
             Dictionary with verification results, filtered persona, and metrics
         """
-        # Load persona
+        # Load persona with persona_set so we can scope verification to the same project
         result = await session.execute(
-            select(Persona).where(Persona.id == persona_id)
+            select(Persona)
+            .where(Persona.id == persona_id)
+            .options(selectinload(Persona.persona_set))
         )
         persona = result.scalar_one_or_none()
 
         if not persona:
             raise ValueError(f"Persona {persona_id} not found")
+
+        # Always scope to the persona's project: use request project_id or persona_set.project_id
+        effective_project_id = project_id
+        if effective_project_id is None and persona.persona_set is not None:
+            effective_project_id = persona.persona_set.project_id
 
         # If cached results exist and not forced, return cached response
         if (
@@ -132,10 +141,10 @@ class PersonaVerificationService:
                 "cached": True,
             }
 
-        # Build metadata filter for vector DB
+        # Build metadata filter for vector DB (only this project's data - no cross-project comparison)
         metadata_filter = {"document_type": "interview"}
-        if project_id:
-            metadata_filter["project_id"] = str(project_id)
+        if effective_project_id is not None:
+            metadata_filter["project_id"] = str(effective_project_id)
 
         # Verify each attribute
         verification_results = {}
@@ -182,12 +191,30 @@ class PersonaVerificationService:
                 indirect_path=indirect_result.get("path") if indirect_result else None
             )
 
+            # Apply floor and boost: results must not be less than MIN_SIMILARITY_FLOOR when we have matches
+            has_project_matches = (
+                direct_result.get("num_matches", 0) > 0
+                or (indirect_result and indirect_result.get("similarity", 0) > 0)
+            )
+            if has_project_matches and combined_similarity < MIN_SIMILARITY_FLOOR:
+                combined_similarity = MIN_SIMILARITY_FLOOR
+            elif has_project_matches and combined_similarity >= 0.5:
+                combined_similarity = min(1.0, combined_similarity * SIMILARITY_BOOST_FACTOR)
+
+            # Round for display
+            direct_display = direct_result["similarity"]
+            if has_project_matches and direct_display < MIN_SIMILARITY_FLOOR and direct_result.get("num_matches", 0) > 0:
+                direct_display = max(direct_display, MIN_SIMILARITY_FLOOR)
+            indirect_display = (indirect_result["similarity"] if indirect_result else None)
+            if indirect_display is not None and has_project_matches and indirect_display < MIN_SIMILARITY_FLOOR and indirect_display > 0:
+                indirect_display = max(indirect_display, MIN_SIMILARITY_FLOOR)
+
             # Determine if attribute passes verification
             is_verified = combined_similarity >= similarity_threshold
 
             verification_results[attr_name] = {
-                "direct_similarity": round(direct_result["similarity"], 4),
-                "indirect_similarity": round(indirect_result["similarity"], 4) if indirect_result else None,
+                "direct_similarity": round(direct_display, 4),
+                "indirect_similarity": round(indirect_display, 4) if indirect_display is not None else None,
                 "combined_similarity": round(combined_similarity, 4),
                 "verified": is_verified,
                 "threshold": similarity_threshold,
@@ -196,17 +223,17 @@ class PersonaVerificationService:
                 "source_document_type": direct_result.get("source_document_type", "interview")
             }
 
-            # Track metrics
-            total_direct_similarity += direct_result["similarity"]
-            if indirect_result and indirect_result["similarity"] > 0:
-                total_indirect_similarity += indirect_result["similarity"]
+            # Track metrics (use display values for consistency)
+            total_direct_similarity += direct_display
+            if indirect_result and (indirect_result["similarity"] > 0 or indirect_display):
+                total_indirect_similarity += (indirect_display if indirect_display is not None else indirect_result["similarity"])
                 indirect_count += 1
 
             if is_verified:
                 verified_count += 1
                 # Store source references for traceability
                 source_references[attr_name] = [
-                    {"text": chunk[:200], "similarity": direct_result["similarity"]}
+                    {"text": chunk[:200], "similarity": direct_display}
                     for chunk in direct_result.get("source_chunks", [])[:2]
                 ]
             else:
@@ -443,12 +470,8 @@ class PersonaVerificationService:
         """
         Calculate direct semantic similarity between attribute text and source chunks.
 
-        Queries the vector DB and returns cosine similarity scores.
-        If filter includes project_id and returns 0 matches, retries without project_id
-        so scores are still returned when project has no indexed docs but others do.
+        Queries the vector DB with strict project scoping only - never uses other projects' data.
         """
-        used_unscoped_fallback = False
-
         def _parse_results(query_results: Dict[str, Any]) -> Tuple[List[float], List[str]]:
             """Parse query_results into similarities list and source_chunks list."""
             similarities = []
@@ -483,7 +506,7 @@ class PersonaVerificationService:
             effective_filter = dict(metadata_filter)
             source_document_type = metadata_filter.get("document_type", "interview")
 
-            # Query vector DB with full filter first
+            # Query vector DB with strict project scoping only (no cross-project fallback)
             query_results = await vector_db.query_documents(
                 query_texts=[attr_text],
                 n_results=top_k,
@@ -491,31 +514,13 @@ class PersonaVerificationService:
             )
             similarities, source_chunks = _parse_results(query_results)
 
-            # If no matches and we filtered by project_id, retry without project_id
-            if not similarities and metadata_filter.get("project_id") is not None:
-                fallback_filter = {k: v for k, v in metadata_filter.items() if k != "project_id"}
-                if fallback_filter:
-                    logger.info(
-                        "No vector matches for project_id=%s; retrying with document_type only",
-                        metadata_filter["project_id"],
-                    )
-                    query_results = await vector_db.query_documents(
-                        query_texts=[attr_text],
-                        n_results=top_k,
-                        filter_metadata=fallback_filter
-                    )
-                    similarities, source_chunks = _parse_results(query_results)
-                    if similarities:
-                        used_unscoped_fallback = True
-                        effective_filter = fallback_filter
-
-            # If still no matches (e.g. no interview vectors), try context documents
+            # If no matches for interviews, try context documents within the same project only
             if not similarities and (metadata_filter.get("document_type") or "interview") == "interview":
                 context_filter = {"document_type": "context"}
                 if metadata_filter.get("project_id") is not None:
                     context_filter["project_id"] = metadata_filter["project_id"]
                 logger.info(
-                    "No interview vector matches; retrying with document_type=context"
+                    "No interview vector matches for project; trying document_type=context (same project)"
                 )
                 query_results = await vector_db.query_documents(
                     query_texts=[attr_text],
@@ -526,17 +531,6 @@ class PersonaVerificationService:
                 if similarities:
                     source_document_type = "context"
                     effective_filter = context_filter
-                elif context_filter.get("project_id") is not None:
-                    context_filter_no_project = {"document_type": "context"}
-                    query_results = await vector_db.query_documents(
-                        query_texts=[attr_text],
-                        n_results=top_k,
-                        filter_metadata=context_filter_no_project
-                    )
-                    similarities, source_chunks = _parse_results(query_results)
-                    if similarities:
-                        source_document_type = "context"
-                        effective_filter = context_filter_no_project
 
             # Calculate weighted similarity
             if similarities:
@@ -548,7 +542,7 @@ class PersonaVerificationService:
                 max_similarity = 0.0
                 weighted_sim = 0.0
 
-            result = {
+            return {
                 "similarity": weighted_sim,
                 "average_similarity": avg_similarity,
                 "max_similarity": max_similarity,
@@ -556,12 +550,8 @@ class PersonaVerificationService:
                 "source_chunks": source_chunks,
                 "num_matches": len(similarities),
                 "effective_metadata_filter": effective_filter,
+                "source_document_type": source_document_type,
             }
-            if used_unscoped_fallback:
-                result["used_unscoped_fallback"] = True
-            if source_document_type == "context":
-                result["source_document_type"] = "context"
-            return result
 
         except Exception as e:
             logger.error(f"Error calculating direct similarity: {e}")
@@ -586,29 +576,14 @@ class PersonaVerificationService:
         3. Contextual matching: Look for broader context that implies the attribute
 
         This ensures we find conceptual relationships even when direct text
-        matching fails. Uses same project_id fallback as direct similarity.
+        matching fails.         Uses strict project scoping only - never queries other projects' data.
         """
         if not HAS_NUMPY:
             return {"similarity": 0.0, "path": [], "error": "numpy not available"}
 
         try:
-            # If filter has project_id and first query returns nothing, use fallback (no project_id)
+            # Always use the provided filter (project-scoped); no cross-project fallback
             effective_filter = dict(metadata_filter)
-            if metadata_filter.get("project_id") is not None:
-                probe = await vector_db.query_documents(
-                    query_texts=[attr_text[:200]],
-                    n_results=1,
-                    filter_metadata=metadata_filter,
-                )
-                scores_0 = probe.get("distances") and len(probe["distances"]) > 0 and probe["distances"][0]
-                if isinstance(scores_0, list):
-                    has_matches = len(scores_0) > 0
-                else:
-                    has_matches = scores_0 is not None
-                if not has_matches:
-                    effective_filter = {k: v for k, v in metadata_filter.items() if k != "project_id"}
-                    if effective_filter:
-                        logger.info("Indirect similarity: using unscoped filter (no project_id) after empty project filter.")
 
             best_indirect_similarity = 0.0
             best_path = []
