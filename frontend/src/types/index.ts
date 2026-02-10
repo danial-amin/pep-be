@@ -135,6 +135,7 @@ export interface VerificationRequest {
   use_indirect_similarity?: boolean;
   filter_low_similarity?: boolean;
   project_id?: number;
+  force?: boolean;
 }
 
 export interface AttributeVerificationResult {

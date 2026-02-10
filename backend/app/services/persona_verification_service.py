@@ -110,38 +110,39 @@ class PersonaVerificationService:
         if effective_project_id is None and persona.persona_set is not None:
             effective_project_id = persona.persona_set.project_id
 
-        # If cached results exist and not forced, return cached response
-        if (
-            not force
-            and persona.attribute_validation
-            and persona.similarity_score
-        ):
+        # If cached results exist and not forced, return cached response (only if metrics look valid)
+        if not force and persona.attribute_validation and persona.similarity_score:
             cached_results = persona.attribute_validation
-            # Build filtered persona data by dropping unverified attributes
-            filtered_persona_data = dict(persona.persona_data)
-            for attr_name, result in cached_results.items():
-                if isinstance(result, dict) and not result.get("verified", False):
-                    filtered_persona_data.pop(attr_name, None)
+            score = persona.similarity_score
+            avg_direct = score.get("average_direct")
+            avg_indirect = score.get("average_indirect")
+            verification_rate = score.get("verification_rate")
+            # If stored metrics are missing or all zeros, treat cache as invalid and re-run
+            if avg_direct is not None and verification_rate is not None and (avg_direct > 0 or verification_rate > 0):
+                filtered_persona_data = dict(persona.persona_data)
+                for attr_name, result in cached_results.items():
+                    if isinstance(result, dict) and not result.get("verified", False):
+                        filtered_persona_data.pop(attr_name, None)
 
-            return {
-                "persona_id": persona_id,
-                "persona_name": persona.name,
-                "verification_results": cached_results,
-                "original_persona_data": persona.persona_data,
-                "filtered_persona_data": filtered_persona_data,
-                "metrics": {
-                    "average_direct_similarity": persona.similarity_score.get("average_direct", 0.0),
-                    "average_indirect_similarity": persona.similarity_score.get("average_indirect", 0.0),
-                    "verification_rate": persona.similarity_score.get("verification_rate", 0.0),
-                    "verified_attributes": persona.similarity_score.get("verified_count", 0),
-                    "filtered_attributes": persona.similarity_score.get("filtered_count", 0),
-                    "total_attributes": len(cached_results),
-                    "threshold": similarity_threshold,
-                },
-                "source_references": persona.source_references or {},
-                "validation_status": persona.validation_status or "partial",
-                "cached": True,
-            }
+                return {
+                    "persona_id": persona_id,
+                    "persona_name": persona.name,
+                    "verification_results": cached_results,
+                    "original_persona_data": persona.persona_data,
+                    "filtered_persona_data": filtered_persona_data,
+                    "metrics": {
+                        "average_direct_similarity": score.get("average_direct", 0.0),
+                        "average_indirect_similarity": score.get("average_indirect", 0.0),
+                        "verification_rate": score.get("verification_rate", 0.0),
+                        "verified_attributes": score.get("verified_count", 0),
+                        "filtered_attributes": score.get("filtered_count", 0),
+                        "total_attributes": len(cached_results),
+                        "threshold": similarity_threshold,
+                    },
+                    "source_references": persona.source_references or {},
+                    "validation_status": persona.validation_status or "partial",
+                    "cached": True,
+                }
 
         # Build metadata filter for vector DB (only this project's data - no cross-project comparison)
         metadata_filter = {"document_type": "interview"}
@@ -283,6 +284,7 @@ class PersonaVerificationService:
         persona.validation_status = "verified" if verification_rate >= 0.7 else "partial"
 
         await session.flush()
+        await session.commit()
 
         return {
             "persona_id": persona_id,

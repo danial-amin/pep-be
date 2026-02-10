@@ -168,6 +168,7 @@ export const personasApi = {
       use_indirect_similarity?: boolean;
       filter_low_similarity?: boolean;
       project_id?: number;
+      force?: boolean;
     }
   ) => {
     const response = await api.post(`/personas/${personaSetId}/verify`, options || {});

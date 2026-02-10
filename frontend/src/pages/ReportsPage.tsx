@@ -71,12 +71,14 @@ export default function ReportsPage() {
   const handleVerifyPersonaSet = async () => {
     if (!selectedSet || verifying) return;
 
+    const isReverify = verificationResult !== null;
     setVerifying(true);
     try {
       const result = await personasApi.verifyPersonaSet(selectedSet.id, {
         similarity_threshold: similarityThreshold,
         use_indirect_similarity: true,
         filter_low_similarity: true,
+        force: isReverify, // when we already have results, always re-run (re-verify)
       });
       setVerificationResult(result);
     } catch (error: any) {
@@ -354,12 +356,12 @@ export default function ReportsPage() {
                     {verifying ? (
                       <>
                         <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>Verifying...</span>
+                        <span>{verificationResult ? 'Re-verifying...' : 'Verifying...'}</span>
                       </>
                     ) : (
                       <>
                         <ShieldCheck className="h-4 w-4" />
-                        <span>Verify Against Source Data</span>
+                        <span>{verificationResult ? 'Re-verify Against Source Data' : 'Verify Against Source Data'}</span>
                       </>
                     )}
                   </button>
