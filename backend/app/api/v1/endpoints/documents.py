@@ -1,18 +1,21 @@
 """
 Document processing endpoints.
 
-Upload returns immediately; chunking, LLM processing, and vector storage run in the background.
+Upload returns immediately: file stored (local or S3), job enqueued to Redis.
+Worker polls Redis, parses document, upserts to vector DB.
 """
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 import uuid
 from pathlib import Path
-import aiofiles
+import logging
 
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.vector_db import vector_db
+from app.core.storage import store_file
+from app.core.queue import enqueue_document_job
 from app.models.document import Document, DocumentType, ProcessingStatus
 from app.schemas.document import (
     DocumentProcessResponse,
@@ -26,20 +29,11 @@ from app.schemas.document import (
 from app.services.document_service import DocumentService
 
 router = APIRouter()
-
-# Upload directory: use config so Railway can point to a Volume (e.g. /data/uploads)
-def _upload_dir() -> Path:
-    p = Path(settings.UPLOAD_DIR).resolve()
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-UPLOAD_DIR = _upload_dir()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/process", response_model=DocumentProcessResponse, status_code=status.HTTP_201_CREATED)
 async def process_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     document_type: DocumentType = Form(...),
     project_id: int = Form(None),
@@ -48,7 +42,8 @@ async def process_document(
     """
     Upload a document (context or interview). Returns immediately after storing the file.
 
-    Post-processing (text extraction, LLM processing, chunking, embeddings) runs in the background.
+    File is stored in Railway Storage (S3) or local Volume. A job is enqueued to Redis.
+    Worker polls Redis, parses the document, and upserts to vector DB.
     Poll GET /documents or GET /documents/{id} to check processing_status (pending | processing | completed | failed).
     """
     file_ext = Path(file.filename).suffix.lower()
@@ -65,15 +60,13 @@ async def process_document(
             detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE / 1024 / 1024}MB"
         )
 
-    # Create pending document first so we have an id for the stored file path (absolute path for worker)
     file_id = str(uuid.uuid4())
     stored_name = f"{file_id}_{file.filename}"
-    file_path = (UPLOAD_DIR / stored_name).resolve()
 
     try:
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(file_content)
+        storage_location = await store_file(content=file_content, object_key=stored_name)
     except Exception as e:
+        logger.exception("Failed to store file: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to store file: {str(e)}"
@@ -82,7 +75,7 @@ async def process_document(
     try:
         document = await DocumentService.create_pending_document(
             session=db,
-            file_path=str(file_path),
+            file_path=storage_location,
             filename=file.filename,
             document_type=document_type,
             project_id=project_id,
@@ -91,16 +84,21 @@ async def process_document(
         await db.refresh(document)
     except Exception as e:
         try:
-            if file_path.exists():
-                file_path.unlink()
-        except OSError:
+            from app.core.storage import delete_file
+            await delete_file(storage_location)
+        except Exception:
             pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create document record: {str(e)}"
         )
 
-    background_tasks.add_task(DocumentService.process_document_background, document.id)
+    try:
+        await enqueue_document_job(document.id)
+    except Exception as e:
+        logger.exception("Failed to enqueue document job: %s", e)
+        # Document is pending; worker can poll for it as fallback, or we keep it pending
+        # User can retry via /retry endpoint
 
     return DocumentProcessResponse(
         id=document.id,

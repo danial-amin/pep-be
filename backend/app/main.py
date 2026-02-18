@@ -256,13 +256,13 @@ async def lifespan(app: FastAPI):
                 logger.warning("Could not load default persona set %s: %s", set_name, e, exc_info=True)
                 await session.rollback()
 
-    # Resume any documents that were pending when the server was last stopped (no Celery — in-process only)
-    async def process_pending_documents_on_startup():
+    # Re-enqueue any documents that were pending when the server was last stopped
+    async def re_enqueue_pending_documents_on_startup():
         try:
             from sqlalchemy import select
             from app.models.document import Document, ProcessingStatus
             from app.core.database import AsyncSessionLocal
-            from app.services.document_service import DocumentService
+            from app.core.queue import enqueue_document_job
             async with AsyncSessionLocal() as session:
                 result = await session.execute(
                     select(Document).where(
@@ -272,13 +272,16 @@ async def lifespan(app: FastAPI):
                 )
                 pending = list(result.scalars().all())
             for doc in pending:
-                asyncio.create_task(DocumentService.process_document_background(doc.id))
+                try:
+                    await enqueue_document_job(doc.id)
+                except Exception as e:
+                    logger.warning("Could not enqueue document %s: %s", doc.id, e)
             if pending:
-                logger.info("Queued %d pending document(s) for background processing on startup", len(pending))
+                logger.info("Re-enqueued %d pending document(s) for worker processing", len(pending))
         except Exception as e:
-            logger.warning("Could not queue pending documents on startup: %s", e, exc_info=True)
+            logger.warning("Could not re-enqueue pending documents on startup: %s", e, exc_info=True)
 
-    asyncio.create_task(process_pending_documents_on_startup())
+    asyncio.create_task(re_enqueue_pending_documents_on_startup())
 
     # Automatically reprocess documents that have content but no vectors (old records → vectors)
     async def reprocess_documents_on_startup():

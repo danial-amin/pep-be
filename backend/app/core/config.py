@@ -73,6 +73,19 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 100 * 1024 * 1024  # 100MB
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt", ".md"]
 
+    # Storage: "local" (Volume/filesystem) or "s3" (Railway Storage Buckets)
+    STORAGE_TYPE: str = "local"
+
+    # S3 / Railway Storage Buckets (required when STORAGE_TYPE=s3)
+    S3_ACCESS_KEY_ID: Optional[str] = None
+    S3_SECRET_ACCESS_KEY: Optional[str] = None
+    S3_BUCKET: Optional[str] = None
+    S3_ENDPOINT: Optional[str] = None  # e.g. https://storage.railway.app
+    S3_REGION: Optional[str] = "auto"
+
+    # Redis (required for document processing queue)
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # Static files root (mount at /static). Use volume path e.g. /data/static to retain persona images across deploys.
     STATIC_DIR: str = "/app/static"
     # Persona images subdir under STATIC_DIR (so full path = STATIC_DIR + /images/personas)

@@ -171,30 +171,33 @@ CORS_ORIGINS=*
 
 ### Document processing on Railway (uploads → vectors)
 
-On Railway, the web process may restart or not finish FastAPI `BackgroundTasks` before the request ends, so **uploaded documents can stay in "pending" and never get processed into vectors**. To fix this without Celery:
+Document processing uses a **Redis queue** (ARQ). Uploads are stored (Volume or S3), jobs are enqueued, and a worker processes them reliably.
 
-1. **Add a Railway Volume** (persistent storage for uploads)
-   - In your Railway project: **New** → **Volume**
-   - Create a volume (e.g. name `uploads`)
-   - Mount path: `/data`
+1. **Add Redis**
+   - **New** → **Database** → **Add Redis**
+   - Copy `REDIS_URL` from the Redis service Variables
+   - Add `REDIS_URL` to both Backend and Document Worker services
 
-2. **Mount the Volume on the Backend service**
-   - Open your **Backend** service → **Settings** → **Volumes**
-   - Add volume: select the volume, mount path `/data`
-   - Set env var: `UPLOAD_DIR=/data/uploads` (so uploads go to the volume)
+2. **Storage** (choose one)
 
-3. **Add a Document Worker service** (polls for pending documents and processes them)
+   **Option A: Railway Volume** (shared filesystem)
+   - **New** → **Volume** → Create (e.g. `uploads`), mount path `/data`
+   - Mount on **Backend** and **Document Worker**
+   - Set `UPLOAD_DIR=/data/uploads`, `STORAGE_TYPE=local`
+
+   **Option B: Railway Storage Buckets** (S3-compatible, no shared Volume)
+   - **New** → **Bucket** → Create bucket
+   - In Bucket → **Credentials** → Use Variable References to add S3 vars to Backend and Worker
+   - Set `STORAGE_TYPE=s3` and the S3 vars (`ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `BUCKET`, `ENDPOINT`, `REGION`)
+
+3. **Add Document Worker service**
    - **New** → **GitHub Repo** (same repo)
-   - **Root Directory**: `backend` (same as backend)
+   - **Root Directory**: `backend`
    - **Start Command**: `python -m app.document_worker`
-   - **Volumes**: Add the **same** volume, mount path `/data` (so the worker can read files the backend wrote)
-   - **Environment variables**: Copy the same vars as the Backend (e.g. `DATABASE_URL`, `OPENAI_API_KEY`, `PINECONE_*`, `UPLOAD_DIR=/data/uploads`)
+   - **Environment variables**: Same as Backend (`DATABASE_URL`, `OPENAI_API_KEY`, `PINECONE_*`, `REDIS_URL`, storage vars)
+   - **Volumes** (if using Option A): Mount the same Volume at `/data`
 
-The worker runs in a loop (every 20s by default), picks up documents with `processing_status=pending` and a `file_path`, and runs text extraction → LLM → chunking → embeddings → vector DB. No Redis or Celery required.
-
-Optional env for the worker:
-- `DOCUMENT_WORKER_POLL_SECONDS=20` – how often to check for pending documents
-- `DOCUMENT_WORKER_BATCH_DELAY=2` – delay in seconds between processing each document
+The worker processes jobs from Redis: fetch file → extract text → LLM → chunk → embed → upsert to vector DB.
 
 ### Step 6: Run Database Migrations
 
@@ -255,7 +258,9 @@ railway logs
 | `ENVIRONMENT` | No | Environment (`development`, `deployment`, or `production`) | `development` |
 | `CORS_ORIGINS` | No | CORS allowed origins (single URL, comma-separated, or JSON array) | `*` |
 | `LOG_LEVEL` | No | Logging level | `INFO` |
-| `UPLOAD_DIR` | No | Directory for uploaded files; on Railway use `/data/uploads` with a Volume | `uploads` |
+| `UPLOAD_DIR` | No | Directory for uploads (when `STORAGE_TYPE=local`); use `/data/uploads` with a Volume | `uploads` |
+| `REDIS_URL` | Yes (for docs) | Redis URL for document queue; add Redis service and use its URL | - |
+| `STORAGE_TYPE` | No | `local` (Volume) or `s3` (Railway Buckets) | `local` |
 
 ### Frontend Service
 

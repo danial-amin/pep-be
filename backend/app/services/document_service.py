@@ -314,30 +314,45 @@ class DocumentService:
     ) -> Optional[str]:
         """
         Retry processing for a document that has a file (e.g. stuck in pending/processing).
-        Uses extract_text_from_file (pdfplumber for PDF) → LLM → chunk → vector upsert.
+        Supports both local storage and S3 (Railway Buckets).
         Returns None on success, or an error message string on failure.
         """
         from app.utils.file_processing import extract_text_from_file
+        from app.core.storage import S3_KEY_PREFIX, fetch_to_temp_file, delete_file
 
         document = await DocumentService.get_document(session, document_id)
         if not document:
             return "Document not found"
         if not document.file_path:
             return "No file path; cannot retry from file. Re-upload the document or use /reprocess if content exists."
-        fp = Path(document.file_path)
-        if not fp.exists():
-            document.processing_status = ProcessingStatus.FAILED
-            document.processing_error = "Stored file not found (retry)"
-            await session.flush()
-            return "Stored file not found. Re-upload the document."
-        file_ext = fp.suffix.lower()
+        storage_location = document.file_path
+        temp_path: Optional[str] = None
         try:
-            content = await extract_text_from_file(str(fp), file_ext)
+            if storage_location.startswith(S3_KEY_PREFIX):
+                suffix = Path(document.filename).suffix if document.filename else ""
+                temp_path = await fetch_to_temp_file(storage_location, suffix=suffix)
+                file_path = temp_path
+            else:
+                fp = Path(storage_location)
+                if not fp.exists():
+                    document.processing_status = ProcessingStatus.FAILED
+                    document.processing_error = "Stored file not found (retry)"
+                    await session.flush()
+                    return "Stored file not found. Re-upload the document."
+                file_path = str(fp)
+            file_ext = Path(document.filename).suffix.lower()
+            content = await extract_text_from_file(file_path, file_ext)
         except Exception as e:
             document.processing_status = ProcessingStatus.FAILED
             document.processing_error = str(e)
             await session.flush()
             return f"Text extraction failed: {e}"
+        finally:
+            if temp_path and Path(temp_path).exists():
+                try:
+                    Path(temp_path).unlink()
+                except OSError:
+                    pass
         if not (content and content.strip()):
             document.processing_status = ProcessingStatus.FAILED
             document.processing_error = "No text extracted from file"
@@ -346,17 +361,14 @@ class DocumentService:
         document.processing_status = ProcessingStatus.PROCESSING
         await session.flush()
         try:
-            # Remove existing vectors for this document so we don't duplicate
             await vector_db.delete_documents(filter_metadata={"document_id": str(document.id)})
             await DocumentService.process_document_content_into_existing(session, document, content)
             document.processing_status = ProcessingStatus.COMPLETED
             document.processing_error = None
             document.file_path = None
             await session.flush()
-            try:
-                fp.unlink()
-            except OSError:
-                pass
+            if storage_location:
+                await delete_file(storage_location)
             return None
         except Exception as e:
             document.processing_status = ProcessingStatus.FAILED
@@ -471,7 +483,9 @@ class DocumentService:
         session: AsyncSession,
         document_id: int
     ) -> bool:
-        """Delete a document and its vectors. Also removes stored file if present."""
+        """Delete a document and its vectors. Also removes stored file if present (local or S3)."""
+        from app.core.storage import delete_file
+
         result = await session.execute(
             select(Document).where(Document.id == document_id)
         )
@@ -479,18 +493,13 @@ class DocumentService:
         if not document:
             return False
 
-        file_path = document.file_path
-        # Delete vectors by document_id metadata (removes all chunks)
+        storage_location = document.file_path
         await vector_db.delete_documents(filter_metadata={"document_id": str(document.id)})
-
         await session.delete(document)
         await session.flush()
 
-        if file_path and Path(file_path).exists():
-            try:
-                Path(file_path).unlink()
-            except OSError as err:
-                logger.warning(f"Could not remove file {file_path}: {err}")
+        if storage_location:
+            await delete_file(storage_location)
         return True
     
     @staticmethod

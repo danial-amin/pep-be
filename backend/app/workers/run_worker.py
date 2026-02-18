@@ -1,25 +1,20 @@
 """
-Document processing worker - ARQ (Redis queue).
+ARQ document processing worker.
 
-Runs ARQ worker that processes jobs from Redis. Use this instead of the old
-polling worker for reliable document processing.
+Run as: python -m app.workers.run_worker
 
-Usage:
-  python -m app.document_worker
+Or: arq app.workers.document_tasks.WorkerSettings
 
-Or directly:
-  arq app.workers.document_tasks.WorkerSettings
-
-Environment:
-  Same as API: DATABASE_URL, OPENAI_API_KEY, PINECONE_*, REDIS_URL.
-  Storage: UPLOAD_DIR (local) or S3_* (Railway Storage Buckets).
+Environment: Same as API (DATABASE_URL, OPENAI_API_KEY, PINECONE_*, REDIS_URL).
+For S3 storage: S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET, S3_ENDPOINT.
 """
+import asyncio
 import logging
 import os
 import sys
 
 if __name__ == "__main__" and os.path.basename(os.getcwd()) != "app":
-    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
 
