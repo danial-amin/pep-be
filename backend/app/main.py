@@ -64,6 +64,10 @@ async def lifespan(app: FastAPI):
                                    WHERE table_name='persona_sets' AND column_name='status') THEN
                         ALTER TABLE persona_sets ADD COLUMN status VARCHAR(50) DEFAULT 'generated';
                     END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='persona_sets' AND column_name='evaluation_scores') THEN
+                        ALTER TABLE persona_sets ADD COLUMN evaluation_scores JSONB;
+                    END IF;
                 END $$;
             """))
             # Human intervention support on simulation_messages
