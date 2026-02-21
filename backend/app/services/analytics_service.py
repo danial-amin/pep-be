@@ -629,6 +629,7 @@ class AnalyticsService:
             "rqe_scores": persona_set.rqe_scores or [],
             "diversity_score": persona_set.diversity_score,
             "validation_scores": persona_set.validation_scores or [],
+            "evaluation_scores": persona_set.evaluation_scores,
             "personas": [
                 {
                     "id": p.id,

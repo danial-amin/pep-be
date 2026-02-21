@@ -35,6 +35,7 @@ class PersonaSet(Base):
     rqe_scores = Column(JSON, nullable=True)  # RQE scores over cycles: [{"cycle": 1, "score": 0.85}, ...]
     diversity_score = Column(JSON, nullable=True)  # Current diversity metrics
     validation_scores = Column(JSON, nullable=True)  # Validation scores: [{"persona_id": 1, "similarity": 0.92}, ...]
+    evaluation_scores = Column(JSON, nullable=True)  # Comprehensive evaluation (groundedness, coverage, coherence, etc.)
 
     # Generation tracking
     generation_cycle = Column(Integer, default=1)  # Current generation cycle

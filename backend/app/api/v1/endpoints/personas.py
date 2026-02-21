@@ -6,7 +6,7 @@ Implements the PEP paper methodology:
 - Cohere reranking for improved retrieval
 - Source traceability and validation
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query, Body
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -26,12 +26,15 @@ from app.schemas.persona import (
     VerificationRequest,
     PersonaVerificationResponse,
     PersonaSetVerificationResponse,
-    VerifiedPersonaResponse
+    VerifiedPersonaResponse,
+    EvaluationRequest,
+    PersonaEvaluationResponse,
 )
 from app.services.persona_service import PersonaService
 from app.services.analytics_service import AnalyticsService
 from app.services.iterative_generation_service import iterative_generation_service
 from app.services.persona_verification_service import persona_verification_service
+from app.services.persona_evaluation_service import persona_evaluation_service
 
 router = APIRouter()
 
@@ -778,6 +781,56 @@ async def validate_persona_attributes(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error validating persona attributes: {str(e)}"
+        )
+
+
+@router.post("/{persona_set_id}/evaluate", response_model=PersonaEvaluationResponse)
+async def evaluate_persona_set(
+    persona_set_id: int,
+    request: EvaluationRequest = Body(default_factory=EvaluationRequest),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Run comprehensive evaluation on a persona set (beyond cosine similarity).
+
+    Evaluates:
+    - Groundedness: Claim extraction + entailment check against source
+    - Coverage: Topic overlap between personas and source
+    - Diversity: Demographic and attitudinal spread
+    - Coherence: Internal consistency (goals vs frustrations, etc.)
+    - Realism: Plausibility as real person
+    - Fairness: Stereotype detection
+    """
+    try:
+        report = await persona_evaluation_service.evaluate_persona_set(
+            session=db,
+            persona_set_id=persona_set_id,
+            include_groundedness=request.include_groundedness,
+            include_coverage=request.include_coverage,
+            include_diversity_extended=request.include_diversity_extended,
+            include_coherence=request.include_coherence,
+            include_realism=request.include_realism,
+            include_fairness=request.include_fairness,
+            force=request.force,
+        )
+        return PersonaEvaluationResponse(
+            persona_set_id=report["persona_set_id"],
+            evaluation_timestamp=report["evaluation_timestamp"],
+            summary=report["summary"],
+            per_persona=report["per_persona"],
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error evaluating persona set: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error evaluating persona set: {str(e)}"
         )
 
 

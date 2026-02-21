@@ -29,6 +29,7 @@ from app.schemas.simulation import (
     SimulationSummaryResponse
 )
 from app.services.persona_simulation_service import simulation_service
+from app.services.persona_evaluation_service import persona_evaluation_service
 
 router = APIRouter()
 
@@ -605,6 +606,34 @@ async def stop_simulation(
     await session.commit()
 
     return {"status": "stopped", "simulation_id": simulation_id}
+
+
+@router.post("/{simulation_id}/evaluate-adherence")
+async def evaluate_simulation_adherence(
+    simulation_id: int,
+    sample_size: int = 5,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Evaluate how well simulation messages adhere to personas (LLM-as-judge).
+
+    Samples messages and rates each for persona consistency.
+    """
+    try:
+        result = await persona_evaluation_service.evaluate_simulation_adherence(
+            session=session,
+            simulation_id=simulation_id,
+            sample_size=sample_size
+        )
+        return result
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error evaluating simulation adherence: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error evaluating simulation adherence: {str(e)}"
+        )
 
 
 @router.post("/{simulation_id}/summary", response_model=SimulationSummaryResponse)

@@ -119,6 +119,7 @@ class PersonaSetResponse(BaseModel):
     rqe_scores: Optional[List[Dict[str, Any]]] = None
     diversity_score: Optional[Dict[str, Any]] = None
     validation_scores: Optional[List[Dict[str, Any]]] = None
+    evaluation_scores: Optional[Dict[str, Any]] = None  # Comprehensive evaluation (groundedness, coverage, etc.)
 
     # Generation tracking
     generation_cycle: Optional[int] = None
@@ -303,6 +304,54 @@ class VerifiedPersonaResponse(BaseModel):
     verification_rate: float
     threshold: float
     source_references: Dict[str, List[Dict[str, Any]]]
+
+
+# ============================================================================
+# Evaluation Schemas - Comprehensive evaluation beyond cosine similarity
+# ============================================================================
+
+class EvaluationRequest(BaseModel):
+    """Request for comprehensive persona set evaluation."""
+    include_groundedness: bool = Field(
+        default=True,
+        description="Evaluate claim-level grounding against source data"
+    )
+    include_coverage: bool = Field(
+        default=True,
+        description="Evaluate topic coverage of source data"
+    )
+    include_diversity_extended: bool = Field(
+        default=True,
+        description="Evaluate demographic and attitudinal diversity"
+    )
+    include_coherence: bool = Field(
+        default=True,
+        description="Evaluate internal consistency of personas"
+    )
+    include_realism: bool = Field(
+        default=True,
+        description="Evaluate plausibility/realism"
+    )
+    include_fairness: bool = Field(
+        default=True,
+        description="Check for stereotypes and fairness"
+    )
+    force: bool = Field(
+        default=False,
+        description="Force re-run even if cached evaluation exists"
+    )
+
+
+class PersonaEvaluationResponse(BaseModel):
+    """Response for comprehensive persona set evaluation."""
+    persona_set_id: int
+    evaluation_timestamp: str
+    summary: Dict[str, Any] = Field(
+        description="Aggregate scores: groundedness, coverage, diversity, coherence, realism, fairness"
+    )
+    per_persona: List[Dict[str, Any]] = Field(
+        description="Per-persona evaluation details"
+    )
 
 
 # Update forward references
