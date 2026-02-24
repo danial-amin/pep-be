@@ -17,6 +17,7 @@ import asyncio
 from app.core.config import settings
 from app.core.vector_db import vector_db
 from app.models.simulation import Simulation, SimulationParticipant, SimulationMessage
+from app.utils.rag_filter import get_project_document_filter
 from app.models.persona import Persona
 from app.utils.token_utils import estimate_tokens
 
@@ -114,12 +115,14 @@ You MUST address this directly in your very next response and let it change the 
 
     async def _get_rag_grounding(
         self,
+        session: AsyncSession,
         simulation: Simulation,
         messages_ordered: List[SimulationMessage],
         participants: Dict[int, Persona],
     ) -> str:
         """
         Retrieve relevant document chunks from RAG so simulation responses are grounded in project data.
+        Uses document_id filter (not project_id) so we only get chunks from the project's files.
         Returns a single string of concatenated chunks to inject into the prompt; empty if none.
         """
         # Build query from goal + context + last few persona messages for relevance
@@ -139,8 +142,11 @@ You MUST address this directly in your very next response and let it change the 
             return ""
 
         filter_metadata = None
-        if getattr(simulation, "project_id", None) is not None:
-            filter_metadata = {"project_id": str(simulation.project_id)}
+        project_id = getattr(simulation, "project_id", None)
+        if project_id is not None:
+            filter_metadata = await get_project_document_filter(
+                session, project_id, "interview"
+            )
 
         try:
             result = await vector_db.query_documents(
@@ -302,7 +308,7 @@ You MUST address this directly in your very next response and let it change the 
 
         # RAG grounding: inject evidence from project documents so responses are grounded, not made up
         rag_grounding = await self._get_rag_grounding(
-            simulation, messages_ordered, participants
+            session, simulation, messages_ordered, participants
         )
         if rag_grounding:
             system_prompt += (
@@ -716,7 +722,7 @@ Respond in JSON format:
         )
         # RAG grounding: evidence from project documents
         rag_grounding = await self._get_rag_grounding(
-            simulation, messages_ordered, participants
+            session, simulation, messages_ordered, participants
         )
         if rag_grounding:
             system_prompt += (

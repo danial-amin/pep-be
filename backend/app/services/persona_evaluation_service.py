@@ -25,6 +25,7 @@ from app.models.simulation import Simulation, SimulationMessage, SimulationParti
 from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
 from app.core.config import settings
+from app.utils.rag_filter import get_project_document_filter
 
 logger = logging.getLogger(__name__)
 
@@ -119,14 +120,13 @@ class PersonaEvaluationService:
 
     async def _get_source_chunks_for_claim(
         self,
+        session: AsyncSession,
         claim: str,
         project_id: Optional[int],
         n_results: int = 5
     ) -> List[str]:
-        """Retrieve relevant source chunks for a claim."""
-        filter_metadata = {"document_type": "interview"}
-        if project_id is not None:
-            filter_metadata["project_id"] = str(project_id)
+        """Retrieve relevant source chunks for a claim. Uses document_id filter for project scope."""
+        filter_metadata = await get_project_document_filter(session, project_id, "interview")
         try:
             result = await vector_db.query_documents(
                 query_texts=[claim],
@@ -142,6 +142,7 @@ class PersonaEvaluationService:
 
     async def evaluate_groundedness(
         self,
+        session: AsyncSession,
         persona: Persona,
         project_id: Optional[int],
         max_claims_per_attr: int = 3
@@ -167,7 +168,7 @@ class PersonaEvaluationService:
 
             entailment_scores = []
             for claim in claims:
-                chunks = await self._get_source_chunks_for_claim(claim, project_id)
+                chunks = await self._get_source_chunks_for_claim(session, claim, project_id)
                 score = await self._check_entailment(claim, chunks)
                 entailment_scores.append(score)
                 all_claims.append(claim)
@@ -514,7 +515,7 @@ Frustrations: {frustrations}
             }
 
             if include_groundedness:
-                g = await self.evaluate_groundedness(persona, project_id)
+                g = await self.evaluate_groundedness(session, persona, project_id)
                 p_result["groundedness"] = g["groundedness"]
                 p_result["attribute_details"]["groundedness"] = g
                 summary["overall_groundedness"] = summary["overall_groundedness"] or 0

@@ -97,15 +97,21 @@ export default function PersonaDetailPage() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!personaSet) return;
-    const dataStr = JSON.stringify(personaSet.personas, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    const exportFileDefaultName = `personas_set_${personaSet.id}.json`;
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
+    try {
+      const blob = await personasApi.downloadJson(personaSet.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `persona_set_${personaSet.id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error: any) {
+      alert(`Failed to download: ${error.response?.data?.detail || error.message}`);
+    }
   };
 
   const preloadImages = (element: HTMLElement): Promise<void> => {

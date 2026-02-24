@@ -36,6 +36,7 @@ except ImportError:
 from app.models.persona import PersonaSet, Persona
 from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
+from app.utils.rag_filter import get_project_document_filter
 
 
 class PersonaVerificationService:
@@ -144,10 +145,14 @@ class PersonaVerificationService:
                     "cached": True,
                 }
 
-        # Build metadata filter for vector DB (only this project's data - no cross-project comparison)
-        metadata_filter = {"document_type": "interview"}
-        if effective_project_id is not None:
-            metadata_filter["project_id"] = str(effective_project_id)
+        # Build metadata filters using document_id (not project_id) so we only get chunks from
+        # this project's files. project_id in vector metadata may be missing for older documents.
+        metadata_filter = await get_project_document_filter(
+            session, effective_project_id, "interview"
+        )
+        context_filter = await get_project_document_filter(
+            session, effective_project_id, "context"
+        )
 
         # Verify each attribute
         verification_results = {}
@@ -174,7 +179,8 @@ class PersonaVerificationService:
             direct_result = await PersonaVerificationService._calculate_direct_similarity(
                 attr_text=attr_text,
                 metadata_filter=metadata_filter,
-                top_k=5
+                top_k=5,
+                context_filter=context_filter,
             )
 
             # Calculate indirect similarity if enabled and direct is below threshold
@@ -474,7 +480,8 @@ class PersonaVerificationService:
     async def _calculate_direct_similarity(
         attr_text: str,
         metadata_filter: Dict[str, Any],
-        top_k: int = 5
+        top_k: int = 5,
+        context_filter: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Calculate direct semantic similarity between attribute text and source chunks.
@@ -525,21 +532,19 @@ class PersonaVerificationService:
 
             # If no matches for interviews, try context documents within the same project only
             if not similarities and (metadata_filter.get("document_type") or "interview") == "interview":
-                context_filter = {"document_type": "context"}
-                if metadata_filter.get("project_id") is not None:
-                    context_filter["project_id"] = metadata_filter["project_id"]
+                fallback_filter = context_filter if context_filter is not None else {"document_type": "context"}
                 logger.info(
                     "No interview vector matches for project; trying document_type=context (same project)"
                 )
                 query_results = await vector_db.query_documents(
                     query_texts=[attr_text],
                     n_results=top_k,
-                    filter_metadata=context_filter
+                    filter_metadata=fallback_filter
                 )
                 similarities, source_chunks = _parse_results(query_results)
                 if similarities:
                     source_document_type = "context"
-                    effective_filter = context_filter
+                    effective_filter = fallback_filter
 
             # Calculate weighted similarity
             if similarities:

@@ -74,14 +74,10 @@ class PersonaService:
             # Get interview document IDs for vector DB filtering
             interview_doc_ids = [str(doc.id) for doc in interviews] if (document_ids or project_id) else None
             
-            # Use RAG to retrieve relevant chunks for persona generation
+            # Use RAG to retrieve relevant chunks. Prefer document_id over project_id.
             interview_query_text = "user interviews, user research, interview transcripts, user feedback, user needs"
             interview_filter = {"document_type": "interview"}
-            if project_id:
-                # Filter by project_id for project isolation
-                interview_filter["project_id"] = str(project_id)
-            elif interview_doc_ids and len(interview_doc_ids) > 0:
-                # Filter by document IDs for session isolation
+            if interview_doc_ids and len(interview_doc_ids) > 0:
                 if len(interview_doc_ids) == 1:
                     interview_filter["document_id"] = interview_doc_ids[0]
                 else:
@@ -116,11 +112,7 @@ class PersonaService:
             context_doc_ids = [str(doc.id) for doc in contexts] if document_ids or project_id else None
             
             context_filter = {"document_type": "context"}
-            if project_id:
-                # Filter by project_id for project isolation
-                context_filter["project_id"] = str(project_id)
-            elif context_doc_ids and len(context_doc_ids) > 0:
-                # Filter by document IDs for session isolation
+            if context_doc_ids and len(context_doc_ids) > 0:
                 if len(context_doc_ids) == 1:
                     context_filter["document_id"] = context_doc_ids[0]
                 else:

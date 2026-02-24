@@ -29,6 +29,7 @@ from app.models.document import Document, DocumentType
 from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
 from app.services.persona_service import PersonaService
+from app.utils.rag_filter import get_project_document_filter
 
 
 class AnalyticsService:
@@ -233,10 +234,12 @@ class AnalyticsService:
                 })
             else:
                 # Real validation with interview documents
+                # Use document_id filter (not project_id) so we only get chunks from this project's files.
+                # project_id in vector metadata may be missing for older documents.
                 persona_text = f"{persona.name} {persona.persona_data.get('basic_description', '')} {persona.persona_data.get('detailed_description', '')}"
-                filter_metadata = {"document_type": fallback_document_type or "interview"}
-                if persona_set.project_id is not None:
-                    filter_metadata["project_id"] = str(persona_set.project_id)
+                filter_metadata = await get_project_document_filter(
+                    session, persona_set.project_id, fallback_document_type or "interview"
+                )
 
                 query_results = await vector_db.query_documents(
                     query_texts=[persona_text],
@@ -251,24 +254,8 @@ class AnalyticsService:
                         scores = [scores] if scores is not None else []
                     similarities = [float(s) if s is not None else 0.0 for s in scores]
 
-                # If no matches and we filtered by project_id, retry without project_id
-                if not similarities and filter_metadata.get("project_id") is not None:
-                    fallback_filter = {"document_type": "interview"}
-                    query_results = await vector_db.query_documents(
-                        query_texts=[persona_text],
-                        n_results=10,
-                        filter_metadata=fallback_filter
-                    )
-                    if query_results.get("distances") and len(query_results["distances"]) > 0:
-                        scores = query_results["distances"][0]
-                        if not isinstance(scores, list):
-                            scores = [scores] if scores is not None else []
-                        similarities = [float(s) if s is not None else 0.0 for s in scores]
-                    logger.info(
-                        "Validate: no vector matches for project_id=%s; used unscoped interview filter",
-                        filter_metadata["project_id"],
-                    )
-
+                # No unscoped fallback - using wrong chunks from other projects is worse than no matches.
+                # If no matches, chunks may not be indexed; user should reprocess documents.
                 if not similarities and query_results.get("documents") and len(query_results["documents"]) > 0:
                     num_matches = len(query_results["documents"][0])
                     similarities = [0.7] * num_matches
@@ -379,6 +366,10 @@ class AnalyticsService:
         flagged_attributes = []
         validated_attributes = []
 
+        # Use document_id filter (not project_id) so we only get chunks from this project's files
+        interview_filter = await get_project_document_filter(session, project_id, "interview")
+        context_filter = await get_project_document_filter(session, project_id, "context")
+
         for attr_name in validatable_attributes:
             attr_value = persona.persona_data.get(attr_name)
             if not attr_value:
@@ -393,15 +384,10 @@ class AnalyticsService:
             if not attr_text.strip():
                 continue
 
-            # Query vector DB for similar source chunks (scope by project when provided)
-            filter_metadata = {"document_type": "interview"}
-            if project_id is not None:
-                filter_metadata["project_id"] = str(project_id)
-
             query_results = await vector_db.query_documents(
                 query_texts=[attr_text],
                 n_results=5,
-                filter_metadata=filter_metadata
+                filter_metadata=interview_filter
             )
 
             similarities = []
@@ -413,25 +399,8 @@ class AnalyticsService:
                     scores = [scores] if scores is not None else []
                 similarities = [float(s) if s is not None else 0.0 for s in scores]
 
-            # If no matches and we filtered by project_id, retry without project_id
-            if not similarities and filter_metadata.get("project_id") is not None:
-                fallback_filter = {"document_type": "interview"}
-                query_results = await vector_db.query_documents(
-                    query_texts=[attr_text],
-                    n_results=5,
-                    filter_metadata=fallback_filter
-                )
-                if query_results.get("distances") and len(query_results["distances"]) > 0:
-                    scores = query_results["distances"][0]
-                    if not isinstance(scores, list):
-                        scores = [scores] if scores is not None else []
-                    similarities = [float(s) if s is not None else 0.0 for s in scores]
-
-            # If still no matches, try context documents
-            if not similarities and filter_metadata.get("document_type") == "interview":
-                context_filter = {"document_type": "context"}
-                if project_id is not None:
-                    context_filter["project_id"] = str(project_id)
+            # If no matches from interviews, try context documents (same project scope)
+            if not similarities:
                 query_results = await vector_db.query_documents(
                     query_texts=[attr_text],
                     n_results=5,
@@ -444,20 +413,6 @@ class AnalyticsService:
                     similarities = [float(s) if s is not None else 0.0 for s in scores]
                     if similarities:
                         source_document_type = "context"
-                if not similarities and project_id is not None:
-                    context_filter_no_project = {"document_type": "context"}
-                    query_results = await vector_db.query_documents(
-                        query_texts=[attr_text],
-                        n_results=5,
-                        filter_metadata=context_filter_no_project
-                    )
-                    if query_results.get("distances") and len(query_results["distances"]) > 0:
-                        scores = query_results["distances"][0]
-                        if not isinstance(scores, list):
-                            scores = [scores] if scores is not None else []
-                        similarities = [float(s) if s is not None else 0.0 for s in scores]
-                        if similarities:
-                            source_document_type = "context"
 
             if query_results.get("documents") and len(query_results["documents"]) > 0:
                 source_chunks = query_results["documents"][0][:3]
@@ -633,11 +588,18 @@ class AnalyticsService:
             "personas": [
                 {
                     "id": p.id,
+                    "persona_set_id": p.persona_set_id,
                     "name": p.name,
                     "persona_data": p.persona_data,
+                    "image_url": p.image_url,
+                    "image_prompt": p.image_prompt,
+                    "image_data": p.image_data,
+                    "source_references": p.source_references,
                     "similarity_score": p.similarity_score,
+                    "attribute_validation": p.attribute_validation,
                     "validation_status": p.validation_status,
-                    "image_url": p.image_url
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "updated_at": p.updated_at.isoformat() if p.updated_at else None,
                 }
                 for p in persona_set.personas
             ],
