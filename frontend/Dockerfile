@@ -1,10 +1,12 @@
-# Build stage
+# Build stage - pin Node 20 LTS for reproducible builds
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files (both required for npm ci)
+COPY package.json package-lock.json* ./
+# Fail fast if package-lock is missing (common cause of "worked before, now fails")
+RUN if [ ! -f package-lock.json ]; then echo "ERROR: package-lock.json not found. Ensure Root Directory is set to 'frontend' in Railway."; exit 1; fi
 RUN npm ci
 
 # Copy source code

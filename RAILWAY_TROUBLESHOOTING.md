@@ -4,6 +4,28 @@ This document explains the most likely causes of frontend and backend deployment
 
 ---
 
+## "It was working before" (frontend suddenly fails)
+
+If the frontend used to deploy and now it doesn’t, try these in order:
+
+1. **Check Root Directory**  
+   Railway can reset this after a re-import or project change.  
+   **Settings → Source → Root Directory** must be exactly `frontend` (no slash). Save and **Redeploy**.
+
+2. **Check builder**  
+   The frontend must use the **Dockerfile**, not Railpack/Nixpacks.  
+   In **Settings**, ensure the service is using the Dockerfile (and if there’s a “Config file” / “Railway config path”, set it to `frontend/railway.toml` so `builder = "DOCKERFILE"` is applied).
+
+3. **Get the exact error**  
+   In Railway: **Deployments → latest deployment → Build logs**.  
+   - If the error is about **missing files** (e.g. `package-lock.json`, `Dockerfile`, or COPY failed), fix **Root Directory** (step 1) and **Config file path** (step 2).  
+   - If the error is **during `npm ci` or `npm run build`**, paste that error; it may be a dependency or Node version issue.
+
+4. **Redeploy with a clean build**  
+   In the latest deployment, use **Redeploy** (or in Settings set **Disable build cache** / `NO_CACHE=1` for one run), then deploy again.
+
+---
+
 ## 1. Root directory not set (most common)
 
 **Symptom:** Build fails with errors like:
