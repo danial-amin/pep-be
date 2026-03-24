@@ -194,6 +194,32 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            # Agreement evaluator: new columns on simulations, drift score on messages, new table
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='simulations') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='simulations' AND column_name='run_until_agreement') THEN
+                            ALTER TABLE simulations ADD COLUMN run_until_agreement BOOLEAN DEFAULT false;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='simulations' AND column_name='agreement_threshold') THEN
+                            ALTER TABLE simulations ADD COLUMN agreement_threshold DOUBLE PRECISION DEFAULT 0.75;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='simulations' AND column_name='initial_persona_stances') THEN
+                            ALTER TABLE simulations ADD COLUMN initial_persona_stances JSONB;
+                        END IF;
+                    END IF;
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='simulation_messages') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='simulation_messages' AND column_name='persona_drift_score') THEN
+                            ALTER TABLE simulation_messages ADD COLUMN persona_drift_score DOUBLE PRECISION;
+                        END IF;
+                    END IF;
+                END $$;
+            """))
         except Exception as e:
             logger.warning(f"Could not add columns automatically: {e}. Run migrations manually if needed.", exc_info=True)
     

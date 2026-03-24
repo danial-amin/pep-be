@@ -2,7 +2,8 @@
 Persona Simulation Service - orchestrates multi-persona LLM conversations.
 
 This service enables multiple persona-infused LLMs to converse with each other
-towards a common goal, with configurable duration and token limits.
+towards a common goal, with configurable duration, token limits, and optional
+agreement-based termination.
 """
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,11 @@ from app.utils.token_utils import estimate_tokens
 
 logger = logging.getLogger(__name__)
 
+# ─── Personality maintenance constants ────────────────────────────────────────
+# After this many rounds, inject an explicit personality reminder into the prompt
+# to counteract gradual LLM drift from the persona's core traits.
+_PERSONALITY_REMINDER_INTERVAL = 3
+
 
 class PersonaSimulationService:
     """Service for running multi-persona simulations."""
@@ -30,13 +36,23 @@ class PersonaSimulationService:
     def __init__(self):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Prompt building
+    # ──────────────────────────────────────────────────────────────────────────
+
     def _build_persona_system_prompt(
         self,
         persona: Persona,
         role: Optional[str] = None,
         facilitator_must_address: Optional[str] = None,
+        current_turn: int = 0,
     ) -> str:
-        """Build a system prompt that infuses the LLM with the persona's personality."""
+        """
+        Build a system prompt that infuses the LLM with the persona's personality.
+
+        Includes a CORE IDENTITY ANCHOR section to preserve traits across turns,
+        and injects a periodic reminder every _PERSONALITY_REMINDER_INTERVAL rounds.
+        """
         persona_data = persona.persona_data or {}
 
         # Extract key persona attributes
@@ -65,7 +81,7 @@ class PersonaSimulationService:
 
         demographic_str = ", ".join(demo_parts) if demo_parts else "a professional"
 
-        # Format goals and frustrations
+        # Format lists
         goals_str = "\n".join([f"  - {g}" for g in goals]) if goals else "  - Not specified"
         frustrations_str = "\n".join([f"  - {f}" for f in frustrations]) if frustrations else "  - Not specified"
         motivations_str = "\n".join([f"  - {m}" for m in motivations]) if motivations else ""
@@ -73,6 +89,37 @@ class PersonaSimulationService:
         role_instruction = ""
         if role:
             role_instruction = f"\n\nYour assigned role in this discussion is: {role}. Act according to this role while staying true to your persona."
+
+        # ── Core identity anchor ─────────────────────────────────────────────
+        # Distil the 1-2 most distinctive attributes per category so the LLM
+        # has an explicit "do not abandon these" anchor even in long conversations.
+        primary_goal = goals[0] if goals else "personal growth"
+        primary_frustration = frustrations[0] if frustrations else "lack of progress"
+        primary_motivation = motivations[0] if motivations else "making a difference"
+        core_behavior = behaviors.split(".")[0].strip() if behaviors else "thoughtful and deliberate"
+
+        core_identity_section = f"""
+CORE IDENTITY ANCHOR — YOU MUST NEVER ABANDON THESE:
+  • Primary drive:    {primary_goal}
+  • Key frustration:  {primary_frustration}
+  • Core motivation:  {primary_motivation}
+  • Characteristic behaviour: {core_behavior}
+  • Your authentic voice: "{quote}"
+
+These traits define WHO YOU ARE. As the discussion progresses you may revise
+individual opinions, but your fundamental personality, values, and communication
+style must remain consistent throughout every single message you produce."""
+
+        # ── Periodic personality reminder ─────────────────────────────────────
+        # Every _PERSONALITY_REMINDER_INTERVAL turns we add an explicit warning
+        # so the model doesn't drift away from the persona in long simulations.
+        periodic_reminder = ""
+        if current_turn > 0 and (current_turn % _PERSONALITY_REMINDER_INTERVAL == 0):
+            periodic_reminder = f"""
+
+⚠  TURN {current_turn} PERSONA CHECK: You are {name}. Re-read your CORE IDENTITY ANCHOR
+above before responding. Your reply must clearly reflect your background as
+"{background[:120].strip()}...". Do not sound like anyone else in this conversation."""
 
         system_prompt = f"""You are {name}, {demographic_str}.
 
@@ -88,11 +135,9 @@ YOUR FRUSTRATIONS AND PAIN POINTS:
 {"YOUR MOTIVATIONS:" if motivations_str else ""}
 {motivations_str}
 
-{"BEHAVIORAL TRAITS:" if behaviors else ""}
+{"BEHAVIOURAL TRAITS:" if behaviors else ""}
 {behaviors}
-
-{"CHARACTERISTIC QUOTE: " + '"' + quote + '"' if quote else ""}
-{role_instruction}
+{core_identity_section}{periodic_reminder}{role_instruction}
 
 CONVERSATION GUIDELINES:
 - Respond authentically as this persona would, drawing from their background, goals, and frustrations
@@ -100,18 +145,26 @@ CONVERSATION GUIDELINES:
 - Engage constructively with others while maintaining your persona's authentic voice
 - Be specific and concrete when possible, relating ideas to your personal experience
 - Keep responses focused and concise (1-3 sentences, ~60 words max)
-- Build on what others say, agree or respectfully disagree based on your persona's perspective
+- Build on what others say, agree or respectfully disagree based on YOUR perspective
 - If you have expertise relevant to the topic, share it naturally
-- Express your frustrations and concerns when relevant to the discussion"""
+- Express your frustrations and concerns when relevant to the discussion
+- NEVER adopt another persona's communication style — remain distinctly yourself"""
 
         if facilitator_must_address:
             system_prompt += f"""
 
-CRITICAL - FACILITATOR INTERVENTION (you must obey this):
+CRITICAL — FACILITATOR INTERVENTION (you must obey this):
 A human facilitator has just intervened and said: "{facilitator_must_address}"
-You MUST address this directly in your very next response and let it change the course of your reply. Do not ignore it or continue the previous thread without first acknowledging and responding to the facilitator. Your response should visibly shift to incorporate their direction."""
+You MUST address this directly in your very next response and let it change the
+course of your reply. Do not ignore it or continue the previous thread without
+first acknowledging and responding to the facilitator. Your response should
+visibly shift to incorporate their direction."""
 
         return system_prompt
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # RAG grounding
+    # ──────────────────────────────────────────────────────────────────────────
 
     async def _get_rag_grounding(
         self,
@@ -121,11 +174,9 @@ You MUST address this directly in your very next response and let it change the 
         participants: Dict[int, Persona],
     ) -> str:
         """
-        Retrieve relevant document chunks from RAG so simulation responses are grounded in project data.
-        Uses document_id filter (not project_id) so we only get chunks from the project's files.
-        Returns a single string of concatenated chunks to inject into the prompt; empty if none.
+        Retrieve relevant document chunks from RAG so simulation responses are
+        grounded in project data.
         """
-        # Build query from goal + context + last few persona messages for relevance
         query_parts = [simulation.goal]
         if simulation.goal_context:
             query_parts.append(simulation.goal_context)
@@ -133,7 +184,7 @@ You MUST address this directly in your very next response and let it change the 
             m for m in messages_ordered
             if not (getattr(m, "is_human_message", False) or m.persona_id is None)
         ]
-        for m in persona_msgs[-3:]:  # last 3 persona messages
+        for m in persona_msgs[-3:]:
             p = participants.get(m.persona_id)
             name = p.name if p else "Unknown"
             query_parts.append(f"{name}: {m.content}")
@@ -158,7 +209,6 @@ You MUST address this directly in your very next response and let it change the 
             if not docs or not docs[0]:
                 return ""
             chunks = docs[0]
-            # Dedupe and join with clear separators; cap total length for context window
             seen = set()
             unique = []
             total = 0
@@ -175,12 +225,15 @@ You MUST address this directly in your very next response and let it change the 
             logger.warning(f"RAG grounding failed for simulation {simulation.id}: {e}", exc_info=True)
             return ""
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Facilitator context
+    # ──────────────────────────────────────────────────────────────────────────
+
     def _get_facilitator_context(
         self, messages: List[SimulationMessage]
     ) -> tuple[Optional[str], bool]:
         """
         Returns (last_facilitator_content, is_last_message_facilitator).
-        Used to steer the simulation when a human has intervened.
         """
         msgs = sorted(messages, key=lambda m: (m.turn_number, m.id))
         if not msgs:
@@ -195,6 +248,10 @@ You MUST address this directly in your very next response and let it change the 
         )
         return last_facilitator_content, is_last_facilitator
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Conversation context
+    # ──────────────────────────────────────────────────────────────────────────
+
     def _build_conversation_context(
         self,
         messages: List[SimulationMessage],
@@ -203,11 +260,9 @@ You MUST address this directly in your very next response and let it change the 
     ) -> List[Dict[str, str]]:
         """Build the conversation history for the LLM context."""
         context = []
-
         for msg in messages:
             is_human = getattr(msg, "is_human_message", False) or msg.persona_id is None
             if is_human:
-                # Human facilitator intervention - always as user message, highlighted
                 context.append({
                     "role": "user",
                     "content": f"[Facilitator]: {msg.content}"
@@ -218,43 +273,47 @@ You MUST address this directly in your very next response and let it change the 
             persona_name = persona.name if persona else "Unknown"
 
             if msg.persona_id == current_persona_id:
-                # This persona's own messages
-                context.append({
-                    "role": "assistant",
-                    "content": msg.content
-                })
+                context.append({"role": "assistant", "content": msg.content})
             else:
-                # Other persona's messages - format as user message with name
-                context.append({
-                    "role": "user",
-                    "content": f"[{persona_name}]: {msg.content}"
-                })
+                context.append({"role": "user", "content": f"[{persona_name}]: {msg.content}"})
 
         return context
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Core turn generation
+    # ──────────────────────────────────────────────────────────────────────────
 
     async def generate_turn(
         self,
         simulation: Simulation,
-        session: AsyncSession
+        session: AsyncSession,
     ) -> Optional[SimulationMessage]:
         """
         Generate the next turn in the simulation.
 
-        Selects the next persona to speak based on conversation flow
-        and generates their response.
+        Selects the next persona to speak based on conversation flow and
+        generates their response with strengthened personality anchoring.
         """
-        # Check if simulation can continue
         if simulation.status == "completed" or simulation.status == "stopped":
             return None
 
-        # Check turn limit
-        if simulation.current_turn >= simulation.max_turns:
+        # Turn-limit check (only applies when NOT in run_until_agreement mode,
+        # or when we hit the absolute safety cap even in that mode).
+        run_until = getattr(simulation, "run_until_agreement", False)
+        if not run_until and simulation.current_turn >= simulation.max_turns:
             simulation.status = "completed"
             simulation.completed_at = datetime.now(timezone.utc)
             await session.commit()
             return None
 
-        # Check duration limit
+        # Absolute safety cap even in run_until_agreement mode
+        if run_until and simulation.current_turn >= simulation.max_turns:
+            simulation.status = "completed"
+            simulation.completed_at = datetime.now(timezone.utc)
+            await session.commit()
+            return None
+
+        # Duration limit
         if simulation.started_at and simulation.max_duration_seconds:
             elapsed = (datetime.now(timezone.utc) - simulation.started_at).total_seconds()
             if elapsed >= simulation.max_duration_seconds:
@@ -263,7 +322,7 @@ You MUST address this directly in your very next response and let it change the 
                 await session.commit()
                 return None
 
-        # Get participants and their personas
+        # Load participants
         participants = {}
         participant_roles = {}
         for p in simulation.participants:
@@ -283,13 +342,11 @@ You MUST address this directly in your very next response and let it change the 
         next_speaker_id = self._select_next_speaker(
             list(simulation.messages),
             list(participants.keys()),
-            simulation.current_turn
+            simulation.current_turn,
         )
-
         next_persona = participants[next_speaker_id]
         next_role = participant_roles.get(next_speaker_id)
 
-        # Facilitator context: so the next turn actually changes course when human intervened
         messages_ordered = sorted(
             simulation.messages,
             key=lambda m: (m.turn_number, getattr(m, "id", 0)),
@@ -297,16 +354,17 @@ You MUST address this directly in your very next response and let it change the 
         last_facilitator_content, is_last_facilitator = self._get_facilitator_context(
             messages_ordered
         )
+        facilitator_must_address = last_facilitator_content if is_last_facilitator else None
 
-        # Build system prompt: inject facilitator directive when they just intervened
-        facilitator_must_address = (
-            last_facilitator_content if is_last_facilitator else None
-        )
+        # Build system prompt with personality anchoring
         system_prompt = self._build_persona_system_prompt(
-            next_persona, next_role, facilitator_must_address=facilitator_must_address
+            next_persona,
+            next_role,
+            facilitator_must_address=facilitator_must_address,
+            current_turn=simulation.current_turn,
         )
 
-        # RAG grounding: inject evidence from project documents so responses are grounded, not made up
+        # RAG grounding
         rag_grounding = await self._get_rag_grounding(
             session, simulation, messages_ordered, participants
         )
@@ -319,12 +377,9 @@ You MUST address this directly in your very next response and let it change the 
 
         # Build conversation context
         conversation_context = self._build_conversation_context(
-            messages_ordered,
-            participants,
-            next_speaker_id,
+            messages_ordered, participants, next_speaker_id,
         )
 
-        # Add the goal and initial prompt if no persona has spoken yet (round 0)
         persona_count_before = self._count_persona_messages(list(simulation.messages))
         if persona_count_before == 0:
             goal_prompt = f"""The topic for this group discussion is: {simulation.goal}
@@ -334,22 +389,19 @@ You MUST address this directly in your very next response and let it change the 
 Please share your initial thoughts on this topic, drawing from your personal experience and perspective. Be authentic to who you are."""
             conversation_context.append({"role": "user", "content": goal_prompt})
         else:
-            # When facilitator just intervened: strong prompt so the simulation changes course
             if is_last_facilitator and last_facilitator_content:
                 continue_prompt = f"""The facilitator has just intervened: "{last_facilitator_content}"
 
 Your response MUST:
 1. First, directly acknowledge and respond to what the facilitator said.
-2. Then, let their direction change the course of your reply (e.g. shift focus, address their question, or incorporate their suggestion).
+2. Then, let their direction change the course of your reply.
 Keep it to 1-3 sentences but make the course change visible."""
             elif last_facilitator_content:
-                # Recent facilitator intervention (not last message): remind to keep that direction
                 continue_prompt = f"""Continue the discussion. The facilitator recently said: "{last_facilitator_content}" — keep this direction in mind and let it influence your response. Share your perspective in 1-3 sentences."""
             else:
                 continue_prompt = "Please continue the discussion by responding to what has been said. Share your perspective, agree or disagree, and add new insights based on your experience. Keep it to 1-3 sentences."
             conversation_context.append({"role": "user", "content": continue_prompt})
 
-        # Slightly lower temperature when facilitator just intervened so model follows instructions
         temperature = 0.65 if is_last_facilitator else 0.85
 
         # Generate response
@@ -358,56 +410,63 @@ Keep it to 1-3 sentences but make the course change visible."""
                 model=settings.OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    *conversation_context
+                    *conversation_context,
                 ],
                 temperature=temperature,
-                max_tokens=180,  # Keep individual responses concise
+                max_tokens=180,
                 presence_penalty=0.3,
-                frequency_penalty=0.3
+                frequency_penalty=0.3,
             )
 
             content = response.choices[0].message.content
             tokens_used = response.usage.total_tokens if response.usage else estimate_tokens(content)
 
-            # One turn = all personas have spoken once; assign round-based turn number
             persona_count = self._count_persona_messages(list(simulation.messages))
             num_participants = len(participants)
             turn_number = self._round_turn_number(persona_count, num_participants)
 
-            # Create message
             message = SimulationMessage(
                 simulation_id=simulation.id,
                 persona_id=next_speaker_id,
                 content=content,
                 turn_number=turn_number,
-                tokens=tokens_used
+                tokens=tokens_used,
             )
             session.add(message)
 
-            # Update simulation state: current_turn = round (1 turn = all personas spoke once)
             simulation.current_turn = turn_number
             simulation.tokens_used += tokens_used
 
-            # Update participant stats
             for p in simulation.participants:
                 if p.persona_id == next_speaker_id:
                     p.messages_count += 1
                     p.tokens_used += tokens_used
                     break
 
-            # Check if we should complete
-            if simulation.current_turn >= simulation.max_turns or simulation.tokens_used >= simulation.max_tokens:
-                simulation.status = "completed"
-                simulation.completed_at = datetime.now(timezone.utc)
+            # Normal (non-agreement) completion check
+            if not run_until:
+                if simulation.current_turn >= simulation.max_turns or (
+                    simulation.max_tokens and simulation.tokens_used >= simulation.max_tokens
+                ):
+                    simulation.status = "completed"
+                    simulation.completed_at = datetime.now(timezone.utc)
+            else:
+                # Safety cap
+                if simulation.current_turn >= simulation.max_turns:
+                    simulation.status = "completed"
+                    simulation.completed_at = datetime.now(timezone.utc)
 
             await session.commit()
             await session.refresh(message)
-
             return message
 
         except Exception as e:
             logger.error(f"Error generating turn for simulation {simulation.id}: {e}", exc_info=True)
             raise
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Static helpers
+    # ──────────────────────────────────────────────────────────────────────────
 
     @staticmethod
     def _count_persona_messages(messages: List[SimulationMessage]) -> int:
@@ -420,8 +479,8 @@ Keep it to 1-3 sentences but make the course change visible."""
     @staticmethod
     def _round_turn_number(persona_message_count: int, num_participants: int) -> int:
         """
-        Compute turn (round) number: 1 turn = all personas have spoken once.
-        For the next persona message (the (persona_message_count+1)-th), returns which round it belongs to.
+        1 turn = all personas have spoken once.
+        Returns the round number the *next* message belongs to.
         """
         if num_participants <= 0:
             return 1
@@ -431,14 +490,11 @@ Keep it to 1-3 sentences but make the course change visible."""
         self,
         messages: List[SimulationMessage],
         participant_ids: List[int],
-        current_turn: int
+        current_turn: int,
     ) -> int:
         """
-        Select the next persona to speak.
-
-        Uses a round-robin approach with some variation to keep
-        the conversation dynamic. Human interventions are ignored
-        for speaker selection (only persona messages count).
+        Select the next persona to speak using round-robin with load balancing.
+        Human interventions are ignored for speaker selection.
         """
         ordered_participants = list(participant_ids)
         persona_messages = [
@@ -447,19 +503,14 @@ Keep it to 1-3 sentences but make the course change visible."""
         ]
 
         if not persona_messages:
-            # First turn or only human messages so far - pick first participant
             return ordered_participants[0]
 
-        # Get the last persona speaker (ignore human interventions)
         last_speaker = persona_messages[-1].persona_id
-
-        # Count messages per participant (persona messages only)
         message_counts = {pid: 0 for pid in ordered_participants}
         for msg in persona_messages:
             if msg.persona_id in message_counts:
                 message_counts[msg.persona_id] += 1
 
-        # Prefer least-spoken, but maintain a strict rotation order
         min_count = min(message_counts.values())
         if last_speaker in ordered_participants:
             last_idx = ordered_participants.index(last_speaker)
@@ -472,34 +523,46 @@ Keep it to 1-3 sentences but make the course change visible."""
             if message_counts[pid] == min_count:
                 return pid
 
-        # Fallback: next in rotation, avoiding immediate repeat if possible
         if rotation_without_last:
             return rotation_without_last[0]
-
         return ordered_participants[0]
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Full simulation runner (with agreement-based termination)
+    # ──────────────────────────────────────────────────────────────────────────
 
     async def run_full_simulation(
         self,
         simulation: Simulation,
-        session: AsyncSession
+        session: AsyncSession,
     ) -> List[SimulationMessage]:
         """
         Run the entire simulation until completion or limits are reached.
 
-        Stops when either:
-        - max_turns is reached
-        - max_duration_seconds has elapsed
-        """
-        messages = []
+        When simulation.run_until_agreement is True, after each complete round
+        an agreement evaluation is triggered. The simulation continues beyond
+        max_turns (up to the absolute cap) until agreement_threshold is met.
 
-        # Start the simulation
+        Stops when ANY of:
+        - max_turns reached (absolute cap when run_until_agreement=True)
+        - max_duration_seconds elapsed
+        - agreement_reached=True (only when run_until_agreement=True)
+        - status manually set to "stopped"
+        """
+        from app.services.agreement_evaluator_service import agreement_evaluator_service
+
+        messages: List[SimulationMessage] = []
+        run_until = getattr(simulation, "run_until_agreement", False)
+
         simulation.status = "running"
         simulation.started_at = datetime.now(timezone.utc)
         await session.commit()
 
         try:
+            last_evaluated_turn = 0  # Track which turns have been evaluated already
+
             while simulation.status == "running":
-                # Check duration limit before each turn
+                # Duration check
                 if simulation.max_duration_seconds:
                     elapsed = (datetime.now(timezone.utc) - simulation.started_at).total_seconds()
                     if elapsed >= simulation.max_duration_seconds:
@@ -508,7 +571,7 @@ Keep it to 1-3 sentences but make the course change visible."""
                         await session.commit()
                         break
 
-                # Refresh to get latest state
+                # Refresh state
                 await session.refresh(simulation, ["messages", "participants"])
 
                 message = await self.generate_turn(simulation, session)
@@ -517,7 +580,58 @@ Keep it to 1-3 sentences but make the course change visible."""
                 else:
                     break
 
-                # Small delay between turns for rate limiting
+                # ── Agreement evaluation after each complete round ──────────
+                # A round is complete when the turn_number advances, meaning all
+                # personas have spoken in that round.
+                if run_until and simulation.current_turn > last_evaluated_turn:
+                    last_evaluated_turn = simulation.current_turn
+
+                    # Load full participants map for the evaluator
+                    participants: Dict[int, Persona] = {}
+                    for p in simulation.participants:
+                        result = await session.execute(
+                            select(Persona).where(Persona.id == p.persona_id)
+                        )
+                        persona = result.scalar_one_or_none()
+                        if persona:
+                            participants[p.persona_id] = persona
+
+                    # Refresh messages for accurate extraction
+                    await session.refresh(simulation, ["messages"])
+
+                    try:
+                        evaluation = await agreement_evaluator_service.evaluate_agreement(
+                            simulation=simulation,
+                            participants=participants,
+                            session=session,
+                            turn_number=simulation.current_turn,
+                        )
+                        logger.info(
+                            "Sim %d turn %d: agreement_score=%.3f reached=%s",
+                            simulation.id,
+                            simulation.current_turn,
+                            evaluation.overall_agreement_score,
+                            evaluation.agreement_reached,
+                        )
+                        if evaluation.agreement_reached and simulation.status == "running":
+                            simulation.status = "completed"
+                            simulation.completed_at = datetime.now(timezone.utc)
+                            await session.commit()
+                            logger.info(
+                                "Simulation %d completed: agreement reached at turn %d",
+                                simulation.id,
+                                simulation.current_turn,
+                            )
+                            break
+                    except Exception as eval_err:
+                        # Don't let evaluation errors kill the simulation
+                        logger.warning(
+                            "Agreement evaluation failed for simulation %d: %s",
+                            simulation.id,
+                            eval_err,
+                            exc_info=True,
+                        )
+
                 await asyncio.sleep(0.5)
 
         except Exception as e:
@@ -528,17 +642,16 @@ Keep it to 1-3 sentences but make the course change visible."""
 
         return messages
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Summary
+    # ──────────────────────────────────────────────────────────────────────────
+
     async def generate_summary(
         self,
         simulation: Simulation,
-        session: AsyncSession
+        session: AsyncSession,
     ) -> Dict[str, Any]:
-        """
-        Generate a summary of the simulation conversation.
-
-        Extracts key insights and action items.
-        """
-        # Get participants for names
+        """Generate a summary of the simulation conversation."""
         participants = {}
         for p in simulation.participants:
             result = await session.execute(
@@ -548,7 +661,6 @@ Keep it to 1-3 sentences but make the course change visible."""
             if persona:
                 participants[p.persona_id] = persona
 
-        # Build conversation transcript
         transcript_parts = []
         for msg in simulation.messages:
             if getattr(msg, "is_human_message", False) or msg.persona_id is None:
@@ -557,17 +669,14 @@ Keep it to 1-3 sentences but make the course change visible."""
                 persona = participants.get(msg.persona_id)
                 name = persona.name if persona else "Unknown"
             transcript_parts.append(f"{name}: {msg.content}")
-
         transcript = "\n\n".join(transcript_parts)
 
-        # Persona names and ids for per-persona summary text
         persona_entries = [
             {"persona_id": pid, "persona_name": p.name}
             for pid, p in participants.items()
         ]
 
-        # Generate summary as before: per-persona summary text + overall key_insights and action_items
-        summary_prompt = f"""Analyze this group discussion and provide:
+        summary_prompt = f"""Analyse this group discussion and provide:
 
 1. For each participant, a concise summary (2-3 sentences) of that person's key points and stance.
 2. 3-5 key insights that emerged from the conversation overall.
@@ -595,12 +704,12 @@ Respond in JSON format:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert facilitator skilled at synthesizing group discussions into actionable insights."
+                        "content": "You are an expert facilitator skilled at synthesising group discussions into actionable insights.",
                     },
-                    {"role": "user", "content": summary_prompt}
+                    {"role": "user", "content": summary_prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.5
+                temperature=0.5,
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -611,7 +720,7 @@ Respond in JSON format:
                     persona_summaries.append({
                         "persona_id": e["persona_id"],
                         "persona_name": e["persona_name"],
-                        "summary": "No summary generated."
+                        "summary": "No summary generated.",
                     })
 
             simulation.summary = json.dumps(persona_summaries)
@@ -629,22 +738,22 @@ Respond in JSON format:
             logger.error(f"Error generating summary for simulation {simulation.id}: {e}", exc_info=True)
             raise
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Streaming
+    # ──────────────────────────────────────────────────────────────────────────
+
     async def stream_turn(
         self,
         simulation: Simulation,
-        session: AsyncSession
+        session: AsyncSession,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        Stream a turn response for real-time updates.
-
-        Yields chunks of the response as they're generated.
-        """
-        # Check if simulation can continue
+        """Stream a turn response for real-time updates."""
         if simulation.status in ["completed", "stopped"]:
             yield {"type": "error", "message": "Simulation is not active"}
             return
 
-        if simulation.current_turn >= simulation.max_turns:
+        run_until = getattr(simulation, "run_until_agreement", False)
+        if not run_until and simulation.current_turn >= simulation.max_turns:
             simulation.status = "completed"
             simulation.completed_at = datetime.now(timezone.utc)
             await session.commit()
@@ -653,11 +762,11 @@ Respond in JSON format:
                 "reason": "max_turns_reached",
                 "simulation_status": simulation.status,
                 "current_turn": simulation.current_turn,
-                "tokens_used": simulation.tokens_used
+                "tokens_used": simulation.tokens_used,
             }
             return
 
-        if simulation.tokens_used >= simulation.max_tokens:
+        if simulation.max_tokens and simulation.tokens_used >= simulation.max_tokens:
             simulation.status = "completed"
             simulation.completed_at = datetime.now(timezone.utc)
             await session.commit()
@@ -666,11 +775,11 @@ Respond in JSON format:
                 "reason": "max_tokens_reached",
                 "simulation_status": simulation.status,
                 "current_turn": simulation.current_turn,
-                "tokens_used": simulation.tokens_used
+                "tokens_used": simulation.tokens_used,
             }
             return
 
-        # Get participants
+        # Load participants
         participants = {}
         participant_roles = {}
         for p in simulation.participants:
@@ -682,17 +791,14 @@ Respond in JSON format:
                 participants[p.persona_id] = persona
                 participant_roles[p.persona_id] = p.role
 
-        # Select next speaker
         next_speaker_id = self._select_next_speaker(
             list(simulation.messages),
             list(participants.keys()),
-            simulation.current_turn
+            simulation.current_turn,
         )
-
         next_persona = participants[next_speaker_id]
         next_role = participant_roles.get(next_speaker_id)
 
-        # One turn = all personas have spoken once
         persona_count = self._count_persona_messages(list(simulation.messages))
         num_participants = len(participants)
         turn_number = self._round_turn_number(persona_count, num_participants)
@@ -701,10 +807,9 @@ Respond in JSON format:
             "type": "start",
             "persona_id": next_speaker_id,
             "persona_name": next_persona.name,
-            "turn_number": turn_number
+            "turn_number": turn_number,
         }
 
-        # Facilitator context: so the next turn actually changes course when human intervened
         messages_ordered = sorted(
             simulation.messages,
             key=lambda m: (m.turn_number, getattr(m, "id", 0)),
@@ -712,15 +817,14 @@ Respond in JSON format:
         last_facilitator_content, is_last_facilitator = self._get_facilitator_context(
             messages_ordered
         )
-        facilitator_must_address = (
-            last_facilitator_content if is_last_facilitator else None
-        )
+        facilitator_must_address = last_facilitator_content if is_last_facilitator else None
 
-        # Build prompts: inject facilitator directive when they just intervened
         system_prompt = self._build_persona_system_prompt(
-            next_persona, next_role, facilitator_must_address=facilitator_must_address
+            next_persona,
+            next_role,
+            facilitator_must_address=facilitator_must_address,
+            current_turn=simulation.current_turn,
         )
-        # RAG grounding: evidence from project documents
         rag_grounding = await self._get_rag_grounding(
             session, simulation, messages_ordered, participants
         )
@@ -731,9 +835,7 @@ Respond in JSON format:
                 + "\n\nYour response must be grounded in the above evidence. Do not invent facts; base your reply on this project data when relevant."
             )
         conversation_context = self._build_conversation_context(
-            messages_ordered,
-            participants,
-            next_speaker_id,
+            messages_ordered, participants, next_speaker_id,
         )
 
         if persona_count == 0:
@@ -754,40 +856,34 @@ Your response MUST: 1) First, directly acknowledge and respond to what the facil
                 continue_prompt = "Please continue the discussion by responding to what has been said. Keep it to 1-3 sentences."
             conversation_context.append({"role": "user", "content": continue_prompt})
 
-        # Slightly lower temperature when facilitator just intervened
         temperature = 0.65 if is_last_facilitator else 0.85
 
-        # Stream response
         full_content = ""
         try:
             stream = await self.client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    *conversation_context
+                    *conversation_context,
                 ],
                 temperature=temperature,
                 max_tokens=180,
-                stream=True
+                stream=True,
             )
 
             async for chunk in stream:
                 if chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     full_content += content
-                    yield {
-                        "type": "chunk",
-                        "content": content
-                    }
+                    yield {"type": "chunk", "content": content}
 
-            # Save the message (turn_number already computed above)
             tokens_used = estimate_tokens(full_content)
             message = SimulationMessage(
                 simulation_id=simulation.id,
                 persona_id=next_speaker_id,
                 content=full_content,
                 turn_number=turn_number,
-                tokens=tokens_used
+                tokens=tokens_used,
             )
             session.add(message)
 
@@ -800,9 +896,16 @@ Your response MUST: 1) First, directly acknowledge and respond to what the facil
                     p.tokens_used += tokens_used
                     break
 
-            if simulation.current_turn >= simulation.max_turns or simulation.tokens_used >= simulation.max_tokens:
-                simulation.status = "completed"
-                simulation.completed_at = datetime.now(timezone.utc)
+            if not run_until:
+                if simulation.current_turn >= simulation.max_turns or (
+                    simulation.max_tokens and simulation.tokens_used >= simulation.max_tokens
+                ):
+                    simulation.status = "completed"
+                    simulation.completed_at = datetime.now(timezone.utc)
+            else:
+                if simulation.current_turn >= simulation.max_turns:
+                    simulation.status = "completed"
+                    simulation.completed_at = datetime.now(timezone.utc)
 
             await session.commit()
 
@@ -812,7 +915,7 @@ Your response MUST: 1) First, directly acknowledge and respond to what the facil
                 "tokens": tokens_used,
                 "simulation_status": simulation.status,
                 "current_turn": simulation.current_turn,
-                "tokens_used": simulation.tokens_used
+                "tokens_used": simulation.tokens_used,
             }
 
         except Exception as e:
