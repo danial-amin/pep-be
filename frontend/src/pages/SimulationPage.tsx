@@ -14,10 +14,14 @@ import {
   CheckCircle,
   Loader2,
   Sparkles,
-  Download
+  Download,
+  TrendingUp,
+  Activity,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { simulationsApi, personasApi, API_BASE_URL } from '../services/api';
-import { Simulation, SimulationMessage, PersonaSet, Persona, SimulationListItem } from '../types';
+import { Simulation, SimulationMessage, PersonaSet, Persona, SimulationListItem, AgreementEvaluation, AgreementHistory } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 
 // Persona Avatar Component (use personaId when available so API serves from file or base64)
@@ -93,9 +97,21 @@ function MessageBubble({ message, isLeft }: { message: SimulationMessage; isLeft
           size="sm"
         />
         <div className={`${isLeft ? 'bg-white/20' : 'bg-purple-500/30'} rounded-2xl px-4 py-3`}>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-sm font-semibold text-white">{message.persona_name}</span>
             <span className="text-xs text-white/50">Turn {message.turn_number}</span>
+            {message.persona_drift_score !== undefined && (
+              <span
+                title={`Persona drift: ${(message.persona_drift_score * 100).toFixed(0)}% (0=on-persona, 100=fully drifted)`}
+                className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  message.persona_drift_score > 0.6 ? 'bg-red-400/30 text-red-200' :
+                  message.persona_drift_score > 0.3 ? 'bg-yellow-400/30 text-yellow-200' :
+                  'bg-green-400/30 text-green-200'
+                }`}
+              >
+                drift {(message.persona_drift_score * 100).toFixed(0)}%
+              </span>
+            )}
           </div>
           <p className="text-white/90 text-sm leading-relaxed">{message.content}</p>
         </div>
@@ -189,13 +205,20 @@ export default function SimulationPage() {
 
   // Setup form state
   const [showSetup, setShowSetup] = useState(!simulationId);
-  const [selectedSetId, setSelectedSetId] = useState<number | null>(null);
+  const [expandedSetIds, setExpandedSetIds] = useState<Set<number>>(new Set());
   const [selectedPersonas, setSelectedPersonas] = useState<Map<number, string>>(new Map());
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [goalContext, setGoalContext] = useState('');
   const [maxTurns, setMaxTurns] = useState(10);
   const [maxDurationSeconds, setMaxDurationSeconds] = useState(120);
+  const [runUntilAgreement, setRunUntilAgreement] = useState(false);
+  const [agreementThreshold, setAgreementThreshold] = useState(0.7);
+
+  // Agreement state
+  const [agreementHistory, setAgreementHistory] = useState<AgreementHistory | null>(null);
+  const [showAgreementHistory, setShowAgreementHistory] = useState(false);
+  const [evaluatingAgreement, setEvaluatingAgreement] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -371,6 +394,8 @@ export default function SimulationPage() {
                       }
                     : null;
 
+                  const evalResult: AgreementEvaluation | undefined = data.agreement_evaluation;
+
                   setCurrentSimulation(prev => {
                     if (!prev) return prev;
                     return {
@@ -378,9 +403,18 @@ export default function SimulationPage() {
                       status: data.simulation_status ?? prev.status,
                       current_turn: data.current_turn ?? prev.current_turn,
                       tokens_used: data.tokens_used ?? prev.tokens_used,
-                      messages: finalized ? [...prev.messages, finalized] : prev.messages
+                      messages: finalized ? [...prev.messages, finalized] : prev.messages,
+                      latest_agreement_score: evalResult?.overall_agreement_score ?? prev.latest_agreement_score,
+                      agreement_reached: evalResult?.agreement_reached ?? prev.agreement_reached
                     };
                   });
+
+                  if (evalResult) {
+                    setAgreementHistory(prev => {
+                      if (!prev) return null;
+                      return { ...prev, evaluations: [...prev.evaluations, evalResult] };
+                    });
+                  }
 
                   setStreamingMessage(null);
                   setRunning(false);
@@ -449,7 +483,9 @@ export default function SimulationPage() {
         goal_context: goalContext || undefined,
         participants,
         max_turns: maxTurns,
-        max_duration_seconds: maxDurationSeconds
+        max_duration_seconds: maxDurationSeconds,
+        run_until_agreement: runUntilAgreement || undefined,
+        agreement_threshold: runUntilAgreement ? agreementThreshold : undefined
       });
 
       setCurrentSimulation(simulation);
@@ -570,19 +606,51 @@ export default function SimulationPage() {
     }
   };
 
+  const handleEvaluateAgreement = async () => {
+    if (!currentSimulation) return;
+    setEvaluatingAgreement(true);
+    try {
+      await simulationsApi.evaluateAgreement(currentSimulation.id);
+      const updated = await simulationsApi.getById(currentSimulation.id);
+      setCurrentSimulation(updated);
+      const history = await simulationsApi.getAgreementHistory(currentSimulation.id);
+      setAgreementHistory(history);
+      setShowAgreementHistory(true);
+    } catch (error: any) {
+      alert(`Failed to evaluate agreement: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setEvaluatingAgreement(false);
+    }
+  };
+
+  const handleLoadAgreementHistory = async () => {
+    if (!currentSimulation) return;
+    try {
+      const history = await simulationsApi.getAgreementHistory(currentSimulation.id);
+      setAgreementHistory(history);
+      setShowAgreementHistory(true);
+    } catch (error: any) {
+      console.error('Failed to load agreement history:', error);
+    }
+  };
+
   const handleNewSimulation = () => {
     closeStream();
     setStreamingMessage(null);
     setCurrentSimulation(null);
     setShowSetup(true);
     setSelectedPersonas(new Map());
+    setExpandedSetIds(new Set());
     setName('');
     setGoal('');
     setGoalContext('');
+    setRunUntilAgreement(false);
+    setAgreementThreshold(0.7);
+    setAgreementHistory(null);
+    setShowAgreementHistory(false);
     navigate('/simulations');
   };
 
-  const selectedSet = personaSets.find(s => s.id === selectedSetId);
   const displayMessages =
     currentSimulation && streamingMessage
       ? [...currentSimulation.messages, streamingMessage]
@@ -657,7 +725,24 @@ export default function SimulationPage() {
                       <span>{sim.participant_count}</span>
                       <MessageSquare className="w-3 h-3 ml-2" />
                       <span>{sim.current_turn}/{sim.max_turns}</span>
+                      {sim.run_until_agreement && (
+                        <TrendingUp className="w-3 h-3 ml-1 text-purple-300" title="Run until agreement" />
+                      )}
                     </div>
+                    {sim.latest_agreement_score !== undefined && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="flex-1 bg-white/10 rounded-full h-1">
+                          <div
+                            className={`h-1 rounded-full ${sim.agreement_reached ? 'bg-teal-400' : 'bg-purple-400'}`}
+                            style={{ width: `${Math.min(sim.latest_agreement_score * 100, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-white/50">
+                          {(sim.latest_agreement_score * 100).toFixed(0)}%
+                          {sim.agreement_reached && ' ✓'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -717,7 +802,7 @@ export default function SimulationPage() {
                 />
               </div>
 
-              {/* Limits - simulation stops when either limit is reached */}
+              {/* Limits */}
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-white/90 mb-3">
                   Simulation Limits (stops when either is reached)
@@ -763,53 +848,106 @@ export default function SimulationPage() {
                 </p>
               </div>
 
-              {/* Persona Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-white/90 mb-2">
-                  <Users className="w-4 h-4 inline mr-1" />
-                  Select Persona Set
+              {/* Agreement Mode */}
+              <div className="mb-6 p-4 bg-white/10 rounded-xl border border-white/20">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={runUntilAgreement}
+                    onChange={(e) => setRunUntilAgreement(e.target.checked)}
+                    className="accent-purple-400 w-4 h-4"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-white flex items-center gap-1">
+                      <TrendingUp className="w-4 h-4 inline" />
+                      Run until agreement
+                    </span>
+                    <p className="text-xs text-white/60 mt-0.5">
+                      Continue beyond max turns until personas reach the alignment threshold
+                    </p>
+                  </div>
                 </label>
-                <select
-                  value={selectedSetId || ''}
-                  onChange={(e) => {
-                    setSelectedSetId(parseInt(e.target.value) || null);
-                    setSelectedPersonas(new Map());
-                  }}
-                  className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50"
-                >
-                  <option value="">Select a persona set...</option>
-                  {personaSets.map(set => (
-                    <option key={set.id} value={set.id}>
-                      {set.name} ({set.personas.length} personas)
-                    </option>
-                  ))}
-                </select>
+                {runUntilAgreement && (
+                  <div className="mt-4">
+                    <label className="block text-sm text-white/70 mb-2">
+                      Agreement threshold: <span className="text-white font-semibold">{(agreementThreshold * 100).toFixed(0)}%</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0.1}
+                      max={1.0}
+                      step={0.05}
+                      value={agreementThreshold}
+                      onChange={(e) => setAgreementThreshold(parseFloat(e.target.value))}
+                      className="w-full accent-purple-400"
+                    />
+                    <div className="flex justify-between text-xs text-white/50 mt-1">
+                      <span>10% (loose)</span>
+                      <span>100% (full)</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {selectedSet && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-medium text-white/90">
-                      Select Participants (2-8 personas)
-                    </label>
-                    <span className="text-sm text-white/60">
-                      {selectedPersonas.size} selected
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-2">
-                    {selectedSet.personas.map(persona => (
-                      <SelectablePersonaCard
-                        key={persona.id}
-                        persona={persona}
-                        isSelected={selectedPersonas.has(persona.id)}
-                        role={selectedPersonas.get(persona.id) || ''}
-                        onToggle={() => handlePersonaToggle(persona.id)}
-                        onRoleChange={(role) => handleRoleChange(persona.id, role)}
-                      />
-                    ))}
-                  </div>
+              {/* Persona Selection — pick from any set */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-white/90 flex items-center gap-1">
+                    <Users className="w-4 h-4" />
+                    Select Participants (2–8 personas, mix from any set)
+                  </label>
+                  <span className="text-sm text-white/60">{selectedPersonas.size} selected</span>
                 </div>
-              )}
+
+                {personaSets.length === 0 ? (
+                  <p className="text-white/50 text-sm">No persona sets found.</p>
+                ) : (
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                    {personaSets.map(set => {
+                      const isExpanded = expandedSetIds.has(set.id);
+                      const selectedInSet = set.personas.filter(p => selectedPersonas.has(p.id)).length;
+                      return (
+                        <div key={set.id} className="border border-white/20 rounded-xl overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = new Set(expandedSetIds);
+                              isExpanded ? next.delete(set.id) : next.add(set.id);
+                              setExpandedSetIds(next);
+                            }}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-white/10 hover:bg-white/15 transition-colors text-left"
+                          >
+                            <span className="text-sm font-medium text-white">
+                              {set.name}
+                              <span className="ml-2 text-white/50 font-normal">({set.personas.length} personas)</span>
+                              {selectedInSet > 0 && (
+                                <span className="ml-2 text-xs bg-purple-400/40 text-purple-200 px-2 py-0.5 rounded-full">
+                                  {selectedInSet} selected
+                                </span>
+                              )}
+                            </span>
+                            {isExpanded ? <ChevronDown className="w-4 h-4 text-white/60" /> : <ChevronRight className="w-4 h-4 text-white/60" />}
+                          </button>
+                          {isExpanded && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3">
+                              {set.personas.map(persona => (
+                                <SelectablePersonaCard
+                                  key={persona.id}
+                                  persona={persona}
+                                  isSelected={selectedPersonas.has(persona.id)}
+                                  role={selectedPersonas.get(persona.id) || ''}
+                                  onToggle={() => handlePersonaToggle(persona.id)}
+                                  onRoleChange={(role) => handleRoleChange(persona.id, role)}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               {/* Create Button */}
               <button
@@ -840,7 +978,7 @@ export default function SimulationPage() {
                     <h3 className="text-xl font-semibold text-white">{currentSimulation.name}</h3>
                     <p className="text-white/80 mt-1">{currentSimulation.goal}</p>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 flex-wrap justify-end">
                     {/* Status Badge */}
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                       currentSimulation.status === 'completed' ? 'bg-green-400/30 text-green-300' :
@@ -851,13 +989,29 @@ export default function SimulationPage() {
                       {currentSimulation.status}
                     </span>
 
-                    {/* Download JSON - only when simulation is completed */}
+                    {/* Agreement reached badge */}
+                    {currentSimulation.agreement_reached && (
+                      <span className="px-3 py-1 rounded-full text-sm font-medium bg-teal-400/30 text-teal-200 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Agreement reached
+                      </span>
+                    )}
+
+                    {/* Agreement mode indicator */}
+                    {currentSimulation.run_until_agreement && !currentSimulation.agreement_reached && (
+                      <span className="px-3 py-1 rounded-full text-sm bg-purple-400/20 text-purple-200 flex items-center gap-1">
+                        <TrendingUp className="w-3.5 h-3.5" />
+                        Until {(currentSimulation.agreement_threshold * 100).toFixed(0)}% agreement
+                      </span>
+                    )}
+
+                    {/* Download JSON */}
                     {currentSimulation.status === 'completed' && (
                       <button
                         type="button"
                         onClick={handleDownloadSimulation}
                         className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-sm font-medium transition-all duration-200 flex items-center gap-2"
-                        title="Download simulation as JSON (setup, conversations, summaries)"
+                        title="Download simulation as JSON"
                       >
                         <Download className="w-4 h-4" />
                         Download JSON
@@ -887,10 +1041,44 @@ export default function SimulationPage() {
                         <PersonaAvatar name={p.persona_name} imageUrl={p.persona_image_url} personaId={p.persona_id} size="sm" showBorder={false} />
                         <span className="text-sm text-white">{p.persona_name}</span>
                         {p.role && <span className="text-xs text-white/60">({p.role})</span>}
+                        {p.persona_set_name && (
+                          <span className="text-xs text-white/40 italic">{p.persona_set_name}</span>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
+
+                {/* Agreement score bar */}
+                {currentSimulation.latest_agreement_score !== undefined && (
+                  <div className="mt-3 pt-3 border-t border-white/20">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-white/70 flex items-center gap-1">
+                        <Activity className="w-3 h-3" />
+                        Agreement score
+                      </span>
+                      <span className="text-xs text-white font-semibold">
+                        {(currentSimulation.latest_agreement_score * 100).toFixed(0)}%
+                        {currentSimulation.run_until_agreement && (
+                          <span className="text-white/50 font-normal ml-1">
+                            / {(currentSimulation.agreement_threshold * 100).toFixed(0)}% target
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="w-full bg-white/10 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-500 ${
+                          currentSimulation.agreement_reached ? 'bg-teal-400' :
+                          currentSimulation.latest_agreement_score > 0.6 ? 'bg-green-400' :
+                          currentSimulation.latest_agreement_score > 0.3 ? 'bg-yellow-400' :
+                          'bg-red-400'
+                        }`}
+                        style={{ width: `${Math.min(currentSimulation.latest_agreement_score * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Controls */}
@@ -957,6 +1145,28 @@ export default function SimulationPage() {
                     Auto-continue turns
                   </label>
                 </div>
+
+                {currentSimulation.messages.length > 0 && (
+                  <button
+                    onClick={handleEvaluateAgreement}
+                    disabled={evaluatingAgreement || running}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
+                    title="Evaluate agreement among personas at this point"
+                  >
+                    {evaluatingAgreement ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+                    Evaluate Agreement
+                  </button>
+                )}
+
+                {agreementHistory && agreementHistory.evaluations.length > 0 && (
+                  <button
+                    onClick={() => setShowAgreementHistory(v => !v)}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
+                  >
+                    <TrendingUp className="w-4 h-4" />
+                    {showAgreementHistory ? 'Hide' : 'Show'} History
+                  </button>
+                )}
 
                 {(currentSimulation.status === 'completed' || currentSimulation.status === 'stopped') &&
                   currentSimulation.messages.length > 0 &&
@@ -1031,6 +1241,75 @@ export default function SimulationPage() {
                   </div>
                 )}
               </div>
+
+              {/* Agreement History Panel */}
+              {showAgreementHistory && agreementHistory && agreementHistory.evaluations.length > 0 && (
+                <div className="glass-card rounded-2xl p-6 pastel-purple">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5" />
+                      Agreement History
+                    </h4>
+                    <span className="text-sm text-white/60">
+                      Target: {(agreementHistory.agreement_threshold * 100).toFixed(0)}%
+                      {agreementHistory.agreement_reached && (
+                        <span className="ml-2 text-teal-300">✓ Reached</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Score timeline */}
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                    {agreementHistory.evaluations.map((ev) => (
+                      <div key={ev.id} className="bg-white/10 rounded-xl p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-white">Turn {ev.turn_number}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-white font-semibold">
+                              {(ev.overall_agreement_score * 100).toFixed(0)}%
+                            </span>
+                            {ev.agreement_reached && (
+                              <span className="text-xs bg-teal-400/30 text-teal-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" /> Reached
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="w-full bg-white/10 rounded-full h-2 mb-2">
+                          <div
+                            className={`h-2 rounded-full transition-all ${
+                              ev.agreement_reached ? 'bg-teal-400' :
+                              ev.overall_agreement_score > 0.6 ? 'bg-green-400' :
+                              ev.overall_agreement_score > 0.3 ? 'bg-yellow-400' :
+                              'bg-red-400'
+                            }`}
+                            style={{ width: `${Math.min(ev.overall_agreement_score * 100, 100)}%` }}
+                          />
+                        </div>
+                        {ev.persona_stances && Object.keys(ev.persona_stances).length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {Object.values(ev.persona_stances).map((stance) => (
+                              <div key={stance.persona_name} className="flex items-center justify-between text-xs text-white/70">
+                                <span className="truncate max-w-[60%]">{stance.persona_name}</span>
+                                <span className={`${
+                                  stance.drift_score > 0.6 ? 'text-red-300' :
+                                  stance.drift_score > 0.3 ? 'text-yellow-300' :
+                                  'text-green-300'
+                                }`}>
+                                  drift {(stance.drift_score * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {ev.evaluation_reasoning && (
+                          <p className="text-xs text-white/50 mt-2 italic line-clamp-2">{ev.evaluation_reasoning}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Summary - per persona then key insights & action items as before */}
               {(currentSimulation.persona_summaries?.length || currentSimulation.summary) && (
