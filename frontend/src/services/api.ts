@@ -204,11 +204,16 @@ export const simulationsApi = {
     name: string;
     goal: string;
     goal_context?: string;
+    /** Personas may come from different persona sets */
     participants: Array<{ persona_id: number; role?: string }>;
     max_duration_seconds?: number;
     max_tokens?: number;
     max_turns?: number;
     project_id?: number;
+    /** Keep running beyond max_turns until agreement threshold is reached */
+    run_until_agreement?: boolean;
+    /** 0.0–1.0 pairwise alignment score required to stop */
+    agreement_threshold?: number;
   }) => {
     const response = await api.post('/simulations/', request);
     return response.data;
@@ -255,7 +260,7 @@ export const simulationsApi = {
     return response.data;
   },
 
-  /** Get full simulation export (setup, conversations, summaries) for download as JSON */
+  /** Get full simulation export (setup, conversations, summaries, agreement history) */
   getDownload: async (id: number) => {
     const response = await api.get(`/simulations/${id}/download`);
     return response.data;
@@ -263,6 +268,25 @@ export const simulationsApi = {
 
   delete: async (id: number) => {
     await api.delete(`/simulations/${id}`);
+  },
+
+  /**
+   * Return the full time-series agreement history for a simulation.
+   * Each entry is a snapshot taken after a complete round showing overall score,
+   * per-persona drift, and pairwise alignment.
+   */
+  getAgreementHistory: async (id: number) => {
+    const response = await api.get(`/simulations/${id}/agreement-history`);
+    return response.data;
+  },
+
+  /**
+   * Manually trigger an agreement evaluation at the current turn.
+   * Works regardless of whether run_until_agreement is enabled.
+   */
+  evaluateAgreement: async (id: number) => {
+    const response = await api.post(`/simulations/${id}/evaluate-agreement`);
+    return response.data;
   },
 };
 

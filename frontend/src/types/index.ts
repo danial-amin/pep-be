@@ -205,11 +205,16 @@ export interface SimulationCreateRequest {
   name: string;
   goal: string;
   goal_context?: string;
+  /** Personas may come from different persona sets — mix freely */
   participants: SimulationParticipantConfig[];
   max_duration_seconds?: number;
   max_tokens?: number;
   max_turns?: number;
   project_id?: number;
+  /** Keep running beyond max_turns until agreement_threshold is reached */
+  run_until_agreement?: boolean;
+  /** 0.0–1.0 pairwise alignment score needed to stop when run_until_agreement=true */
+  agreement_threshold?: number;
 }
 
 export interface SimulationMessage {
@@ -222,6 +227,8 @@ export interface SimulationMessage {
   tokens: number;
   is_moderator_message: boolean;
   is_human_message?: boolean;
+  /** Populated asynchronously by evaluator; 0=on-persona, 1=fully drifted */
+  persona_drift_score?: number;
   created_at: string;
 }
 
@@ -230,6 +237,9 @@ export interface SimulationParticipant {
   persona_id: number;
   persona_name: string;
   persona_image_url?: string;
+  /** Which persona set this participant came from */
+  persona_set_id?: number;
+  persona_set_name?: string;
   role?: string;
   messages_count: number;
   tokens_used: number;
@@ -241,6 +251,40 @@ export interface PersonaSummaryEntry {
   summary: string;
 }
 
+// ─── Agreement evaluation types ──────────────────────────────────────────────
+
+export interface PersonaStanceDetail {
+  persona_name: string;
+  initial_stance: string;
+  current_stance: string;
+  /** 0.0 = unchanged, 1.0 = completely shifted from original */
+  drift_score: number;
+  /** Pairwise alignment with every other persona keyed by string persona_id */
+  alignment_scores: Record<string, number>;
+}
+
+export interface AgreementEvaluation {
+  id: number;
+  simulation_id: number;
+  turn_number: number;
+  /** 0.0 = complete disagreement, 1.0 = full agreement */
+  overall_agreement_score: number;
+  agreement_reached: boolean;
+  /** Keyed by string persona_id */
+  persona_stances?: Record<string, PersonaStanceDetail>;
+  evaluation_reasoning?: string;
+  created_at: string;
+}
+
+export interface AgreementHistory {
+  simulation_id: number;
+  agreement_threshold: number;
+  agreement_reached: boolean;
+  evaluations: AgreementEvaluation[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface Simulation {
   id: number;
   name: string;
@@ -249,9 +293,14 @@ export interface Simulation {
   max_duration_seconds: number;
   max_tokens: number;
   max_turns: number;
+  run_until_agreement: boolean;
+  agreement_threshold: number;
   status: 'pending' | 'running' | 'completed' | 'stopped';
   current_turn: number;
   tokens_used: number;
+  /** Latest agreement snapshot score, if any evaluation has been run */
+  latest_agreement_score?: number;
+  agreement_reached: boolean;
   started_at?: string;
   completed_at?: string;
   summary?: string;
@@ -275,6 +324,9 @@ export interface SimulationListItem {
   tokens_used: number;
   max_tokens: number;
   participant_count: number;
+  run_until_agreement: boolean;
+  latest_agreement_score?: number;
+  agreement_reached: boolean;
   started_at?: string;
   completed_at?: string;
   created_at: string;
@@ -288,6 +340,8 @@ export interface SimulationTurnResponse {
   tokens_remaining: number;
   turns_remaining: number;
   is_complete: boolean;
+  /** Populated when a full round just completed in run_until_agreement mode */
+  agreement_evaluation?: AgreementEvaluation;
 }
 
 export interface SimulationSummary {
