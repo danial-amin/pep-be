@@ -623,17 +623,6 @@ export default function SimulationPage() {
     }
   };
 
-  const handleLoadAgreementHistory = async () => {
-    if (!currentSimulation) return;
-    try {
-      const history = await simulationsApi.getAgreementHistory(currentSimulation.id);
-      setAgreementHistory(history);
-      setShowAgreementHistory(true);
-    } catch (error: any) {
-      console.error('Failed to load agreement history:', error);
-    }
-  };
-
   const handleNewSimulation = () => {
     closeStream();
     setStreamingMessage(null);
@@ -726,7 +715,9 @@ export default function SimulationPage() {
                       <MessageSquare className="w-3 h-3 ml-2" />
                       <span>{sim.current_turn}/{sim.max_turns}</span>
                       {sim.run_until_agreement && (
-                        <TrendingUp className="w-3 h-3 ml-1 text-purple-300" title="Run until agreement" />
+                        <span title="Run until agreement">
+                          <TrendingUp className="w-3 h-3 ml-1 text-purple-300" />
+                        </span>
                       )}
                     </div>
                     {sim.latest_agreement_score !== undefined && (
