@@ -1,0 +1,255 @@
+{
+    "personas": [
+      {
+        "persona_id": "persona_001",
+        "name": "Dr. Jameela Jamil",
+        "tagline": "I need AI that can think like a specialist and communicate like a human.",
+        "demographics": {
+          "age": 42,
+          "location": {
+            "city": "Unknown",
+            "country": "Regional (Middle Eastern Context)"
+          },
+          "occupation": "Researcher and PhD Program Coordinator at the College of Human and Social Sciences",
+          "education": "Doctorate (PhD)"
+        },
+        "background": "Dr. Jameela Jamil is a highly analytical academic and researcher working as a Researcher and PhD Program Coordinator at the College of Human and Social Sciences. She expects AI systems to do more than provide generic answers, and instead wants them to adopt distinct professional perspectives such as a general user, a specialist, a biologist, or a sustainability expert. She uses LinkedIn and Instagram as part of her professional advocacy work, helping translate scientific research into broader social awareness. She values scientific rigor, but also wants responses to be rewritten in a human-like style that makes academic knowledge more engaging and accessible to the public.",
+        "goals": [
+          "Access responses framed from different expert perspectives",
+          "Maintain scientific accuracy in AI-supported outputs",
+          "Translate academic research into socially engaging public content",
+          "Use AI to bridge technical depth and public awareness"
+        ],
+        "frustrations": [
+          "AI tools that respond too generally to specialist questions",
+          "Outputs that lack scientific nuance or perspective switching",
+          "Responses that are accurate but stylistically too robotic for public engagement",
+          "Difficulty balancing technical rigor with accessible communication"
+        ],
+        "technology_profile": {
+          "primary_devices": [
+            "Laptop",
+            "Smartphone",
+            "Tablet"
+          ],
+          "comfort_level": "Advanced",
+          "software_used": [
+            "LinkedIn",
+            "Instagram",
+            "Academic research tools",
+            "Document editors"
+          ],
+          "interaction_preferences": [
+            "Prefers text for verifying scientific data and citations",
+            "Values human-like stylistic rewriting for public-facing outputs",
+            "Likes comparing outputs from multiple professional viewpoints",
+            "Uses AI iteratively for both accuracy and tone refinement"
+          ],
+          "accessibility_needs": []
+        },
+        "quote": "I'm interested to get the prompts from different perspectives, like what the chatbot knows as a general user and as the specialist, as a biologist... and also as the sustainable scenario."
+      },
+      {
+        "persona_id": "persona_002",
+        "name": "Professor Jeff",
+        "tagline": "Give me the big picture clearly, privately, and without artificial friction.",
+        "demographics": {
+          "age": 70,
+          "location": {
+            "city": "Unknown",
+            "country": "Canada"
+          },
+          "occupation": "Executive Director and Senior Lecturer",
+          "education": "Doctorate (MD/PhD)"
+        },
+        "background": "Professor Jeff is an unconventional thinker, senior academic, and executive leader who values pragmatic insight and broad context over overly guided or bot-driven interactions. He is privacy-conscious and avoids active social media participation because of concerns about data harvesting, manipulation, and loss of autonomy. Although he is critical of many digital platforms, he has a strong preference for audio-based learning and often listens to podcasts at 1.5x or 2x speed so they feel more natural and efficient. He wants AI to support oral information digestion while preserving user control and minimizing robotic delivery.",
+        "goals": [
+          "Absorb big-picture insights quickly and efficiently",
+          "Protect personal privacy while using digital tools",
+          "Use audio to consume information in a natural, high-speed format",
+          "Avoid bot-led questioning that slows down the exchange"
+        ],
+        "frustrations": [
+          "Social platforms that harvest data and manipulate users",
+          "AI systems that ask too many questions instead of providing answers",
+          "Robotic or unnatural voice experiences",
+          "Interactions that reduce his control over pace and direction"
+        ],
+        "technology_profile": {
+          "primary_devices": [
+            "Laptop",
+            "Smartphone",
+            "Audio devices"
+          ],
+          "comfort_level": "Advanced",
+          "software_used": [
+            "Podcast apps",
+            "Professional communication tools",
+            "Secure browsing tools"
+          ],
+          "interaction_preferences": [
+            "Strong preference for audio features",
+            "Listens to spoken content at 1.5x to 2x speed",
+            "Prefers concise, big-picture delivery",
+            "Avoids active social media posting due to privacy concerns"
+          ],
+          "accessibility_needs": []
+        },
+        "quote": "I avoid the social media because I hate the corruption underlying everything... They're harvesting data to manipulate you... I just don't like that much invasion of my privacy."
+      },
+      {
+        "persona_id": "persona_003",
+        "name": "Dr. Bashir",
+        "tagline": "Turn long documents into useful summaries that save me hours of work.",
+        "demographics": {
+          "age": 51,
+          "location": {
+            "city": "Unknown",
+            "country": "Regional (Middle Eastern Context)"
+          },
+          "occupation": "Economist and Researcher at Education Above All",
+          "education": "Post-Doctorate"
+        },
+        "background": "Dr. Bashir is an economist and researcher at Education Above All who treats AI as a personal peer, mentor, and productivity partner. His work involves reviewing long and complex documents, and he sees significant value in using AI to summarize 20- to 30-page materials into concise, digestible outputs. He is professionally active, uses LinkedIn for networking, and is especially interested in tools that can reduce manual effort while improving daily workflow. He also values speech-to-text and text-to-speech integration as part of a larger vision for continuous knowledge enhancement and research support.",
+        "goals": [
+          "Summarize long documents into digestible insights",
+          "Reduce hours of manual reading and synthesis",
+          "Use AI as a personal peer for daily productivity",
+          "Integrate audio and text workflows into research practice"
+        ],
+        "frustrations": [
+          "Manual review of lengthy documents that takes too much time",
+          "AI tools that fail to extract the core message accurately",
+          "Workflows that separate summarization from speech capabilities",
+          "Systems that are not practical for day-to-day professional use"
+        ],
+        "technology_profile": {
+          "primary_devices": [
+            "Laptop",
+            "Desktop computer",
+            "Smartphone"
+          ],
+          "comfort_level": "Advanced",
+          "software_used": [
+            "LinkedIn",
+            "Office productivity tools",
+            "Document readers",
+            "Research platforms"
+          ],
+          "interaction_preferences": [
+            "Prefers text for reviewing extracted summaries",
+            "Values speech-to-text and text-to-speech integration",
+            "Uses AI as a professional assistant and thought partner",
+            "Wants concise outputs that can immediately support work tasks"
+          ],
+          "accessibility_needs": []
+        },
+        "quote": "I would love to use this one for my day to day work... extracting information from a 20 or 30 page document which takes two hours of my time... and use this tool to extract a summary."
+      },
+      {
+        "persona_id": "persona_004",
+        "name": "Professor Habib",
+        "tagline": "I value friendly AI, but only when it stays accurate and text-based enough to verify.",
+        "demographics": {
+          "age": 58,
+          "location": {
+            "city": "Unknown",
+            "country": "Tunisia"
+          },
+          "occupation": "Physics Professor and Researcher",
+          "education": "Doctorate (PhD)"
+        },
+        "background": "Professor Habib is a highly technical academic who prioritizes correctness, validation, and alignment with trusted learning materials. As a physics professor and researcher, he approaches AI with the expectation that it should simplify difficult concepts without sacrificing scientific reliability. His social media use is limited, and he mainly relies on professional channels to disseminate his research. He finds text to be the most natural and dependable way to learn and verify information, though he appreciates AI interactions that feel friendly and realistic when explaining complex mechanisms.",
+        "goals": [
+          "Verify explanations against trusted learning materials",
+          "Use AI to clarify complex scientific mechanisms",
+          "Maintain depth and correctness in technical learning",
+          "Rely on text for careful review and validation"
+        ],
+        "frustrations": [
+          "Audio-only formats that move too fast for technical depth",
+          "Simplified explanations that reduce scientific accuracy",
+          "Systems that feel engaging but are hard to verify",
+          "Interfaces that do not support careful text-based checking"
+        ],
+        "technology_profile": {
+          "primary_devices": [
+            "Laptop",
+            "Desktop computer",
+            "Smartphone"
+          ],
+          "comfort_level": "Advanced",
+          "software_used": [
+            "Academic portals",
+            "Research databases",
+            "Professional dissemination platforms",
+            "Document readers"
+          ],
+          "interaction_preferences": [
+            "Strongly prefers text for deep learning and verification",
+            "Uses AI to simplify technical ideas while preserving correctness",
+            "Appreciates friendly and realistic interaction styles",
+            "Relies on text as the primary learning modality"
+          ],
+          "accessibility_needs": []
+        },
+        "quote": "For me, [text is] something very natural... this is the old fashioned and then the best way of learning and performing... although it's very easy to read here, but okay, a text is better."
+      },
+      {
+        "persona_id": "persona_005",
+        "name": "Dean Marcus",
+        "tagline": "The best educational AI combines engagement, accessibility, and multimodal learning.",
+        "demographics": {
+          "age": 63,
+          "location": {
+            "city": "Unknown",
+            "country": "International Background"
+          },
+          "occupation": "Dean of the University",
+          "education": "Doctorate"
+        },
+        "background": "Dean Marcus is a senior university leader who thinks about technology in terms of educational impact across a wide range of stakeholders. He is especially interested in how AI can support students with learning disabilities and enable more personalized learning pathways. His experience makes him attentive to the engagement quality of educational materials, and he is critical of monotone or flat audio experiences. He prefers multimodal interaction, particularly formats that combine listening with synchronized reading, because the dual input helps him focus and stay engaged.",
+        "goals": [
+          "Support more personalized learning paths for students",
+          "Improve accessibility for learners with different needs",
+          "Use AI to communicate effectively with diverse university stakeholders",
+          "Promote multimodal educational experiences that improve focus"
+        ],
+        "frustrations": [
+          "Monotone audio that fails to engage learners",
+          "Single-mode content that does not support different learning needs",
+          "Educational tools that ignore accessibility concerns",
+          "Experiences that do not sustain attention or focus"
+        ],
+        "technology_profile": {
+          "primary_devices": [
+            "Laptop",
+            "Tablet",
+            "Smartphone"
+          ],
+          "comfort_level": "Advanced",
+          "software_used": [
+            "University communication systems",
+            "Presentation tools",
+            "Educational technology platforms"
+          ],
+          "interaction_preferences": [
+            "Prefers multimodal experiences combining audio and text",
+            "Values synchronized reading while listening",
+            "Evaluates tools through accessibility and engagement",
+            "Looks for learning experiences that improve focus"
+          ],
+          "accessibility_needs": [
+            "Values features that support learners with disabilities and different learning preferences"
+          ]
+        },
+        "quote": "I prefer the audio podcast. If the podcast didn't have the writing as you go, like reading as you go, I wouldn't prefer it... because I hear it and I read it, I'm choosing it."
+      }
+    ],
+    "metadata": {
+      "total_count": 5,
+      "generation_date": "2026-03-26",
+      "context": "Educator personas converted from source transcript-based profiles into structured design-persona format",
+      "note": "These personas are design empathy tools, not user profiles for automated decision-making"
+    }
+  }

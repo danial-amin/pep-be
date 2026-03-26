@@ -31,9 +31,18 @@ async def enqueue_document_job(document_id: int) -> None:
     Call this after storing the file and creating the pending document record.
     """
     redis_settings = _parse_redis_url(settings.REDIS_URL)
-    redis = await create_pool(redis_settings)
+    # IMPORTANT: Ensure the enqueue queue matches the worker queue name.
+    # The worker listens on "arq:document_queue" (see app/workers/document_tasks.py).
+    redis = await create_pool(
+        redis_settings,
+        default_queue_name="arq:document_queue",
+    )
     try:
-        job = await redis.enqueue_job("process_document_task", document_id)
+        job = await redis.enqueue_job(
+            "process_document_task",
+            document_id,
+            _queue_name="arq:document_queue",
+        )
         logger.info("Enqueued document job %s for document_id=%s", job and job.job_id, document_id)
     finally:
         await redis.close()
