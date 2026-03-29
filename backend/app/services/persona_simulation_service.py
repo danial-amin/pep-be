@@ -21,8 +21,7 @@ Key design principles (all production defaults):
   6. ADDRESSEE INSTRUCTION: agents name at least one other participant in
      each turn, making cross-group vs within-group exchange recoverable
      from the transcript without modifying speaker-selection logic.
-  7. TOKEN BUDGET: 300 tokens per turn (≈100-120 words), sufficient for
-     reliable stance classification.
+  7. TOKEN BUDGET: SIMULATION_MAX_OUTPUT_TOKENS per turn (default 200), capped in code.
   8. NO PERIODIC REMINDER: CORE IDENTITY ANCHOR in the system prompt does
      the stability work; a mid-conversation reminder is a confound.
 """
@@ -45,10 +44,8 @@ from app.utils.token_utils import estimate_tokens
 logger = logging.getLogger(__name__)
 
 # ─── Token budget ──────────────────────────────────────────────────────────────
-# 300 tokens ≈ 100-120 words. Below ~80 words, stance classification is
-# unreliable because turns lack enough context to distinguish maintaining
-# from abandoning. Do not lower this without re-validating the classifier.
-_MAX_TOKENS = 300
+# Output cap per turn comes from settings.SIMULATION_MAX_OUTPUT_TOKENS (default 200).
+# Count only completion tokens toward simulation.tokens_used (not full prompt+completion).
 
 # ─── Group mandates ────────────────────────────────────────────────────────────
 # Injected into the system prompt when a participant carries a known role.
@@ -78,6 +75,11 @@ class PersonaSimulationService:
 
     def __init__(self):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
+    @staticmethod
+    def _max_output_tokens() -> int:
+        n = getattr(settings, "SIMULATION_MAX_OUTPUT_TOKENS", 200)
+        return max(50, min(int(n), 1024))
 
     # ──────────────────────────────────────────────────────────────────────────
     # Prompt building
@@ -432,8 +434,6 @@ state the argument that persuaded you. Write 100-120 words."""
         if simulation.status in ("completed", "stopped"):
             return None
 
-        run_until = getattr(simulation, "run_until_agreement", False)
-
         if simulation.current_turn >= simulation.max_turns:
             simulation.status = "completed"
             simulation.completed_at = datetime.now(timezone.utc)
@@ -525,13 +525,17 @@ state the argument that persuaded you. Write 100-120 words."""
                     *conversation_context,
                 ],
                 temperature=temperature,
-                max_tokens=_MAX_TOKENS,
+                max_tokens=self._max_output_tokens(),
                 presence_penalty=0.3,
                 frequency_penalty=0.3,
             )
 
-            content    = response.choices[0].message.content
-            tokens_used = response.usage.total_tokens if response.usage else estimate_tokens(content)
+            content = response.choices[0].message.content
+            # Count completion only (prompt is huge; total_tokens would hit caps in ~1–2 turns)
+            if response.usage and response.usage.completion_tokens is not None:
+                tokens_used = response.usage.completion_tokens
+            else:
+                tokens_used = estimate_tokens(content)
 
             message = SimulationMessage(
                 simulation_id=simulation.id,
@@ -823,27 +827,13 @@ Respond in JSON format:
             yield {"type": "error", "message": "Simulation is not active"}
             return
 
-        run_until = getattr(simulation, "run_until_agreement", False)
-        if not run_until and simulation.current_turn >= simulation.max_turns:
+        if simulation.current_turn >= simulation.max_turns:
             simulation.status = "completed"
             simulation.completed_at = datetime.now(timezone.utc)
             await session.commit()
             yield {
                 "type": "complete",
                 "reason": "max_turns_reached",
-                "simulation_status": simulation.status,
-                "current_turn": simulation.current_turn,
-                "tokens_used": simulation.tokens_used,
-            }
-            return
-
-        if simulation.max_tokens and simulation.tokens_used >= simulation.max_tokens:
-            simulation.status = "completed"
-            simulation.completed_at = datetime.now(timezone.utc)
-            await session.commit()
-            yield {
-                "type": "complete",
-                "reason": "max_tokens_reached",
                 "simulation_status": simulation.status,
                 "current_turn": simulation.current_turn,
                 "tokens_used": simulation.tokens_used,
@@ -935,7 +925,7 @@ Respond in JSON format:
                     *conversation_context,
                 ],
                 temperature=temperature,
-                max_tokens=_MAX_TOKENS,
+                max_tokens=self._max_output_tokens(),
                 stream=True,
             )
 
@@ -964,16 +954,9 @@ Respond in JSON format:
                     p.tokens_used    += tokens_used
                     break
 
-            if not run_until:
-                if simulation.current_turn >= simulation.max_turns or (
-                    simulation.max_tokens and simulation.tokens_used >= simulation.max_tokens
-                ):
-                    simulation.status = "completed"
-                    simulation.completed_at = datetime.now(timezone.utc)
-            else:
-                if simulation.current_turn >= simulation.max_turns:
-                    simulation.status = "completed"
-                    simulation.completed_at = datetime.now(timezone.utc)
+            if simulation.current_turn >= simulation.max_turns:
+                simulation.status = "completed"
+                simulation.completed_at = datetime.now(timezone.utc)
 
             await session.commit()
 

@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: Union[str, List[str]] = ["*"]
+
+    # Persona simulation: max output tokens per persona message (API max_tokens).
+    # Lower = shorter replies and lower cost; too low may truncate stance-taking.
+    SIMULATION_MAX_OUTPUT_TOKENS: int = 200
     
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod
