@@ -1,26 +1,34 @@
 """
 Persona Simulation Service - orchestrates multi-persona LLM conversations.
 
-This service enables multiple persona-infused LLMs to converse with each other
-towards a common goal, with configurable duration, token limits, and optional
-agreement-based termination.
+This service enables multiple persona-infused LLMs to conduct structured
+simulations of discussion, with each agent grounded in behavioral data via RAG.
 
-RESEARCH MODE CHANGES (flagged with # [RESEARCH]):
-  1. Turn-1 prompt forces an explicit stakeholder stance declaration.
-  2. Final-turn prompt forces a declared final position, enabling
-     agreement-genuineness measurement.
-  3. Continue prompt instructs agents to address at least one other
-     agent by name, making dyad type recoverable from the transcript.
-  4. max_tokens raised to 300 in research mode (100-120 words min).
-  5. Personality reminder disabled in research mode to avoid
-     confounding stance-stability measurements.
-  6. research_mode flag on the class controls all of the above;
-     production behavior is fully preserved when research_mode=False.
+Key design principles (all production defaults):
+  1. BLIND OPENING: each agent writes their opening statement without seeing
+     what other agents said first, producing genuinely independent starting
+     positions rather than convergence from turn 1.
+  2. GROUP MANDATES: when agents carry a role (e.g. "teacher" / "student"),
+     a group-specific mandate is injected into their system prompt, encoding
+     the structural tension between groups.
+  3. NON-NEGOTIABLES: the agent's primary frustration becomes an explicit
+     position they cannot abandon without a documented reason, preventing
+     costless capitulation.
+  4. STANCE ACCOUNTABILITY: agents must say explicitly when and why their
+     position changes; agreement without stated reason is disallowed.
+  5. FINAL POSITION DECLARATION: the last round forces each agent to state
+     their final position and account for any change from their opening.
+  6. ADDRESSEE INSTRUCTION: agents name at least one other participant in
+     each turn, making cross-group vs within-group exchange recoverable
+     from the transcript without modifying speaker-selection logic.
+  7. TOKEN BUDGET: 300 tokens per turn (≈100-120 words), sufficient for
+     reliable stance classification.
+  8. NO PERIODIC REMINDER: CORE IDENTITY ANCHOR in the system prompt does
+     the stability work; a mid-conversation reminder is a confound.
 """
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from datetime import datetime, timezone
 import json
@@ -36,27 +44,40 @@ from app.utils.token_utils import estimate_tokens
 
 logger = logging.getLogger(__name__)
 
-# ─── Personality maintenance constants ────────────────────────────────────────
-# After this many rounds, inject an explicit personality reminder.
-# Disabled in research mode to avoid confounding stance-stability measurements.
-_PERSONALITY_REMINDER_INTERVAL = 3
+# ─── Token budget ──────────────────────────────────────────────────────────────
+# 300 tokens ≈ 100-120 words. Below ~80 words, stance classification is
+# unreliable because turns lack enough context to distinguish maintaining
+# from abandoning. Do not lower this without re-validating the classifier.
+_MAX_TOKENS = 300
 
-# ─── Research mode token budget ───────────────────────────────────────────────
-# Production cap: 180 tokens (~60 words).
-# Research cap: 300 tokens (~100-120 words), needed for reliable stance
-# classification — too-short turns cannot be classified reliably.
-_PRODUCTION_MAX_TOKENS = 180
-_RESEARCH_MAX_TOKENS = 300
+# ─── Group mandates ────────────────────────────────────────────────────────────
+# Injected into the system prompt when a participant carries a known role.
+# Mandates encode the structural tension between groups — they are partially
+# compatible but not fully reconcilable, which is what forces genuine exchange.
+# Extend this dict as new role types are added.
+_GROUP_MANDATES: Dict[str, str] = {
+    "teacher": (
+        "YOUR GROUP MANDATE (Teachers):\n"
+        "Cipherbot must protect the integrity of the learning process. It must stay "
+        "within the uploaded course material, must not do the student's thinking for "
+        "them, and must never provide a direct answer to an assessment question. "
+        "Your job is to ensure students learn, not just get answers."
+    ),
+    "student": (
+        "YOUR GROUP MANDATE (Students):\n"
+        "Cipherbot must give you direct, accessible help when you need it. It must "
+        "respond in plain language without requiring prior subject knowledge to "
+        "understand the answer, and it must not make you feel stupid for asking a "
+        "question. Your job is to get the help you need to succeed."
+    ),
+}
 
 
 class PersonaSimulationService:
-    """Service for running multi-persona simulations."""
+    """Service for running multi-persona simulations of discussion."""
 
-    # [RESEARCH] Set research_mode=True when generating study corpora.
-    # All production paths are preserved when research_mode=False.
-    def __init__(self, research_mode: bool = False):
+    def __init__(self):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        self.research_mode = research_mode
 
     # ──────────────────────────────────────────────────────────────────────────
     # Prompt building
@@ -67,26 +88,29 @@ class PersonaSimulationService:
         persona: Persona,
         role: Optional[str] = None,
         facilitator_must_address: Optional[str] = None,
-        current_turn: int = 0,
     ) -> str:
         """
-        Build a system prompt that infuses the LLM with the persona's personality.
+        Build the system prompt for one agent turn.
 
-        Includes a CORE IDENTITY ANCHOR section to preserve traits across turns.
-        Periodic reminder is injected only in production mode; in research mode
-        it is suppressed to avoid confounding stance-stability measurements.
+        Includes:
+          - Full persona profile (background, goals, frustrations, behaviours)
+          - CORE IDENTITY ANCHOR (primary traits that must never be abandoned)
+          - NON-NEGOTIABLE derived from the agent's strongest frustration
+          - Group mandate when a known role is provided
+          - Stance accountability instruction
         """
         persona_data = persona.persona_data or {}
 
-        name = persona_data.get("name", persona.name)
+        name       = persona_data.get("name", persona.name)
         demographics = persona_data.get("demographics", {})
-        background = persona_data.get("background", "")
-        goals = persona_data.get("goals", [])
+        background   = persona_data.get("background", "")
+        goals        = persona_data.get("goals", [])
         frustrations = persona_data.get("frustrations", [])
-        motivations = persona_data.get("motivations", [])
-        behaviors = persona_data.get("behaviors", "")
-        quote = persona_data.get("quote", "")
+        motivations  = persona_data.get("motivations", [])
+        behaviors    = persona_data.get("behaviors", "")
+        quote        = persona_data.get("quote", "")
 
+        # ── Demographic string ──────────────────────────────────────────────
         demo_parts = []
         if demographics.get("age"):
             demo_parts.append(f"{demographics['age']} years old")
@@ -99,57 +123,62 @@ class PersonaSimulationService:
             if isinstance(loc, dict):
                 loc = f"{loc.get('city', '')}, {loc.get('country', '')}".strip(", ")
             demo_parts.append(f"from {loc}")
-
         demographic_str = ", ".join(demo_parts) if demo_parts else "a professional"
 
-        goals_str = "\n".join([f"  - {g}" for g in goals]) if goals else "  - Not specified"
+        # ── Formatted lists ─────────────────────────────────────────────────
+        goals_str        = "\n".join([f"  - {g}" for g in goals])        if goals        else "  - Not specified"
         frustrations_str = "\n".join([f"  - {f}" for f in frustrations]) if frustrations else "  - Not specified"
-        motivations_str = "\n".join([f"  - {m}" for m in motivations]) if motivations else ""
+        motivations_str  = "\n".join([f"  - {m}" for m in motivations])  if motivations  else ""
 
-        role_instruction = ""
-        if role:
-            role_instruction = f"\n\nYour assigned role in this discussion is: {role}. Act according to this role while staying true to your persona."
-
-        primary_goal = goals[0] if goals else "personal growth"
+        # ── Core identity anchor ─────────────────────────────────────────────
+        primary_goal        = goals[0]        if goals        else "personal growth"
         primary_frustration = frustrations[0] if frustrations else "lack of progress"
-        primary_motivation = motivations[0] if motivations else "making a difference"
-        core_behavior = behaviors.split(".")[0].strip() if behaviors else "thoughtful and deliberate"
+        primary_motivation  = motivations[0]  if motivations  else "making a difference"
+        core_behavior       = behaviors.split(".")[0].strip() if behaviors else "thoughtful and deliberate"
 
         core_identity_section = f"""
-CORE IDENTITY ANCHOR — YOU MUST NEVER ABANDON THESE:
-  • Primary drive:    {primary_goal}
-  • Key frustration:  {primary_frustration}
-  • Core motivation:  {primary_motivation}
-  • Characteristic behaviour: {core_behavior}
-  • Your authentic voice: "{quote}"
+CORE IDENTITY ANCHOR — NEVER ABANDON THESE:
+  • Primary drive:             {primary_goal}
+  • Key frustration:           {primary_frustration}
+  • Core motivation:           {primary_motivation}
+  • Characteristic behaviour:  {core_behavior}
+  • Your authentic voice:      "{quote}"
 
-These traits define WHO YOU ARE. As the discussion progresses you may revise
-individual opinions based on genuine reasoning, but your fundamental personality,
-values, and communication style must remain consistent throughout every message."""
+These define WHO YOU ARE. You may revise individual opinions if another participant
+gives you a genuine reason to do so, but your personality, values, and communication
+style must remain consistent in every single message you produce."""
 
-        # [RESEARCH] Suppress periodic reminder in research mode.
-        # In production mode, inject reminder every _PERSONALITY_REMINDER_INTERVAL turns.
-        periodic_reminder = ""
-        if not self.research_mode:
-            if current_turn > 0 and (current_turn % _PERSONALITY_REMINDER_INTERVAL == 0):
-                periodic_reminder = f"""
+        # ── Non-negotiable ───────────────────────────────────────────────────
+        # Derived from the agent's strongest frustration. This is the one
+        # position they cannot drop without explicitly stating what changed
+        # their mind. It prevents costless capitulation in later turns.
+        non_negotiable_section = ""
+        if frustrations:
+            non_negotiable_section = f"""
+NON-NEGOTIABLE POSITION:
+The following concern is central to your stakeholder perspective. You will not
+abandon it unless another participant directly addresses it with a specific,
+reasoned argument. If you change this position, you must name the argument
+that convinced you.
+  "{frustrations[0]}"
+"""
 
-⚠  TURN {current_turn} PERSONA CHECK: You are {name}. Re-read your CORE IDENTITY ANCHOR
-above before responding. Your reply must clearly reflect your background as
-"{background[:120].strip()}...". Do not sound like anyone else in this conversation."""
+        # ── Group mandate ─────────────────────────────────────────────────────
+        group_mandate_section = ""
+        if role and role.lower() in _GROUP_MANDATES:
+            group_mandate_section = f"\n{_GROUP_MANDATES[role.lower()]}\n"
 
-        # [RESEARCH] In research mode, add an explicit instruction that position
-        # changes must be grounded in reasoning heard during the discussion.
-        research_stance_instruction = ""
-        if self.research_mode:
-            research_stance_instruction = """
+        # ── Stance accountability ─────────────────────────────────────────────
+        stance_instruction = """
+STANCE ACCOUNTABILITY:
+You may change your position during this discussion, but only if another
+participant has offered a specific reason that genuinely addresses your concern.
+When you change your position, say so explicitly: name the argument that
+persuaded you. Do not agree with others simply to be agreeable or to move the
+conversation forward. Surface agreement without genuine persuasion is not
+acceptable."""
 
-RESEARCH STANCE INSTRUCTION:
-You may change your position during this discussion, but only if another participant
-has offered a specific reason that genuinely addresses your concerns. If you change
-your position, you must say so explicitly and state which argument changed your mind.
-Do not agree with others simply to be agreeable or to move the conversation forward."""
-
+        # ── Assemble ─────────────────────────────────────────────────────────
         system_prompt = f"""You are {name}, {demographic_str}.
 
 BACKGROUND:
@@ -166,145 +195,110 @@ YOUR FRUSTRATIONS AND PAIN POINTS:
 
 {"BEHAVIOURAL TRAITS:" if behaviors else ""}
 {behaviors}
-{core_identity_section}{periodic_reminder}{research_stance_instruction}{role_instruction}
+{core_identity_section}
+{non_negotiable_section}
+{group_mandate_section}
+{stance_instruction}
 
 CONVERSATION GUIDELINES:
-- Respond authentically as this persona would, drawing from their background, goals, and frustrations
+- Respond authentically as this persona, drawing from your background, goals, and frustrations
 - Share perspectives that reflect your unique experiences and viewpoint
-- Engage constructively with others while maintaining your persona's authentic voice
-- Be specific and concrete when possible, relating ideas to your personal experience
-- Build on what others say, agree or respectfully disagree based on YOUR perspective
-- If you have expertise relevant to the topic, share it naturally
-- Express your frustrations and concerns when relevant to the discussion
-- NEVER adopt another persona's communication style — remain distinctly yourself"""
-
-        if not self.research_mode:
-            system_prompt += "\n- Keep responses focused and concise (1-3 sentences, ~60 words max)"
-        else:
-            system_prompt += "\n- Keep responses to 100-120 words. Be substantive enough that your position is clearly classifiable."
+- Be specific and concrete — relate ideas to your personal experience
+- Address at least one other participant by name in every turn
+- Agree, disagree, or qualify — but always take a clear position
+- If you have expertise relevant to the topic, use it
+- Express your frustrations and concerns when relevant
+- NEVER adopt another participant's communication style — remain distinctly yourself
+- Write 100-120 words per turn"""
 
         if facilitator_must_address:
             system_prompt += f"""
 
-CRITICAL — FACILITATOR INTERVENTION (you must obey this):
-A human facilitator has just intervened and said: "{facilitator_must_address}"
-You MUST address this directly in your very next response and let it change the
-course of your reply. Do not ignore it or continue the previous thread without
-first acknowledging and responding to the facilitator."""
+CRITICAL — FACILITATOR INTERVENTION:
+The facilitator has said: "{facilitator_must_address}"
+Address this directly in your next response. Let it change the course of your
+reply. Do not continue the previous thread without first acknowledging the
+facilitator's intervention."""
 
         return system_prompt
 
     # ──────────────────────────────────────────────────────────────────────────
-    # [RESEARCH] Turn prompt selection
+    # Group mandate helpers
+    # ──────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _get_role(participant_roles: Dict[int, Optional[str]], persona_id: int) -> Optional[str]:
+        return participant_roles.get(persona_id)
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Turn prompt selection
     # ──────────────────────────────────────────────────────────────────────────
 
     def _build_turn_prompt(
         self,
         simulation: Simulation,
-        persona_count: int,
+        is_first_turn_for_agent: bool,
         is_last_facilitator: bool,
         last_facilitator_content: Optional[str],
-        participants: Dict[int, "Persona"],
-        current_persona_id: int,
-        max_turns: int,
-        current_turn: int,
+        other_participant_names: List[str],
+        is_final_round: bool,
     ) -> str:
         """
-        Return the user-turn prompt appropriate for the current turn.
+        Return the user-turn prompt appropriate for the current moment.
 
-        In research mode:
-          - Turn 0 (opening):  stance declaration prompt.
-          - Final round:       closing position prompt.
-          - All other turns:   continue prompt with explicit addressee instruction.
-        In production mode:
-          - Existing behavior preserved exactly.
+          Opening (agent's first turn): stance declaration — agent commits to
+            a specific position before seeing what others said.
+          Final round: closing declaration — agent states final position and
+            accounts for any change.
+          Facilitator intervention: acknowledgement required.
+          All other turns: continue prompt with addressee and stance
+            accountability instructions.
         """
-        # ── Opening turn ──────────────────────────────────────────────────────
-        if persona_count == 0:
-            if self.research_mode:
-                # [RESEARCH] Force an explicit stakeholder stance declaration.
-                # This is the baseline against which all subsequent turns are
-                # classified as maintaining / shifting / abandoning.
-                return f"""The topic for this discussion is: {simulation.goal}
+        addressee_str = (
+            f"Address at least one of these participants by name: {', '.join(other_participant_names)}."
+            if other_participant_names else ""
+        )
+
+        # ── Opening turn (blind) ──────────────────────────────────────────────
+        if is_first_turn_for_agent:
+            return f"""The topic for this discussion is: {simulation.goal}
 
 {simulation.goal_context if simulation.goal_context else ""}
 
-State your position clearly: what should Cipherbot do when a student asks a question,
-and what should it not do? Be specific — name at least one concrete behaviour you
-support and one you oppose. Explain why, drawing from your own experience.
-Write 100-120 words."""
-            else:
-                return f"""The topic for this group discussion is: {simulation.goal}
+State your position clearly: what should Cipherbot do when a student asks a
+question, and what should it not do? Be specific — name at least one concrete
+behaviour you support and one you oppose. Explain why, drawing from your own
+experience. Write 100-120 words."""
 
-{simulation.goal_context if simulation.goal_context else ""}
+        # ── Final round ───────────────────────────────────────────────────────
+        if is_final_round:
+            return f"""This is the final round of the discussion. State your final position:
+what should Cipherbot do when a student asks a question, and what should it
+not do?
 
-Please share your initial thoughts on this topic, drawing from your personal experience and perspective. Be authentic to who you are."""
-
-        # ── Final turn ────────────────────────────────────────────────────────
-        if self.research_mode and current_turn >= max_turns - 1:
-            # [RESEARCH] Force a declared final position so agreement-genuineness
-            # can be computed by comparing this against the turn-1 baseline
-            # and the intervening stance-classification record.
-            return """This is the final round of the discussion. State your final position:
-what should Cipherbot do when a student asks a question, and what should it not do?
-
-If your view has changed from what you said at the start, identify specifically
-which argument or evidence changed your mind. If your view has not changed, say so
-and explain why the discussion did not shift your position.
+If your view has changed from what you said at the start, name specifically
+which argument changed your mind. If your view has not changed, say so and
+explain why the discussion did not shift your position.
+{addressee_str}
 Write 100-120 words."""
 
-        # ── Facilitator intervention ───────────────────────────────────────────
+        # ── Facilitator intervention ──────────────────────────────────────────
         if is_last_facilitator and last_facilitator_content:
-            if self.research_mode:
-                other_names = [
-                    p.name for pid, p in participants.items()
-                    if pid != current_persona_id
-                ]
-                addressee_instruction = (
-                    f"Address at least one of the following participants by name in your response: "
-                    f"{', '.join(other_names)}."
-                ) if other_names else ""
-                return f"""The facilitator has just intervened: "{last_facilitator_content}"
+            return f"""The facilitator has just said: "{last_facilitator_content}"
 
-Your response MUST:
-1. Directly acknowledge and respond to what the facilitator said.
-2. Let their direction change the course of your reply.
-{addressee_instruction}
+Respond directly to this. Let it change the direction of your reply.
+{addressee_str}
 Write 100-120 words."""
-            else:
-                return f"""The facilitator has just intervened: "{last_facilitator_content}"
 
-Your response MUST:
-1. First, directly acknowledge and respond to what the facilitator said.
-2. Then, let their direction change the course of your reply.
-Keep it to 1-3 sentences but make the course change visible."""
+        # ── Standard continue turn ────────────────────────────────────────────
+        facilitator_note = ""
+        if last_facilitator_content:
+            facilitator_note = f'The facilitator recently said: "{last_facilitator_content}" — keep this in mind.\n\n'
 
-        # ── Standard continue turn ─────────────────────────────────────────────
-        if self.research_mode:
-            # [RESEARCH] Require explicit addressee so dyad type is recoverable
-            # from the transcript text without modifying the speaker-selection logic.
-            other_names = [
-                p.name for pid, p in participants.items()
-                if pid != current_persona_id
-            ]
-            addressee_instruction = (
-                f"Address at least one of the following participants by name: "
-                f"{', '.join(other_names)}."
-            ) if other_names else ""
-
-            facilitator_reminder = ""
-            if last_facilitator_content:
-                facilitator_reminder = f'The facilitator recently said: "{last_facilitator_content}" — keep this direction in mind.\n\n'
-
-            return f"""{facilitator_reminder}Continue the discussion. {addressee_instruction}
-Respond to what has been said: agree, disagree, or qualify — but take a clear position.
-If you are changing your view from earlier, say so explicitly and state why.
-Write 100-120 words."""
-        else:
-            if last_facilitator_content:
-                return f"""Continue the discussion. The facilitator recently said: "{last_facilitator_content}" — keep this direction in mind and let it influence your response. Share your perspective in 1-3 sentences."""
-            else:
-                return "Please continue the discussion by responding to what has been said. Share your perspective, agree or disagree, and add new insights based on your experience. Keep it to 1-3 sentences."
+        return f"""{facilitator_note}Continue the discussion. {addressee_str}
+Respond to what has been said. Agree, disagree, or qualify — but take a clear
+position. If you are changing your view from earlier, say so explicitly and
+state the argument that persuaded you. Write 100-120 words."""
 
     # ──────────────────────────────────────────────────────────────────────────
     # RAG grounding
@@ -317,10 +311,7 @@ Write 100-120 words."""
         messages_ordered: List[SimulationMessage],
         participants: Dict[int, Persona],
     ) -> str:
-        """
-        Retrieve relevant document chunks from RAG so simulation responses are
-        grounded in project data.
-        """
+        """Retrieve relevant document chunks to ground persona responses."""
         query_parts = [simulation.goal]
         if simulation.goal_context:
             query_parts.append(simulation.goal_context)
@@ -353,18 +344,13 @@ Write 100-120 words."""
             if not docs or not docs[0]:
                 return ""
             chunks = docs[0]
-            seen = set()
-            unique = []
-            total = 0
-            max_chars = 6000
+            seen, unique, total = set(), [], 0
             for c in chunks:
-                if c and c not in seen and total + len(c) <= max_chars:
+                if c and c not in seen and total + len(c) <= 6000:
                     seen.add(c)
                     unique.append(c)
                     total += len(c)
-            if not unique:
-                return ""
-            return "\n\n---\n\n".join(unique)
+            return "\n\n---\n\n".join(unique) if unique else ""
         except Exception as e:
             logger.warning(f"RAG grounding failed for simulation {simulation.id}: {e}", exc_info=True)
             return ""
@@ -376,9 +362,7 @@ Write 100-120 words."""
     def _get_facilitator_context(
         self, messages: List[SimulationMessage]
     ) -> tuple[Optional[str], bool]:
-        """
-        Returns (last_facilitator_content, is_last_message_facilitator).
-        """
+        """Returns (last_facilitator_content, is_last_message_facilitator)."""
         msgs = sorted(messages, key=lambda m: (m.turn_number, m.id))
         if not msgs:
             return None, False
@@ -400,9 +384,24 @@ Write 100-120 words."""
         self,
         messages: List[SimulationMessage],
         participants: Dict[int, Persona],
-        current_persona_id: int
+        current_persona_id: int,
     ) -> List[Dict[str, str]]:
-        """Build the conversation history for the LLM context."""
+        """
+        Build the conversation history for the LLM context.
+
+        BLIND OPENING: if this agent has not yet spoken, return an empty
+        context. Each agent writes their opening statement without seeing
+        what others said first. This produces genuinely independent starting
+        positions rather than immediate convergence toward the first speaker.
+        """
+        agent_has_spoken = any(
+            m.persona_id == current_persona_id
+            for m in messages
+            if not getattr(m, "is_human_message", False) and m.persona_id is not None
+        )
+        if not agent_has_spoken:
+            return []
+
         context = []
         for msg in messages:
             is_human = getattr(msg, "is_human_message", False) or msg.persona_id is None
@@ -412,15 +411,12 @@ Write 100-120 words."""
                     "content": f"[Facilitator]: {msg.content}"
                 })
                 continue
-
             persona = participants.get(msg.persona_id)
             persona_name = persona.name if persona else "Unknown"
-
             if msg.persona_id == current_persona_id:
                 context.append({"role": "assistant", "content": msg.content})
             else:
                 context.append({"role": "user", "content": f"[{persona_name}]: {msg.content}"})
-
         return context
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -432,23 +428,13 @@ Write 100-120 words."""
         simulation: Simulation,
         session: AsyncSession,
     ) -> Optional[SimulationMessage]:
-        """
-        Generate the next turn in the simulation.
-
-        Selects the next persona to speak based on conversation flow and
-        generates their response with strengthened personality anchoring.
-        """
-        if simulation.status == "completed" or simulation.status == "stopped":
+        """Generate the next turn in the simulation."""
+        if simulation.status in ("completed", "stopped"):
             return None
 
         run_until = getattr(simulation, "run_until_agreement", False)
-        if not run_until and simulation.current_turn >= simulation.max_turns:
-            simulation.status = "completed"
-            simulation.completed_at = datetime.now(timezone.utc)
-            await session.commit()
-            return None
 
-        if run_until and simulation.current_turn >= simulation.max_turns:
+        if simulation.current_turn >= simulation.max_turns:
             simulation.status = "completed"
             simulation.completed_at = datetime.now(timezone.utc)
             await session.commit()
@@ -462,13 +448,11 @@ Write 100-120 words."""
                 await session.commit()
                 return None
 
-        # Load participants
-        participants = {}
-        participant_roles = {}
+        # ── Load participants ─────────────────────────────────────────────────
+        participants: Dict[int, Persona] = {}
+        participant_roles: Dict[int, Optional[str]] = {}
         for p in simulation.participants:
-            result = await session.execute(
-                select(Persona).where(Persona.id == p.persona_id)
-            )
+            result = await session.execute(select(Persona).where(Persona.id == p.persona_id))
             persona = result.scalar_one_or_none()
             if persona:
                 participants[p.persona_id] = persona
@@ -495,11 +479,11 @@ Write 100-120 words."""
         )
         facilitator_must_address = last_facilitator_content if is_last_facilitator else None
 
+        # ── System prompt ─────────────────────────────────────────────────────
         system_prompt = self._build_persona_system_prompt(
             next_persona,
             next_role,
             facilitator_must_address=facilitator_must_address,
-            current_turn=simulation.current_turn,
         )
 
         rag_grounding = await self._get_rag_grounding(
@@ -507,35 +491,39 @@ Write 100-120 words."""
         )
         if rag_grounding:
             system_prompt += (
-                "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (you must use this):\n"
+                "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (use this):\n"
                 + rag_grounding
-                + "\n\nYour response must be grounded in the above evidence. Do not invent facts; base your reply on this project data when relevant."
+                + "\n\nBase your reply on this project data where relevant. Do not invent facts."
             )
 
+        # ── Conversation context (blind opening enforced here) ────────────────
         conversation_context = self._build_conversation_context(
             messages_ordered, participants, next_speaker_id,
         )
 
-        persona_count = self._count_persona_messages(list(simulation.messages))
+        persona_count  = self._count_persona_messages(list(simulation.messages))
         num_participants = len(participants)
-        turn_number = self._round_turn_number(persona_count, num_participants)
+        turn_number    = self._round_turn_number(persona_count, num_participants)
 
-        # [RESEARCH] Unified prompt selection replaces the inline if/else.
+        is_first_turn_for_agent = not any(
+            m.persona_id == next_speaker_id
+            for m in simulation.messages
+            if not getattr(m, "is_human_message", False) and m.persona_id is not None
+        )
+        is_final_round = simulation.current_turn >= simulation.max_turns - 1
+        other_names = [p.name for pid, p in participants.items() if pid != next_speaker_id]
+
         turn_prompt = self._build_turn_prompt(
             simulation=simulation,
-            persona_count=persona_count,
+            is_first_turn_for_agent=is_first_turn_for_agent,
             is_last_facilitator=is_last_facilitator,
             last_facilitator_content=last_facilitator_content,
-            participants=participants,
-            current_persona_id=next_speaker_id,
-            max_turns=simulation.max_turns,
-            current_turn=simulation.current_turn,
+            other_participant_names=other_names,
+            is_final_round=is_final_round,
         )
         conversation_context.append({"role": "user", "content": turn_prompt})
 
         temperature = 0.65 if is_last_facilitator else 0.85
-        # [RESEARCH] Use higher token budget in research mode.
-        max_tokens = _RESEARCH_MAX_TOKENS if self.research_mode else _PRODUCTION_MAX_TOKENS
 
         try:
             response = await self.client.chat.completions.create(
@@ -545,12 +533,12 @@ Write 100-120 words."""
                     *conversation_context,
                 ],
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=_MAX_TOKENS,
                 presence_penalty=0.3,
                 frequency_penalty=0.3,
             )
 
-            content = response.choices[0].message.content
+            content    = response.choices[0].message.content
             tokens_used = response.usage.total_tokens if response.usage else estimate_tokens(content)
 
             message = SimulationMessage(
@@ -562,13 +550,13 @@ Write 100-120 words."""
             )
             session.add(message)
 
-            simulation.current_turn = turn_number
-            simulation.tokens_used += tokens_used
+            simulation.current_turn  = turn_number
+            simulation.tokens_used  += tokens_used
 
             for p in simulation.participants:
                 if p.persona_id == next_speaker_id:
                     p.messages_count += 1
-                    p.tokens_used += tokens_used
+                    p.tokens_used    += tokens_used
                     break
 
             if not run_until:
@@ -596,7 +584,6 @@ Write 100-120 words."""
 
     @staticmethod
     def _count_persona_messages(messages: List[SimulationMessage]) -> int:
-        """Count messages from personas only (exclude human interventions)."""
         return sum(
             1 for m in messages
             if m.persona_id is not None and not getattr(m, "is_human_message", False)
@@ -604,10 +591,6 @@ Write 100-120 words."""
 
     @staticmethod
     def _round_turn_number(persona_message_count: int, num_participants: int) -> int:
-        """
-        1 turn = all personas have spoken once.
-        Returns the round number the *next* message belongs to.
-        """
         if num_participants <= 0:
             return 1
         return max(1, (persona_message_count + num_participants) // num_participants)
@@ -618,40 +601,33 @@ Write 100-120 words."""
         participant_ids: List[int],
         current_turn: int,
     ) -> int:
-        """
-        Select the next persona to speak using round-robin with load balancing.
-        Human interventions are ignored for speaker selection.
-        """
-        ordered_participants = list(participant_ids)
+        """Round-robin with load balancing. Human interventions are ignored."""
+        ordered = list(participant_ids)
         persona_messages = [
             m for m in messages
             if not (getattr(m, "is_human_message", False) or m.persona_id is None)
         ]
-
         if not persona_messages:
-            return ordered_participants[0]
+            return ordered[0]
 
-        last_speaker = persona_messages[-1].persona_id
-        message_counts = {pid: 0 for pid in ordered_participants}
+        last_speaker   = persona_messages[-1].persona_id
+        message_counts = {pid: 0 for pid in ordered}
         for msg in persona_messages:
             if msg.persona_id in message_counts:
                 message_counts[msg.persona_id] += 1
 
         min_count = min(message_counts.values())
-        if last_speaker in ordered_participants:
-            last_idx = ordered_participants.index(last_speaker)
-            rotation = ordered_participants[last_idx + 1:] + ordered_participants[:last_idx + 1]
+        if last_speaker in ordered:
+            last_idx = ordered.index(last_speaker)
+            rotation = ordered[last_idx + 1:] + ordered[:last_idx + 1]
         else:
-            rotation = ordered_participants
+            rotation = ordered
 
-        rotation_without_last = [pid for pid in rotation if pid != last_speaker]
-        for pid in rotation_without_last:
+        without_last = [pid for pid in rotation if pid != last_speaker]
+        for pid in without_last:
             if message_counts[pid] == min_count:
                 return pid
-
-        if rotation_without_last:
-            return rotation_without_last[0]
-        return ordered_participants[0]
+        return without_last[0] if without_last else ordered[0]
 
     # ──────────────────────────────────────────────────────────────────────────
     # Full simulation runner
@@ -665,29 +641,27 @@ Write 100-120 words."""
         """
         Run the entire simulation until completion or limits are reached.
 
-        When simulation.run_until_agreement is True, after each complete round
-        an agreement evaluation is triggered.
-
-        NOTE FOR RESEARCH MODE: run_until_agreement should be set to False when
-        generating study corpora. The agreement evaluator measures linguistic
-        convergence, which is exactly the surface consensus this study is designed
-        to detect. Allowing it to terminate the simulation early would truncate
-        transcripts at the moment of maximum analytical interest.
+        NOTE ON run_until_agreement:
+        The agreement evaluator measures linguistic convergence. In a simulation
+        of discussion designed to surface genuine disagreement, early termination
+        on surface consensus is the failure mode being studied — not a success
+        condition. For study corpora, set run_until_agreement=False and let the
+        simulation run to max_turns so the full stance trajectory is captured.
         """
         from app.services.agreement_evaluator_service import agreement_evaluator_service
 
-        if self.research_mode and getattr(simulation, "run_until_agreement", False):
+        run_until = getattr(simulation, "run_until_agreement", False)
+        if run_until:
             logger.warning(
-                "Simulation %d: research_mode=True but run_until_agreement=True. "
-                "The agreement evaluator may terminate simulations on surface consensus. "
-                "Consider setting run_until_agreement=False for study corpora.",
+                "Simulation %d: run_until_agreement=True. The agreement evaluator "
+                "measures linguistic convergence and may terminate the simulation at "
+                "the moment of surface consensus — which is the failure mode this "
+                "system is designed to detect. Consider setting run_until_agreement=False.",
                 simulation.id,
             )
 
         messages: List[SimulationMessage] = []
-        run_until = getattr(simulation, "run_until_agreement", False)
-
-        simulation.status = "running"
+        simulation.status     = "running"
         simulation.started_at = datetime.now(timezone.utc)
         await session.commit()
 
@@ -714,21 +688,21 @@ Write 100-120 words."""
                 if run_until and simulation.current_turn > last_evaluated_turn:
                     last_evaluated_turn = simulation.current_turn
 
-                    participants: Dict[int, Persona] = {}
+                    participants_map: Dict[int, Persona] = {}
                     for p in simulation.participants:
                         result = await session.execute(
                             select(Persona).where(Persona.id == p.persona_id)
                         )
                         persona = result.scalar_one_or_none()
                         if persona:
-                            participants[p.persona_id] = persona
+                            participants_map[p.persona_id] = persona
 
                     await session.refresh(simulation, ["messages"])
 
                     try:
                         evaluation = await agreement_evaluator_service.evaluate_agreement(
                             simulation=simulation,
-                            participants=participants,
+                            participants=participants_map,
                             session=session,
                             turn_number=simulation.current_turn,
                         )
@@ -743,18 +717,11 @@ Write 100-120 words."""
                             simulation.status = "completed"
                             simulation.completed_at = datetime.now(timezone.utc)
                             await session.commit()
-                            logger.info(
-                                "Simulation %d completed: agreement reached at turn %d",
-                                simulation.id,
-                                simulation.current_turn,
-                            )
                             break
                     except Exception as eval_err:
                         logger.warning(
                             "Agreement evaluation failed for simulation %d: %s",
-                            simulation.id,
-                            eval_err,
-                            exc_info=True,
+                            simulation.id, eval_err, exc_info=True,
                         )
 
                 await asyncio.sleep(0.5)
@@ -776,12 +743,10 @@ Write 100-120 words."""
         simulation: Simulation,
         session: AsyncSession,
     ) -> Dict[str, Any]:
-        """Generate a summary of the simulation conversation."""
-        participants = {}
+        """Generate a summary of the simulation of discussion."""
+        participants: Dict[int, Persona] = {}
         for p in simulation.participants:
-            result = await session.execute(
-                select(Persona).where(Persona.id == p.persona_id)
-            )
+            result = await session.execute(select(Persona).where(Persona.id == p.persona_id))
             persona = result.scalar_one_or_none()
             if persona:
                 participants[p.persona_id] = persona
@@ -803,9 +768,11 @@ Write 100-120 words."""
 
         summary_prompt = f"""Analyse this group discussion and provide:
 
-1. For each participant, a concise summary (2-3 sentences) of that person's key points and stance.
-2. 3-5 key insights that emerged from the conversation overall.
-3. 3-5 actionable recommendations or next steps overall.
+1. For each participant, a concise summary (2-3 sentences) of their key points
+   and final position.
+2. 3-5 points of genuine disagreement that remained unresolved.
+3. 3-5 points where participants appeared to reach shared understanding.
+4. 3-5 actionable recommendations or next steps.
 
 DISCUSSION GOAL: {simulation.goal}
 {f"CONTEXT: {simulation.goal_context}" if simulation.goal_context else ""}
@@ -816,11 +783,12 @@ TRANSCRIPT:
 Respond in JSON format:
 {{
   "persona_summaries": [
-    {{ "persona_id": <number>, "persona_name": "<name>", "summary": "<2-3 sentences for this persona>" }},
+    {{ "persona_id": <number>, "persona_name": "<name>", "summary": "<2-3 sentences>" }},
     ...
   ],
-  "key_insights": ["insight 1", "insight 2", ...],
-  "action_items": ["action 1", "action 2", ...]
+  "unresolved_disagreements": ["disagreement 1", ...],
+  "shared_understanding": ["point 1", ...],
+  "action_items": ["action 1", ...]
 }}"""
 
         try:
@@ -829,7 +797,12 @@ Respond in JSON format:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert facilitator skilled at synthesising group discussions into actionable insights.",
+                        "content": (
+                            "You are an expert analyst of group discussions. "
+                            "Your job is to identify where participants genuinely agree, "
+                            "where they genuinely disagree, and where apparent agreement "
+                            "may mask unresolved differences."
+                        ),
                     },
                     {"role": "user", "content": summary_prompt},
                 ],
@@ -848,15 +821,16 @@ Respond in JSON format:
                         "summary": "No summary generated.",
                     })
 
-            simulation.summary = json.dumps(persona_summaries)
-            simulation.key_insights = result.get("key_insights", [])
+            simulation.summary      = json.dumps(persona_summaries)
+            simulation.key_insights = result.get("unresolved_disagreements", [])
             simulation.action_items = result.get("action_items", [])
             await session.commit()
 
             return {
-                "persona_summaries": persona_summaries,
-                "key_insights": simulation.key_insights,
-                "action_items": simulation.action_items,
+                "persona_summaries":         persona_summaries,
+                "unresolved_disagreements":  result.get("unresolved_disagreements", []),
+                "shared_understanding":      result.get("shared_understanding", []),
+                "action_items":              simulation.action_items,
             }
 
         except Exception as e:
@@ -873,7 +847,7 @@ Respond in JSON format:
         session: AsyncSession,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream a turn response for real-time updates."""
-        if simulation.status in ["completed", "stopped"]:
+        if simulation.status in ("completed", "stopped"):
             yield {"type": "error", "message": "Simulation is not active"}
             return
 
@@ -904,12 +878,10 @@ Respond in JSON format:
             }
             return
 
-        participants = {}
-        participant_roles = {}
+        participants: Dict[int, Persona] = {}
+        participant_roles: Dict[int, Optional[str]] = {}
         for p in simulation.participants:
-            result = await session.execute(
-                select(Persona).where(Persona.id == p.persona_id)
-            )
+            result = await session.execute(select(Persona).where(Persona.id == p.persona_id))
             persona = result.scalar_one_or_none()
             if persona:
                 participants[p.persona_id] = persona
@@ -921,17 +893,17 @@ Respond in JSON format:
             simulation.current_turn,
         )
         next_persona = participants[next_speaker_id]
-        next_role = participant_roles.get(next_speaker_id)
+        next_role    = participant_roles.get(next_speaker_id)
 
-        persona_count = self._count_persona_messages(list(simulation.messages))
+        persona_count    = self._count_persona_messages(list(simulation.messages))
         num_participants = len(participants)
-        turn_number = self._round_turn_number(persona_count, num_participants)
+        turn_number      = self._round_turn_number(persona_count, num_participants)
 
         yield {
-            "type": "start",
-            "persona_id": next_speaker_id,
+            "type":         "start",
+            "persona_id":   next_speaker_id,
             "persona_name": next_persona.name,
-            "turn_number": turn_number,
+            "turn_number":  turn_number,
         }
 
         messages_ordered = sorted(
@@ -947,38 +919,42 @@ Respond in JSON format:
             next_persona,
             next_role,
             facilitator_must_address=facilitator_must_address,
-            current_turn=simulation.current_turn,
         )
         rag_grounding = await self._get_rag_grounding(
             session, simulation, messages_ordered, participants
         )
         if rag_grounding:
             system_prompt += (
-                "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (you must use this):\n"
+                "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (use this):\n"
                 + rag_grounding
-                + "\n\nYour response must be grounded in the above evidence. Do not invent facts; base your reply on this project data when relevant."
+                + "\n\nBase your reply on this project data where relevant. Do not invent facts."
             )
+
         conversation_context = self._build_conversation_context(
             messages_ordered, participants, next_speaker_id,
         )
 
-        # [RESEARCH] Unified prompt selection in streaming path too.
+        is_first_turn_for_agent = not any(
+            m.persona_id == next_speaker_id
+            for m in simulation.messages
+            if not getattr(m, "is_human_message", False) and m.persona_id is not None
+        )
+        is_final_round = simulation.current_turn >= simulation.max_turns - 1
+        other_names    = [p.name for pid, p in participants.items() if pid != next_speaker_id]
+
         turn_prompt = self._build_turn_prompt(
             simulation=simulation,
-            persona_count=persona_count,
+            is_first_turn_for_agent=is_first_turn_for_agent,
             is_last_facilitator=is_last_facilitator,
             last_facilitator_content=last_facilitator_content,
-            participants=participants,
-            current_persona_id=next_speaker_id,
-            max_turns=simulation.max_turns,
-            current_turn=simulation.current_turn,
+            other_participant_names=other_names,
+            is_final_round=is_final_round,
         )
         conversation_context.append({"role": "user", "content": turn_prompt})
 
         temperature = 0.65 if is_last_facilitator else 0.85
-        max_tokens = _RESEARCH_MAX_TOKENS if self.research_mode else _PRODUCTION_MAX_TOKENS
-
         full_content = ""
+
         try:
             stream = await self.client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
@@ -987,7 +963,7 @@ Respond in JSON format:
                     *conversation_context,
                 ],
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=_MAX_TOKENS,
                 stream=True,
             )
 
@@ -1007,13 +983,13 @@ Respond in JSON format:
             )
             session.add(message)
 
-            simulation.current_turn = turn_number
-            simulation.tokens_used += tokens_used
+            simulation.current_turn  = turn_number
+            simulation.tokens_used  += tokens_used
 
             for p in simulation.participants:
                 if p.persona_id == next_speaker_id:
                     p.messages_count += 1
-                    p.tokens_used += tokens_used
+                    p.tokens_used    += tokens_used
                     break
 
             if not run_until:
@@ -1030,12 +1006,12 @@ Respond in JSON format:
             await session.commit()
 
             yield {
-                "type": "complete",
-                "message_id": message.id,
-                "tokens": tokens_used,
+                "type":              "complete",
+                "message_id":        message.id,
+                "tokens":            tokens_used,
                 "simulation_status": simulation.status,
-                "current_turn": simulation.current_turn,
-                "tokens_used": simulation.tokens_used,
+                "current_turn":      simulation.current_turn,
+                "tokens_used":       simulation.tokens_used,
             }
 
         except Exception as e:
@@ -1043,11 +1019,5 @@ Respond in JSON format:
             yield {"type": "error", "message": str(e)}
 
 
-# ─── Global service instances ─────────────────────────────────────────────────
-# Production instance — behavior unchanged from original.
-simulation_service = PersonaSimulationService(research_mode=False)
-
-# [RESEARCH] Research instance — use this when generating study corpora.
-# Instantiate in your study runner script as:
-#   from app.services.persona_simulation_service import research_simulation_service
-research_simulation_service = PersonaSimulationService(research_mode=True)
+# ─── Global service instance ───────────────────────────────────────────────────
+simulation_service = PersonaSimulationService()
