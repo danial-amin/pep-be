@@ -211,7 +211,6 @@ export default function SimulationPage() {
   const [goal, setGoal] = useState('');
   const [goalContext, setGoalContext] = useState('');
   const [maxTurns, setMaxTurns] = useState(10);
-  const [maxDurationSeconds, setMaxDurationSeconds] = useState(120);
   const [runUntilAgreement, setRunUntilAgreement] = useState(false);
   const [agreementThreshold, setAgreementThreshold] = useState(0.7);
 
@@ -483,7 +482,6 @@ export default function SimulationPage() {
         goal_context: goalContext || undefined,
         participants,
         max_turns: maxTurns,
-        max_duration_seconds: maxDurationSeconds,
         run_until_agreement: runUntilAgreement || undefined,
         agreement_threshold: runUntilAgreement ? agreementThreshold : undefined
       });
@@ -796,9 +794,9 @@ export default function SimulationPage() {
               {/* Limits */}
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-white/90 mb-3">
-                  Simulation Limits (stops when either is reached)
+                  Simulation Limits
                 </h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="block text-sm text-white/70 mb-2">
                       <MessageSquare className="w-4 h-4 inline mr-1" />
@@ -814,28 +812,12 @@ export default function SimulationPage() {
                       <option value={15}>15 turns</option>
                       <option value={20}>20 turns</option>
                       <option value={30}>30 turns</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-white/70 mb-2">
-                      <Clock className="w-4 h-4 inline mr-1" />
-                      Time Limit
-                    </label>
-                    <select
-                      value={maxDurationSeconds}
-                      onChange={(e) => setMaxDurationSeconds(parseInt(e.target.value))}
-                      className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50"
-                    >
-                      <option value={60}>1 minute</option>
-                      <option value={120}>2 minutes</option>
-                      <option value={180}>3 minutes</option>
-                      <option value={300}>5 minutes</option>
-                      <option value={600}>10 minutes</option>
+                      <option value={50}>50 turns</option>
                     </select>
                   </div>
                 </div>
                 <p className="text-xs text-white/50 mt-2">
-                  One turn = every selected persona speaks once (one full round). Conversation stops at the turn or time limit.
+                  One turn = every selected persona speaks once (one full round). Conversation stops only when the turn limit is reached.
                 </p>
               </div>
 
@@ -1017,7 +999,7 @@ export default function SimulationPage() {
                       </div>
                       <div className="text-xs text-white/60">
                         <Clock className="w-3 h-3 inline mr-1" />
-                        {Math.floor(currentSimulation.max_duration_seconds / 60)}:{(currentSimulation.max_duration_seconds % 60).toString().padStart(2, '0')} limit
+                        {/* Turn-limit only; duration limit intentionally disabled */}
                       </div>
                     </div>
                   </div>

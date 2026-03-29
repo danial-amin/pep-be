@@ -440,14 +440,6 @@ state the argument that persuaded you. Write 100-120 words."""
             await session.commit()
             return None
 
-        if simulation.started_at and simulation.max_duration_seconds:
-            elapsed = (datetime.now(timezone.utc) - simulation.started_at).total_seconds()
-            if elapsed >= simulation.max_duration_seconds:
-                simulation.status = "completed"
-                simulation.completed_at = datetime.now(timezone.utc)
-                await session.commit()
-                return None
-
         # ── Load participants ─────────────────────────────────────────────────
         participants: Dict[int, Persona] = {}
         participant_roles: Dict[int, Optional[str]] = {}
@@ -559,16 +551,11 @@ state the argument that persuaded you. Write 100-120 words."""
                     p.tokens_used    += tokens_used
                     break
 
-            if not run_until:
-                if simulation.current_turn >= simulation.max_turns or (
-                    simulation.max_tokens and simulation.tokens_used >= simulation.max_tokens
-                ):
-                    simulation.status = "completed"
-                    simulation.completed_at = datetime.now(timezone.utc)
-            else:
-                if simulation.current_turn >= simulation.max_turns:
-                    simulation.status = "completed"
-                    simulation.completed_at = datetime.now(timezone.utc)
+            # Conversation termination rule:
+            # Conversations should stop ONLY when the turn limit is reached.
+            if simulation.current_turn >= simulation.max_turns:
+                simulation.status = "completed"
+                simulation.completed_at = datetime.now(timezone.utc)
 
             await session.commit()
             await session.refresh(message)
@@ -652,11 +639,9 @@ state the argument that persuaded you. Write 100-120 words."""
 
         run_until = getattr(simulation, "run_until_agreement", False)
         if run_until:
-            logger.warning(
-                "Simulation %d: run_until_agreement=True. The agreement evaluator "
-                "measures linguistic convergence and may terminate the simulation at "
-                "the moment of surface consensus — which is the failure mode this "
-                "system is designed to detect. Consider setting run_until_agreement=False.",
+            logger.info(
+                "Simulation %d: run_until_agreement=True. Agreement is evaluated and stored, "
+                "but termination is still controlled only by max_turns.",
                 simulation.id,
             )
 
@@ -669,14 +654,6 @@ state the argument that persuaded you. Write 100-120 words."""
             last_evaluated_turn = 0
 
             while simulation.status == "running":
-                if simulation.max_duration_seconds:
-                    elapsed = (datetime.now(timezone.utc) - simulation.started_at).total_seconds()
-                    if elapsed >= simulation.max_duration_seconds:
-                        simulation.status = "completed"
-                        simulation.completed_at = datetime.now(timezone.utc)
-                        await session.commit()
-                        break
-
                 await session.refresh(simulation, ["messages", "participants"])
 
                 message = await self.generate_turn(simulation, session)
@@ -713,11 +690,6 @@ state the argument that persuaded you. Write 100-120 words."""
                             evaluation.overall_agreement_score,
                             evaluation.agreement_reached,
                         )
-                        if evaluation.agreement_reached and simulation.status == "running":
-                            simulation.status = "completed"
-                            simulation.completed_at = datetime.now(timezone.utc)
-                            await session.commit()
-                            break
                     except Exception as eval_err:
                         logger.warning(
                             "Agreement evaluation failed for simulation %d: %s",
