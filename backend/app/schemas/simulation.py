@@ -40,9 +40,9 @@ class SimulationCreateRequest(BaseModel):
     participants: List[ParticipantConfig] = Field(
         ...,
         min_length=2,
-        max_length=8,
+        max_length=12,
         description=(
-            "List of personas to participate (2-8 personas). "
+            "List of personas to participate (2-12 personas). "
             "Personas may belong to different persona sets — mix freely."
         )
     )

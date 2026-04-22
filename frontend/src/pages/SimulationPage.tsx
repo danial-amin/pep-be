@@ -867,7 +867,7 @@ export default function SimulationPage() {
                 <div className="flex items-center justify-between mb-3">
                   <label className="text-sm font-medium text-white/90 flex items-center gap-1">
                     <Users className="w-4 h-4" />
-                    Select Participants (2–8 personas, mix from any set)
+                    Select Participants (2–12 personas, mix from any set)
                   </label>
                   <span className="text-sm text-white/60">{selectedPersonas.size} selected</span>
                 </div>
