@@ -46,6 +46,13 @@ logger = logging.getLogger(__name__)
 # ─── Token budget ──────────────────────────────────────────────────────────────
 # Output cap per turn: settings.SIMULATION_MAX_OUTPUT_TOKENS, clamped to 100–150.
 # Count only completion tokens toward simulation.tokens_used (not full prompt+completion).
+# Prompts must not ask for ~100+ words — that exceeds the cap and causes truncation.
+
+_SIMULATION_REPLY_LENGTH = (
+    "LENGTH (strict): Your whole reply must fit in roughly 50–80 words (about 2–3 short paragraphs). "
+    "Prioritize one clear point plus one brief example or reason; skip preamble and long lists. "
+    "Always finish with a complete sentence — never stop mid-thought."
+)
 
 # ─── Group mandates ────────────────────────────────────────────────────────────
 # Injected into the system prompt when a participant carries a known role.
@@ -205,14 +212,13 @@ YOUR FRUSTRATIONS AND PAIN POINTS:
 
 CONVERSATION GUIDELINES:
 - Respond authentically as this persona, drawing from your background, goals, and frustrations
-- Share perspectives that reflect your unique experiences and viewpoint
-- Be specific and concrete — relate ideas to your personal experience
+- Share one focused perspective per turn — one concrete detail beats a long essay
 - Address at least one other participant by name in every turn
 - Agree, disagree, or qualify — but always take a clear position
-- If you have expertise relevant to the topic, use it
-- Express your frustrations and concerns when relevant
+- If you have expertise relevant to the topic, mention it briefly
+- Express frustrations when relevant, in one tight sentence if possible
 - NEVER adopt another participant's communication style — remain distinctly yourself
-- Write 100-120 words per turn"""
+- {_SIMULATION_REPLY_LENGTH}"""
 
         if facilitator_must_address:
             system_prompt += f"""
@@ -221,7 +227,8 @@ CRITICAL — FACILITATOR INTERVENTION:
 The facilitator has said: "{facilitator_must_address}"
 Address this directly in your next response. Let it change the course of your
 reply. Do not continue the previous thread without first acknowledging the
-facilitator's intervention."""
+facilitator's intervention.
+{_SIMULATION_REPLY_LENGTH}"""
 
         return system_prompt
 
@@ -269,9 +276,8 @@ facilitator's intervention."""
 {simulation.goal_context if simulation.goal_context else ""}
 
 State your position clearly: what should Cipherbot do when a student asks a
-question, and what should it not do? Be specific — name at least one concrete
-behaviour you support and one you oppose. Explain why, drawing from your own
-experience. Write 100-120 words."""
+question, and what should it not do? Name one behaviour you support and one you
+oppose, with one short reason each. {_SIMULATION_REPLY_LENGTH}"""
 
         # ── Final round ───────────────────────────────────────────────────────
         if is_final_round:
@@ -283,7 +289,7 @@ If your view has changed from what you said at the start, name specifically
 which argument changed your mind. If your view has not changed, say so and
 explain why the discussion did not shift your position.
 {addressee_str}
-Write 100-120 words."""
+{_SIMULATION_REPLY_LENGTH}"""
 
         # ── Facilitator intervention ──────────────────────────────────────────
         if is_last_facilitator and last_facilitator_content:
@@ -291,7 +297,7 @@ Write 100-120 words."""
 
 Respond directly to this. Let it change the direction of your reply.
 {addressee_str}
-Write 100-120 words."""
+{_SIMULATION_REPLY_LENGTH}"""
 
         # ── Standard continue turn ────────────────────────────────────────────
         facilitator_note = ""
@@ -301,7 +307,7 @@ Write 100-120 words."""
         return f"""{facilitator_note}Continue the discussion. {addressee_str}
 Respond to what has been said. Agree, disagree, or qualify — but take a clear
 position. If you are changing your view from earlier, say so explicitly and
-state the argument that persuaded you. Write 100-120 words."""
+state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
 
     # ──────────────────────────────────────────────────────────────────────────
     # RAG grounding
@@ -486,7 +492,8 @@ state the argument that persuaded you. Write 100-120 words."""
             system_prompt += (
                 "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (use this):\n"
                 + rag_grounding
-                + "\n\nBase your reply on this project data where relevant. Do not invent facts."
+                + "\n\nBase your reply on this project data where relevant. Do not invent facts. "
+                "Use at most one tight idea from this text — do not quote long passages."
             )
 
         # ── Conversation context (blind opening enforced here) ────────────────
@@ -890,7 +897,8 @@ Respond in JSON format:
             system_prompt += (
                 "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (use this):\n"
                 + rag_grounding
-                + "\n\nBase your reply on this project data where relevant. Do not invent facts."
+                + "\n\nBase your reply on this project data where relevant. Do not invent facts. "
+                "Use at most one tight idea from this text — do not quote long passages."
             )
 
         conversation_context = self._build_conversation_context(
