@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3, Play } from 'lucide-react';
+import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3, Play, FileJson } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet, PersonaSetGenerateResponse, Persona } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -10,6 +10,19 @@ function ExpandedPersonaCard({ persona }: { persona: Persona }) {
   const personaData = persona.persona_data || {};
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
+
+  const downloadPersonaJson = () => {
+    const blob = new Blob([JSON.stringify(persona, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const base = (personaData.name || persona.name || 'persona').replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'persona';
+    a.download = `${base}_${persona.id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
 
   return (
     <div className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue">
@@ -66,13 +79,24 @@ function ExpandedPersonaCard({ persona }: { persona: Persona }) {
         </p>
       </div>
 
-      {/* Button to view expanded version */}
-      <button
-        onClick={() => navigate(`/personas/${persona.persona_set_id}/${persona.id}`)}
-        className="w-full mt-4 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-lg font-medium transition-all duration-200 shadow-lg transform hover:scale-105"
-      >
-        View Complete Persona
-      </button>
+      {/* Actions */}
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        <button
+          type="button"
+          onClick={() => navigate(`/personas/${persona.persona_set_id}/${persona.id}`)}
+          className="flex flex-1 items-center justify-center rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 px-4 py-2.5 font-medium text-white shadow-lg transition-all duration-200 hover:from-purple-600 hover:to-indigo-700 sm:py-2"
+        >
+          View complete persona
+        </button>
+        <button
+          type="button"
+          onClick={downloadPersonaJson}
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/40 bg-white/15 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/25 sm:py-2"
+        >
+          <FileJson className="h-4 w-4 shrink-0" />
+          <span className="text-center leading-snug">Download JSON</span>
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, FileJson } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
@@ -97,7 +97,10 @@ export default function PersonaDetailPage() {
     }
   };
 
-  const handleDownload = async () => {
+  const sanitizeFilename = (name: string) =>
+    name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'persona';
+
+  const handleDownloadFullSetJson = async () => {
     if (!personaSet) return;
     try {
       const blob = await personasApi.downloadJson(personaSet.id);
@@ -112,6 +115,21 @@ export default function PersonaDetailPage() {
     } catch (error: any) {
       alert(`Failed to download: ${error.response?.data?.detail || error.message}`);
     }
+  };
+
+  const handleDownloadCurrentPersonaJson = () => {
+    if (!personaSet) return;
+    const p = personaSet.personas[currentIndex];
+    const blob = new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const label = sanitizeFilename(p.persona_data?.name || p.name || `persona_${p.id}`);
+    a.download = `${label}_${p.id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
   const preloadImages = (element: HTMLElement): Promise<void> => {
@@ -156,38 +174,72 @@ export default function PersonaDetailPage() {
 
   const handleDownloadProfileImage = async () => {
     if (!profileCardRef.current || downloadingProfile) return;
-    
+
     const currentPersona = personaSet?.personas[currentIndex];
     if (!currentPersona) return;
-    
+
+    const sourceEl = profileCardRef.current;
+
     setDownloadingProfile(true);
     try {
-      // Preload all images in the profile card
-      await preloadImages(profileCardRef.current);
-      
-      // Wait a bit more to ensure rendering is complete
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Capture the profile card with improved settings
-      const canvas = await html2canvas(profileCardRef.current, {
-        backgroundColor: '#667eea', // Match the gradient background start color
-        scale: 3, // Higher quality for better image rendering
-        useCORS: true, // Allow cross-origin images
-        allowTaint: true, // Allow tainted canvas for better image rendering
+      await preloadImages(sourceEl);
+      sourceEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Width at capture time so line breaks match the profile card as laid out on screen
+      const captureWidthPx = Math.max(320, Math.ceil(sourceEl.getBoundingClientRect().width));
+
+      const canvas = await html2canvas(sourceEl, {
+        // Page gradient average — fills only outside the card’s rounded bounds if any
+        backgroundColor: '#7b6bb8',
+        scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 2)),
+        useCORS: true,
+        allowTaint: true,
         logging: false,
-        width: profileCardRef.current.scrollWidth,
-        height: profileCardRef.current.scrollHeight,
-        windowWidth: profileCardRef.current.scrollWidth,
-        windowHeight: profileCardRef.current.scrollHeight,
-        // Better image rendering
-        imageTimeout: 15000, // Wait up to 15 seconds for images
+        imageTimeout: 20000,
         removeContainer: false,
-        // Capture all CSS including gradients
-        foreignObjectRendering: false, // Disable for better compatibility
-        // Capture scrollable content
+        foreignObjectRendering: false,
         scrollX: 0,
         scrollY: 0,
-      } as any); // Type assertion needed for some html2canvas options
+        onclone: (_doc: Document, cloned: HTMLElement) => {
+          // Match on-screen card width (same wrapping as the live profile block)
+          cloned.style.width = `${captureWidthPx}px`;
+          cloned.style.maxWidth = 'none';
+          cloned.style.boxSizing = 'border-box';
+          cloned.style.height = 'auto';
+          cloned.style.minHeight = '0';
+          cloned.style.overflow = 'visible';
+
+          // html2canvas does not rasterize backdrop-filter reliably; approximate the real card look
+          cloned.style.backdropFilter = 'none';
+          cloned.style.setProperty('-webkit-backdrop-filter', 'none');
+          cloned.style.background =
+            'linear-gradient(135deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.22) 100%), linear-gradient(135deg, rgba(173, 216, 230, 0.42), rgba(176, 224, 230, 0.28))';
+          cloned.style.backgroundColor = 'rgba(248, 252, 255, 0.88)';
+          cloned.style.border = '1px solid rgba(255, 255, 255, 0.45)';
+          cloned.style.boxShadow = '0 8px 32px 0 rgba(31, 38, 135, 0.22)';
+
+          cloned.querySelectorAll('.persona-detail-export-scroll').forEach((el: Element) => {
+            const node = el as HTMLElement;
+            node.style.maxHeight = 'none';
+            node.style.overflow = 'visible';
+            node.style.height = 'auto';
+            node.style.paddingRight = '0.5rem';
+          });
+
+          cloned.querySelectorAll('.persona-export-hide').forEach((el: Element) => {
+            (el as HTMLElement).style.display = 'none';
+          });
+
+          cloned.querySelectorAll('.persona-export-text').forEach((el: Element) => {
+            const node = el as HTMLElement;
+            node.style.whiteSpace = 'normal';
+            node.style.overflow = 'visible';
+            node.style.textOverflow = 'clip';
+            node.style.wordBreak = 'break-word';
+          });
+        },
+      } as any);
       
       // Convert to blob and download
       canvas.toBlob((blob) => {
@@ -200,7 +252,9 @@ export default function PersonaDetailPage() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        const personaName = currentPersona.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const personaName = sanitizeFilename(
+          currentPersona.persona_data?.name || currentPersona.name || `persona_${currentPersona.id}`
+        );
         link.download = `${personaName}_profile.png`;
         document.body.appendChild(link);
         link.click();
@@ -288,9 +342,11 @@ export default function PersonaDetailPage() {
           ) : typeof data === 'object' && data !== null && !Array.isArray(data) ? (
             <div className="space-y-2">
               {Object.entries(data).map(([key, value]) => (
-                <div key={key} className="flex">
-                  <span className="text-white/70 font-medium min-w-[120px] capitalize">{key.replace(/_/g, ' ')}:</span>
-                  <span className="text-white/90 flex-1">
+                <div key={key} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                  <span className="shrink-0 font-medium capitalize text-white/70 sm:min-w-[8.5rem]">
+                    {key.replace(/_/g, ' ')}:
+                  </span>
+                  <span className="min-w-0 flex-1 break-words text-white/90">
                     {(() => {
                       if (value === null || value === undefined) return String(value || '');
                       if (typeof value === 'object') {
@@ -317,36 +373,49 @@ export default function PersonaDetailPage() {
     <div className="min-h-screen px-4 py-6">
       {/* Header with Navigation */}
       <div className="glass-card rounded-2xl p-4 mb-6 pastel-purple">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <button
+              type="button"
               onClick={() => navigate('/personas')}
-              className="p-2 rounded-lg hover:bg-white/20 transition-colors"
+              className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-white/20"
             >
               <X className="h-5 w-5 text-white" />
             </button>
-            <div>
-              <h1 className="text-xl font-bold text-white">{personaSet.name}</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold text-white sm:text-xl">{personaSet.name}</h1>
               <p className="text-sm text-white/70">
                 Persona {currentIndex + 1} of {personaSet.personas.length}
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-stretch justify-start gap-2 sm:justify-end">
             <button
+              type="button"
               onClick={handleDownloadProfileImage}
               disabled={downloadingProfile}
-              className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-white/20 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-initial sm:px-4"
             >
-              <ImageIcon className="h-4 w-4" />
-              <span>{downloadingProfile ? 'Generating...' : 'Download Profile Image'}</span>
+              <ImageIcon className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">
+                {downloadingProfile ? 'Saving…' : 'Download profile as image'}
+              </span>
             </button>
             <button
-              onClick={handleDownload}
-              className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors flex items-center space-x-2"
+              type="button"
+              onClick={handleDownloadCurrentPersonaJson}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-white/20 px-3 py-2.5 text-sm text-white transition-colors hover:bg-white/30 sm:flex-initial sm:px-4"
             >
-              <Download className="h-4 w-4" />
-              <span>Download JSON</span>
+              <FileJson className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">This persona (JSON)</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadFullSetJson}
+              className="inline-flex flex-1 basis-full items-center justify-center gap-2 rounded-lg bg-white/20 px-3 py-2.5 text-sm text-white transition-colors hover:bg-white/30 sm:basis-auto sm:flex-initial sm:px-4"
+            >
+              <Download className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">Full set (JSON)</span>
             </button>
           </div>
         </div>
@@ -411,9 +480,9 @@ export default function PersonaDetailPage() {
       {/* Expanded Persona Card */}
       <div ref={profileCardRef} className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue max-w-7xl mx-auto">
         {/* Header with Image, Demographics, Quote and Overview */}
-        <div className="flex gap-6 mb-4 pb-4 border-b border-white/20">
+        <div className="mb-4 flex flex-col gap-6 border-b border-white/20 pb-4 xl:flex-row xl:items-start">
           {/* Left: Image and Demographics */}
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             {/* Persona Image */}
             <div className="flex-shrink-0">
               {(currentPersona.image_url || currentPersona.id) && !imageErrors.has(currentPersona.id) ? (
@@ -434,10 +503,11 @@ export default function PersonaDetailPage() {
                     </div>
                   ) : (
                     <button
+                      type="button"
                       onClick={() => handleGenerateImage(currentPersona.id)}
-                      className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                      className="persona-export-hide absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 transition-opacity hover:opacity-100"
                     >
-                      <span className="text-white text-xs">Generate</span>
+                      <span className="text-xs text-white">Generate</span>
                     </button>
                   )}
                 </div>
@@ -445,8 +515,10 @@ export default function PersonaDetailPage() {
             </div>
             
             {/* Demographics - Four Rows */}
-            <div className="flex flex-col justify-center space-y-2 min-w-[200px]">
-              <h4 className="text-2xl font-bold text-white mb-2">{personaData.name || currentPersona.name}</h4>
+            <div className="flex min-w-0 max-w-full flex-col justify-center space-y-2 sm:min-w-[200px]">
+              <h4 className="mb-2 break-words text-2xl font-bold text-white">
+                {personaData.name || currentPersona.name}
+              </h4>
               {(getField('age')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <User className="h-4 w-4 text-white/70" />
@@ -456,8 +528,9 @@ export default function PersonaDetailPage() {
               {(getField('location') || getField('nationality')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <MapPin className="h-4 w-4 text-white/70" />
-                  <span className="truncate">
-                    <strong>Location:</strong> {
+                  <span className="persona-export-text break-words">
+                    <strong>Location:</strong>{' '}
+                    {
                       (() => {
                         const location = getField('location');
                         const nationality = getField('nationality');
@@ -477,7 +550,9 @@ export default function PersonaDetailPage() {
               {(getField('occupation')) && (
                 <div className="flex items-center space-x-2 text-sm text-white/90">
                   <Briefcase className="h-4 w-4 text-white/70" />
-                  <span className="truncate"><strong>Occupation:</strong> {String(getField('occupation') || '')}</span>
+                  <span className="persona-export-text break-words">
+                    <strong>Occupation:</strong> {String(getField('occupation') || '')}
+                  </span>
                 </div>
               )}
               {(getField('gender')) && (
@@ -508,12 +583,12 @@ export default function PersonaDetailPage() {
           </div>
 
           {/* Right: Quote and Overview */}
-          <div className="flex-1 space-y-3">
+          <div className="min-w-0 flex-1 space-y-3">
             {(personaData.quote || personaData.quotes) && (
               <div className="p-3 bg-white/10 rounded-lg border-l-4 border-purple-400">
                 <div className="flex items-start space-x-2">
                   <Quote className="h-4 w-4 text-purple-300 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-white/90 italic leading-relaxed">
+                  <div className="text-sm italic leading-relaxed text-white/90 break-words">
                     {Array.isArray(personaData.quotes) ? (
                       <ul className="list-disc list-inside space-y-1">
                         {personaData.quotes.map((q: any, idx: number) => (
@@ -530,7 +605,7 @@ export default function PersonaDetailPage() {
             {(personaData.basic_description || personaData.tagline || personaData.role) && (
               <div>
                 <h5 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Overview</h5>
-                <p className="text-sm text-white/90 leading-relaxed">
+                <p className="text-sm leading-relaxed text-white/90 break-words">
                   {(() => {
                     const getStringValue = (value: any): string | null => {
                       if (!value) return null;
@@ -555,7 +630,7 @@ export default function PersonaDetailPage() {
         </div>
 
         {/* Details Section - 2x2 Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-h-[calc(100vh-380px)] overflow-y-auto pr-2">
+        <div className="persona-detail-export-scroll grid max-h-[min(70vh,calc(100vh-380px))] grid-cols-1 gap-4 overflow-y-auto pr-2 lg:grid-cols-2">
           {/* Top Left: Background */}
           <div>
             {renderSection(
