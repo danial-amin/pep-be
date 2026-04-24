@@ -711,7 +711,7 @@ export default function SimulationPage() {
                       <Users className="w-3 h-3" />
                       <span>{sim.participant_count}</span>
                       <MessageSquare className="w-3 h-3 ml-2" />
-                      <span>{sim.current_turn}/{sim.max_turns}</span>
+                      <span>{sim.current_turn}/{sim.max_turns} rounds</span>
                       {sim.run_until_agreement && (
                         <span title="Run until agreement">
                           <TrendingUp className="w-3 h-3 ml-1 text-purple-300" />
@@ -995,7 +995,7 @@ export default function SimulationPage() {
                     <div className="text-right">
                       <div className="text-sm text-white/80">
                         <MessageSquare className="w-4 h-4 inline mr-1" />
-                        {currentSimulation.current_turn} / {currentSimulation.max_turns} turns
+                        {currentSimulation.current_turn} / {currentSimulation.max_turns} rounds done
                       </div>
                       <div className="text-xs text-white/60">
                         <Clock className="w-3 h-3 inline mr-1" />

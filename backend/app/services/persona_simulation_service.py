@@ -441,12 +441,6 @@ state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
         if simulation.status in ("completed", "stopped"):
             return None
 
-        if simulation.current_turn >= simulation.max_turns:
-            simulation.status = "completed"
-            simulation.completed_at = datetime.now(timezone.utc)
-            await session.commit()
-            return None
-
         # ── Load participants ─────────────────────────────────────────────────
         participants: Dict[int, Persona] = {}
         participant_roles: Dict[int, Optional[str]] = {}
@@ -459,6 +453,17 @@ state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
 
         if not participants:
             logger.error(f"No valid participants for simulation {simulation.id}")
+            return None
+
+        num_participants = len(participants)
+        persona_count_before = self._count_persona_messages(list(simulation.messages))
+        completed_before = self._completed_full_rounds(persona_count_before, num_participants)
+        # max_turns = number of full rounds (schema). Stop only after that many rounds finish.
+        if completed_before >= simulation.max_turns:
+            simulation.status = "completed"
+            simulation.completed_at = datetime.now(timezone.utc)
+            simulation.current_turn = completed_before
+            await session.commit()
             return None
 
         next_speaker_id = self._select_next_speaker(
@@ -501,16 +506,15 @@ state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
             messages_ordered, participants, next_speaker_id,
         )
 
-        persona_count  = self._count_persona_messages(list(simulation.messages))
-        num_participants = len(participants)
-        turn_number    = self._round_turn_number(persona_count, num_participants)
+        turn_number = self._round_turn_number(persona_count_before, num_participants)
 
         is_first_turn_for_agent = not any(
             m.persona_id == next_speaker_id
             for m in simulation.messages
             if not getattr(m, "is_human_message", False) and m.persona_id is not None
         )
-        is_final_round = simulation.current_turn >= simulation.max_turns - 1
+        # Final-round prompt only while still inside the last configured round (not when it has already finished).
+        is_final_round = completed_before >= max(0, simulation.max_turns - 1)
         other_names = [p.name for pid, p in participants.items() if pid != next_speaker_id]
 
         turn_prompt = self._build_turn_prompt(
@@ -554,8 +558,10 @@ state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
             )
             session.add(message)
 
-            simulation.current_turn  = turn_number
-            simulation.tokens_used  += tokens_used
+            persona_count_after = persona_count_before + 1
+            completed_after = self._completed_full_rounds(persona_count_after, num_participants)
+            simulation.current_turn = completed_after
+            simulation.tokens_used += tokens_used
 
             for p in simulation.participants:
                 if p.persona_id == next_speaker_id:
@@ -563,9 +569,8 @@ state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
                     p.tokens_used    += tokens_used
                     break
 
-            # Conversation termination rule:
-            # Conversations should stop ONLY when the turn limit is reached.
-            if simulation.current_turn >= simulation.max_turns:
+            # Stop only after max_turns full rounds are completed (every persona spoke each round).
+            if completed_after >= simulation.max_turns:
                 simulation.status = "completed"
                 simulation.completed_at = datetime.now(timezone.utc)
 
@@ -593,6 +598,13 @@ state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
         if num_participants <= 0:
             return 1
         return max(1, (persona_message_count + num_participants) // num_participants)
+
+    @staticmethod
+    def _completed_full_rounds(persona_message_count: int, num_participants: int) -> int:
+        """How many full rounds (every persona spoke once) are finished."""
+        if num_participants <= 0:
+            return 0
+        return persona_message_count // num_participants
 
     def _select_next_speaker(
         self,
@@ -835,9 +847,26 @@ Respond in JSON format:
             yield {"type": "error", "message": "Simulation is not active"}
             return
 
-        if simulation.current_turn >= simulation.max_turns:
+        participants: Dict[int, Persona] = {}
+        participant_roles: Dict[int, Optional[str]] = {}
+        for p in simulation.participants:
+            result = await session.execute(select(Persona).where(Persona.id == p.persona_id))
+            persona = result.scalar_one_or_none()
+            if persona:
+                participants[p.persona_id] = persona
+                participant_roles[p.persona_id] = p.role
+
+        if not participants:
+            yield {"type": "error", "message": "No valid participants"}
+            return
+
+        num_participants = len(participants)
+        persona_count_before = self._count_persona_messages(list(simulation.messages))
+        completed_before = self._completed_full_rounds(persona_count_before, num_participants)
+        if completed_before >= simulation.max_turns:
             simulation.status = "completed"
             simulation.completed_at = datetime.now(timezone.utc)
+            simulation.current_turn = completed_before
             await session.commit()
             yield {
                 "type": "complete",
@@ -848,15 +877,6 @@ Respond in JSON format:
             }
             return
 
-        participants: Dict[int, Persona] = {}
-        participant_roles: Dict[int, Optional[str]] = {}
-        for p in simulation.participants:
-            result = await session.execute(select(Persona).where(Persona.id == p.persona_id))
-            persona = result.scalar_one_or_none()
-            if persona:
-                participants[p.persona_id] = persona
-                participant_roles[p.persona_id] = p.role
-
         next_speaker_id = self._select_next_speaker(
             list(simulation.messages),
             list(participants.keys()),
@@ -865,9 +885,7 @@ Respond in JSON format:
         next_persona = participants[next_speaker_id]
         next_role    = participant_roles.get(next_speaker_id)
 
-        persona_count    = self._count_persona_messages(list(simulation.messages))
-        num_participants = len(participants)
-        turn_number      = self._round_turn_number(persona_count, num_participants)
+        turn_number      = self._round_turn_number(persona_count_before, num_participants)
 
         yield {
             "type":         "start",
@@ -910,7 +928,7 @@ Respond in JSON format:
             for m in simulation.messages
             if not getattr(m, "is_human_message", False) and m.persona_id is not None
         )
-        is_final_round = simulation.current_turn >= simulation.max_turns - 1
+        is_final_round = completed_before >= max(0, simulation.max_turns - 1)
         other_names    = [p.name for pid, p in participants.items() if pid != next_speaker_id]
 
         turn_prompt = self._build_turn_prompt(
@@ -954,8 +972,10 @@ Respond in JSON format:
             )
             session.add(message)
 
-            simulation.current_turn  = turn_number
-            simulation.tokens_used  += tokens_used
+            persona_count_after = persona_count_before + 1
+            completed_after = self._completed_full_rounds(persona_count_after, num_participants)
+            simulation.current_turn = completed_after
+            simulation.tokens_used += tokens_used
 
             for p in simulation.participants:
                 if p.persona_id == next_speaker_id:
@@ -963,7 +983,7 @@ Respond in JSON format:
                     p.tokens_used    += tokens_used
                     break
 
-            if simulation.current_turn >= simulation.max_turns:
+            if completed_after >= simulation.max_turns:
                 simulation.status = "completed"
                 simulation.completed_at = datetime.now(timezone.utc)
 

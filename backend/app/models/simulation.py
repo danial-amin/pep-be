@@ -38,6 +38,7 @@ class Simulation(Base):
 
     # Current state
     status = Column(String(50), default="pending")  # pending, running, completed, stopped
+    # Number of fully completed rounds (each participant spoke once per round).
     current_turn = Column(Integer, default=0)
     tokens_used = Column(Integer, default=0)
 

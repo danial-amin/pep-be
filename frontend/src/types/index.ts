@@ -296,6 +296,7 @@ export interface Simulation {
   run_until_agreement: boolean;
   agreement_threshold: number;
   status: 'pending' | 'running' | 'completed' | 'stopped';
+  /** Full rounds completed (every participant spoke once per round). */
   current_turn: number;
   tokens_used: number;
   /** Latest agreement snapshot score, if any evaluation has been run */
@@ -319,6 +320,7 @@ export interface SimulationListItem {
   name: string;
   goal: string;
   status: string;
+  /** Full rounds completed. */
   current_turn: number;
   max_turns: number;
   tokens_used: number;
