@@ -219,14 +219,6 @@ export default function PersonaDetailPage() {
           cloned.style.border = '1px solid rgba(255, 255, 255, 0.45)';
           cloned.style.boxShadow = '0 8px 32px 0 rgba(31, 38, 135, 0.22)';
 
-          cloned.querySelectorAll('.persona-detail-export-scroll').forEach((el: Element) => {
-            const node = el as HTMLElement;
-            node.style.maxHeight = 'none';
-            node.style.overflow = 'visible';
-            node.style.height = 'auto';
-            node.style.paddingRight = '0.5rem';
-          });
-
           cloned.querySelectorAll('.persona-export-hide').forEach((el: Element) => {
             (el as HTMLElement).style.display = 'none';
           });
@@ -630,7 +622,8 @@ export default function PersonaDetailPage() {
         </div>
 
         {/* Details Section - 2x2 Grid */}
-        <div className="persona-detail-export-scroll grid max-h-[min(70vh,calc(100vh-380px))] grid-cols-1 gap-4 overflow-y-auto pr-2 lg:grid-cols-2">
+        {/* NOTE: No internal scrolling here; keep full profile visible + exportable */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Top Left: Background */}
           <div>
             {renderSection(
