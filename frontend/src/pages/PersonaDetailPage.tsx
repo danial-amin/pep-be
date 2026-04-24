@@ -189,9 +189,29 @@ export default function PersonaDetailPage() {
       // Width at capture time so line breaks match the profile card as laid out on screen
       const captureWidthPx = Math.max(320, Math.ceil(sourceEl.getBoundingClientRect().width));
 
-      const canvas = await html2canvas(sourceEl, {
-        // Page gradient average — fills only outside the card’s rounded bounds if any
-        backgroundColor: '#7b6bb8',
+      // Create a temporary wrapper so the exported image has a consistent solid background.
+      const exportBg = '#0b1220'; // deep navy, prints well and keeps good contrast
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-10000px';
+      wrapper.style.top = '0';
+      wrapper.style.padding = '24px';
+      wrapper.style.width = `${captureWidthPx + 48}px`;
+      wrapper.style.background = exportBg;
+      wrapper.style.borderRadius = '24px';
+      wrapper.style.boxSizing = 'border-box';
+
+      const clone = sourceEl.cloneNode(true) as HTMLElement;
+      clone.style.width = `${captureWidthPx}px`;
+      clone.style.maxWidth = 'none';
+      clone.style.boxSizing = 'border-box';
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await html2canvas(wrapper, {
+          backgroundColor: exportBg,
         scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 2)),
         useCORS: true,
         allowTaint: true,
@@ -202,27 +222,12 @@ export default function PersonaDetailPage() {
         scrollX: 0,
         scrollY: 0,
         onclone: (_doc: Document, cloned: HTMLElement) => {
-          // Match on-screen card width (same wrapping as the live profile block)
-          cloned.style.width = `${captureWidthPx}px`;
-          cloned.style.maxWidth = 'none';
-          cloned.style.boxSizing = 'border-box';
-          cloned.style.height = 'auto';
-          cloned.style.minHeight = '0';
-          cloned.style.overflow = 'visible';
-
-          // html2canvas does not rasterize backdrop-filter reliably; approximate the real card look
-          cloned.style.backdropFilter = 'none';
-          cloned.style.setProperty('-webkit-backdrop-filter', 'none');
-          cloned.style.background =
-            'linear-gradient(135deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.22) 100%), linear-gradient(135deg, rgba(173, 216, 230, 0.42), rgba(176, 224, 230, 0.28))';
-          cloned.style.backgroundColor = 'rgba(248, 252, 255, 0.88)';
-          cloned.style.border = '1px solid rgba(255, 255, 255, 0.45)';
-          cloned.style.boxShadow = '0 8px 32px 0 rgba(31, 38, 135, 0.22)';
-
+          // Hide export-only UI (e.g. image generation overlay)
           cloned.querySelectorAll('.persona-export-hide').forEach((el: Element) => {
             (el as HTMLElement).style.display = 'none';
           });
 
+          // Ensure long fields wrap (avoid ellipsis/truncation in export)
           cloned.querySelectorAll('.persona-export-text').forEach((el: Element) => {
             const node = el as HTMLElement;
             node.style.whiteSpace = 'normal';
@@ -230,8 +235,27 @@ export default function PersonaDetailPage() {
             node.style.textOverflow = 'clip';
             node.style.wordBreak = 'break-word';
           });
+
+          // html2canvas does not rasterize backdrop-filter reliably; approximate the real card look
+          const exportedCard = cloned.querySelector(
+            '[data-persona-profile-card="true"]'
+          ) as HTMLElement | null;
+          if (exportedCard) {
+            exportedCard.style.backdropFilter = 'none';
+            exportedCard.style.setProperty('-webkit-backdrop-filter', 'none');
+            exportedCard.style.background =
+              'linear-gradient(135deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.22) 100%), linear-gradient(135deg, rgba(173, 216, 230, 0.42), rgba(176, 224, 230, 0.28))';
+            exportedCard.style.backgroundColor = 'rgba(255, 255, 255, 0.25)';
+            exportedCard.style.border = '1px solid rgba(255, 255, 255, 0.45)';
+            exportedCard.style.boxShadow = '0 8px 32px 0 rgba(31, 38, 135, 0.22)';
+          }
         },
-      } as any);
+        } as any);
+      } finally {
+        if (wrapper.parentNode) {
+          wrapper.parentNode.removeChild(wrapper);
+        }
+      }
       
       // Convert to blob and download
       canvas.toBlob((blob) => {
@@ -470,7 +494,11 @@ export default function PersonaDetailPage() {
       </div>
 
       {/* Expanded Persona Card */}
-      <div ref={profileCardRef} className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue max-w-7xl mx-auto">
+      <div
+        ref={profileCardRef}
+        data-persona-profile-card="true"
+        className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue max-w-7xl mx-auto"
+      >
         {/* Header with Image, Demographics, Quote and Overview */}
         <div className="mb-4 flex flex-col gap-6 border-b border-white/20 pb-4 xl:flex-row xl:items-start">
           {/* Left: Image and Demographics */}
