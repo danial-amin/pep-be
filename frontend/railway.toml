@@ -4,7 +4,6 @@
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
 # Paths are relative to the repository root (Railway monorepo docs).
 watchPatterns = ["frontend/**"]
 # Build arguments - set VITE_API_URL as a build-time variable in Railway
