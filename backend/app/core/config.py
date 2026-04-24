@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Union[str, List[str]] = ["*"]
 
     # Persona simulation: max output tokens per persona message (API max_tokens).
-    # Lower = shorter replies and lower cost; too low may truncate stance-taking.
-    SIMULATION_MAX_OUTPUT_TOKENS: int = 200
+    # Clamped in PersonaSimulationService to 100–150 per turn. Override via env in that band.
+    SIMULATION_MAX_OUTPUT_TOKENS: int = 128
     
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod

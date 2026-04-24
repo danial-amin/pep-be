@@ -21,7 +21,7 @@ Key design principles (all production defaults):
   6. ADDRESSEE INSTRUCTION: agents name at least one other participant in
      each turn, making cross-group vs within-group exchange recoverable
      from the transcript without modifying speaker-selection logic.
-  7. TOKEN BUDGET: SIMULATION_MAX_OUTPUT_TOKENS per turn (default 200), capped in code.
+  7. TOKEN BUDGET: SIMULATION_MAX_OUTPUT_TOKENS per turn (default 128), clamped 100–150 in code.
   8. NO PERIODIC REMINDER: CORE IDENTITY ANCHOR in the system prompt does
      the stability work; a mid-conversation reminder is a confound.
 """
@@ -44,7 +44,7 @@ from app.utils.token_utils import estimate_tokens
 logger = logging.getLogger(__name__)
 
 # ─── Token budget ──────────────────────────────────────────────────────────────
-# Output cap per turn comes from settings.SIMULATION_MAX_OUTPUT_TOKENS (default 200).
+# Output cap per turn: settings.SIMULATION_MAX_OUTPUT_TOKENS, clamped to 100–150.
 # Count only completion tokens toward simulation.tokens_used (not full prompt+completion).
 
 # ─── Group mandates ────────────────────────────────────────────────────────────
@@ -78,8 +78,9 @@ class PersonaSimulationService:
 
     @staticmethod
     def _max_output_tokens() -> int:
-        n = getattr(settings, "SIMULATION_MAX_OUTPUT_TOKENS", 200)
-        return max(50, min(int(n), 1024))
+        """Per persona message: 100–150 completion tokens (short turns, lower cost)."""
+        n = getattr(settings, "SIMULATION_MAX_OUTPUT_TOKENS", 128)
+        return max(100, min(int(n), 150))
 
     # ──────────────────────────────────────────────────────────────────────────
     # Prompt building
