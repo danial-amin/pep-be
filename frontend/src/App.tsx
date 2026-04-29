@@ -9,6 +9,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectWorkflowPage from './pages/ProjectWorkflowPage';
 import SimulationPage from './pages/SimulationPage';
+import SimulationPersonaChatsPage from './pages/SimulationPersonaChatsPage';
 
 function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
   const location = useLocation();
@@ -71,6 +72,7 @@ function App() {
             <Route path="/personas/:setId/:personaId" element={<PersonaDetailPage />} />
             <Route path="/simulations" element={<SimulationPage />} />
             <Route path="/simulations/:simulationId" element={<SimulationPage />} />
+            <Route path="/simulations/:simulationId/persona-chats" element={<SimulationPersonaChatsPage />} />
             <Route path="/prompts" element={<PromptsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
           </Routes>

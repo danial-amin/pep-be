@@ -186,26 +186,55 @@ export default function PersonaDetailPage() {
       sourceEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      // Capture the card exactly as it is currently rendered on screen.
-      // NOTE: This intentionally avoids any export-only restyling so colors/gradients/shadows match the UI.
-      const canvas = await html2canvas(sourceEl, {
-        backgroundColor: null,
-        scale: Math.min(3, Math.max(2, window.devicePixelRatio || 2)),
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        imageTimeout: 20000,
-        removeContainer: true,
-        foreignObjectRendering: true,
-        scrollX: 0,
-        scrollY: 0,
-        onclone: (_doc: Document, cloned: Document) => {
-          // Hide export-only UI (e.g. hover-only buttons) inside the cloned DOM if present.
-          cloned.querySelectorAll('.persona-export-hide').forEach((el: Element) => {
-            (el as HTMLElement).style.display = 'none';
-          });
-        },
-      } as any);
+      // html2canvas can return a blank/grey capture for glassmorphism/backdrop-filter elements.
+      // We therefore capture a cloned copy in a temporary wrapper with the *same page background*,
+      // but we DO NOT restyle the card itself (so it still matches how it's displayed).
+      const captureWidthPx = Math.max(320, Math.ceil(sourceEl.getBoundingClientRect().width));
+      const pageBg =
+        (typeof window !== 'undefined'
+          ? window.getComputedStyle(document.body).backgroundColor
+          : '') || '#f8f7f4';
+
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-10000px';
+      wrapper.style.top = '0';
+      wrapper.style.padding = '24px';
+      wrapper.style.width = `${captureWidthPx + 48}px`;
+      wrapper.style.background = pageBg;
+      wrapper.style.boxSizing = 'border-box';
+
+      const clone = sourceEl.cloneNode(true) as HTMLElement;
+      clone.style.width = `${captureWidthPx}px`;
+      clone.style.maxWidth = 'none';
+      clone.style.boxSizing = 'border-box';
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await html2canvas(wrapper, {
+          backgroundColor: pageBg,
+          scale: Math.min(3, Math.max(2, window.devicePixelRatio || 2)),
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          imageTimeout: 20000,
+          removeContainer: true,
+          foreignObjectRendering: false,
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (_doc: Document, clonedDoc: Document) => {
+            clonedDoc.querySelectorAll('.persona-export-hide').forEach((el: Element) => {
+              (el as HTMLElement).style.display = 'none';
+            });
+          },
+        } as any);
+      } finally {
+        if (wrapper.parentNode) {
+          wrapper.parentNode.removeChild(wrapper);
+        }
+      }
       
       // Convert to blob and download
       canvas.toBlob((blob) => {
