@@ -203,6 +203,12 @@ export default function SimulationPage() {
   const [interventionText, setInterventionText] = useState('');
   const [intervening, setIntervening] = useState(false);
 
+  // View mode: conversation vs persona-focused transcript
+  const [viewMode, setViewMode] = useState<'chat' | 'persona_chats'>('chat');
+  const [selectedPersonaId, setSelectedPersonaId] = useState<number | null>(null);
+  const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
+  const [loadingPersona, setLoadingPersona] = useState(false);
+
   // Setup form state
   const [showSetup, setShowSetup] = useState(!simulationId);
   const [expandedSetIds, setExpandedSetIds] = useState<Set<number>>(new Set());
@@ -227,6 +233,35 @@ export default function SimulationPage() {
       loadSimulation(parseInt(simulationId));
     }
   }, [simulationId]);
+
+  // When a simulation loads/changes, default the persona selection.
+  useEffect(() => {
+    if (!currentSimulation?.participants?.length) return;
+    const first = currentSimulation.participants[0]?.persona_id;
+    if (!first) return;
+    setSelectedPersonaId(prev => prev ?? first);
+  }, [currentSimulation?.id, currentSimulation?.participants]);
+
+  // Load the selected persona profile (full data) for persona-focused view.
+  useEffect(() => {
+    const run = async () => {
+      if (!selectedPersonaId) {
+        setSelectedPersona(null);
+        return;
+      }
+      setLoadingPersona(true);
+      try {
+        const p = await personasApi.getPersona(selectedPersonaId);
+        setSelectedPersona(p);
+      } catch (e) {
+        console.error('Failed to load persona:', e);
+        setSelectedPersona(null);
+      } finally {
+        setLoadingPersona(false);
+      }
+    };
+    run();
+  }, [selectedPersonaId]);
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -635,6 +670,9 @@ export default function SimulationPage() {
     setAgreementThreshold(0.7);
     setAgreementHistory(null);
     setShowAgreementHistory(false);
+    setViewMode('chat');
+    setSelectedPersonaId(null);
+    setSelectedPersona(null);
     navigate('/simulations');
   };
 
@@ -642,6 +680,17 @@ export default function SimulationPage() {
     currentSimulation && streamingMessage
       ? [...currentSimulation.messages, streamingMessage]
       : currentSimulation?.messages || [];
+
+  const personaFocusedMessages = selectedPersonaId
+    ? displayMessages
+        .filter(m => !(m.is_human_message ?? (m.persona_id == null)) && m.persona_id === selectedPersonaId)
+        .slice()
+        .sort((a, b) => (a.turn_number - b.turn_number) || (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()))
+    : [];
+
+  const selectedParticipant = selectedPersonaId
+    ? currentSimulation?.participants.find(p => p.persona_id === selectedPersonaId) ?? null
+    : null;
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -1119,6 +1168,21 @@ export default function SimulationPage() {
                   </label>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => setViewMode(v => (v === 'chat' ? 'persona_chats' : 'chat'))}
+                  disabled={!currentSimulation}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 ${
+                    viewMode === 'persona_chats'
+                      ? 'bg-stone-900 text-white hover:bg-stone-800'
+                      : 'bg-stone-100 text-stone-900 hover:bg-stone-100'
+                  }`}
+                  title="View personas with their message history"
+                >
+                  <Users className="w-4 h-4" />
+                  Personas + Chats
+                </button>
+
                 {currentSimulation.messages.length > 0 && (
                   <button
                     onClick={handleEvaluateAgreement}
@@ -1155,65 +1219,284 @@ export default function SimulationPage() {
                 )}
               </div>
 
-              {/* Chat area: messages scrollable, intervention box fixed at bottom */}
-              <div className="glass-card rounded-2xl overflow-hidden flex flex-col min-h-[480px] max-h-[70vh]">
-                {/* Messages - scrollable, takes remaining space */}
-                <div className="flex-1 min-h-0 overflow-y-auto p-4">
-                  {displayMessages.length === 0 ? (
-                    <div className="flex items-center justify-center h-64 text-stone-400">
-                      <div className="text-center">
-                        <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                        <p>No messages yet. Start the simulation to begin the conversation.</p>
+              {viewMode === 'chat' ? (
+                /* Chat area: messages scrollable, intervention box fixed at bottom */
+                <div className="glass-card rounded-2xl overflow-hidden flex flex-col min-h-[480px] max-h-[70vh]">
+                  {/* Messages - scrollable, takes remaining space */}
+                  <div className="flex-1 min-h-0 overflow-y-auto p-4">
+                    {displayMessages.length === 0 ? (
+                      <div className="flex items-center justify-center h-64 text-stone-400">
+                        <div className="text-center">
+                          <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No messages yet. Start the simulation to begin the conversation.</p>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <>
-                      {displayMessages.map((msg, idx) => (
-                        <MessageBubble
-                          key={msg.id}
-                          message={msg}
-                          isLeft={idx % 2 === 0}
+                    ) : (
+                      <>
+                        {displayMessages.map((msg, idx) => (
+                          <MessageBubble
+                            key={msg.id}
+                            message={msg}
+                            isLeft={idx % 2 === 0}
+                          />
+                        ))}
+                        <div ref={messagesEndRef} />
+                      </>
+                    )}
+                    {running && (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-6 h-6 text-stone-400 animate-spin" />
+                        <span className="ml-2 text-stone-400">Generating response...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Intervention box - fixed at bottom under the chat */}
+                  {(currentSimulation.status === 'running' || currentSimulation.status === 'pending') && (
+                    <div className="flex-shrink-0 p-4 pt-0 border-t border-stone-200">
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={interventionText}
+                          onChange={(e) => setInterventionText(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleIntervene()}
+                          placeholder="Facilitator intervention (e.g., Let's focus on cost...)"
+                          className="flex-1 px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          disabled={intervening}
                         />
-                      ))}
-                      <div ref={messagesEndRef} />
-                    </>
-                  )}
-                  {running && (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className="w-6 h-6 text-stone-400 animate-spin" />
-                      <span className="ml-2 text-stone-400">Generating response...</span>
+                        <button
+                          onClick={handleIntervene}
+                          disabled={intervening || !interventionText.trim()}
+                          className="px-4 py-2.5 bg-amber-100 hover:bg-amber-200 disabled:opacity-50 text-amber-800 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                        >
+                          {intervening ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                          Intervene
+                        </button>
+                      </div>
+                      <p className="text-xs text-stone-400 mt-1.5">
+                        Next persona turn will address your message and give it strong weight.
+                      </p>
                     </div>
                   )}
                 </div>
-
-                {/* Intervention box - fixed at bottom under the chat */}
-                {(currentSimulation.status === 'running' || currentSimulation.status === 'pending') && (
-                  <div className="flex-shrink-0 p-4 pt-0 border-t border-stone-200">
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="text"
-                        value={interventionText}
-                        onChange={(e) => setInterventionText(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleIntervene()}
-                        placeholder="Facilitator intervention (e.g., Let's focus on cost...)"
-                        className="flex-1 px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                        disabled={intervening}
-                      />
+              ) : (
+                /* Persona-focused view: persona profile + that persona's message history */
+                <div className="glass-card rounded-2xl overflow-hidden p-4">
+                  {/* Persona pills */}
+                  <div className="flex items-center gap-2 flex-wrap pb-4 border-b border-stone-200">
+                    <span className="text-sm text-stone-500 mr-2">Personas:</span>
+                    {currentSimulation.participants.map(p => (
                       <button
-                        onClick={handleIntervene}
-                        disabled={intervening || !interventionText.trim()}
-                        className="px-4 py-2.5 bg-amber-100 hover:bg-amber-200 disabled:opacity-50 text-amber-800 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                        key={p.id}
+                        type="button"
+                        onClick={() => setSelectedPersonaId(p.persona_id)}
+                        className={`flex items-center gap-2 rounded-full px-3 py-1.5 border transition-colors ${
+                          selectedPersonaId === p.persona_id
+                            ? 'bg-stone-900 text-white border-stone-900'
+                            : 'bg-stone-50 text-stone-900 border-stone-200 hover:bg-stone-100'
+                        }`}
+                        title="Select persona"
                       >
-                        {intervening ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                        Intervene
+                        <PersonaAvatar
+                          name={p.persona_name}
+                          imageUrl={p.persona_image_url}
+                          personaId={p.persona_id}
+                          size="sm"
+                          showBorder={false}
+                        />
+                        <span className="text-sm font-medium">{p.persona_name}</span>
+                        {p.role && <span className={`text-xs ${selectedPersonaId === p.persona_id ? 'text-white/70' : 'text-stone-400'}`}>({p.role})</span>}
                       </button>
-                    </div>
-                    <p className="text-xs text-stone-400 mt-1.5">
-                      Next persona turn will address your message and give it strong weight.
-                    </p>
+                    ))}
                   </div>
-                )}
-              </div>
+
+                  {/* Split layout */}
+                  <div className="mt-4 flex flex-col lg:flex-row gap-4">
+                    {/* Persona profile (≈ 3/4 width) */}
+                    <div className="lg:w-3/4 w-full">
+                      <div className="rounded-2xl border border-stone-200 bg-white p-5">
+                        {loadingPersona ? (
+                          <div className="flex items-center gap-2 text-stone-500">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Loading persona…
+                          </div>
+                        ) : !selectedPersona ? (
+                          <div className="text-stone-500">Select a persona to view their full profile.</div>
+                        ) : (
+                          (() => {
+                            const personaData = selectedPersona.persona_data || ({} as any);
+                            const demographics = personaData.demographics || {};
+                            const background =
+                              personaData.background ||
+                              personaData.detailed_description ||
+                              personaData.personal_background ||
+                              personaData.background_and_personal_history ||
+                              personaData.other_information ||
+                              '';
+                            const goals = Array.isArray(personaData.goals) ? personaData.goals : [];
+                            const frustrations = Array.isArray(personaData.frustrations) ? personaData.frustrations : [];
+
+                            const renderValue = (v: any): string => {
+                              if (v === null || v === undefined) return '';
+                              if (typeof v === 'string') return v;
+                              if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+                              if (Array.isArray(v)) return v.map(renderValue).filter(Boolean).join(', ');
+                              if (typeof v === 'object') {
+                                if ('text' in v || 'description' in v || 'content' in v) {
+                                  return String((v as any).text || (v as any).description || (v as any).content || '');
+                                }
+                                try {
+                                  return JSON.stringify(v);
+                                } catch {
+                                  return String(v);
+                                }
+                              }
+                              return String(v);
+                            };
+
+                            return (
+                              <div>
+                                <div className="flex items-start gap-4 mb-5">
+                                  <PersonaAvatar
+                                    name={selectedPersona.name}
+                                    imageUrl={selectedPersona.image_url}
+                                    personaId={selectedPersona.id}
+                                    size="lg"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="text-2xl font-bold text-stone-900">
+                                      {personaData.name || selectedPersona.name}
+                                    </h4>
+                                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-stone-500">
+                                      {(demographics.occupation || personaData.occupation) && (
+                                        <span>{renderValue(demographics.occupation || personaData.occupation)}</span>
+                                      )}
+                                      {(demographics.location || personaData.location) && (
+                                        <span>• {renderValue(demographics.location || personaData.location)}</span>
+                                      )}
+                                      {(demographics.age || personaData.age) && (
+                                        <span>• {renderValue(demographics.age || personaData.age)} yrs</span>
+                                      )}
+                                      {(demographics.gender || personaData.gender) && (
+                                        <span>• {renderValue(demographics.gender || personaData.gender)}</span>
+                                      )}
+                                    </div>
+                                    {selectedParticipant?.persona_set_name && (
+                                      <div className="mt-2 text-xs text-stone-400">
+                                        From: <span className="italic">{selectedParticipant.persona_set_name}</span>
+                                      </div>
+                                    )}
+                                    {personaData.quote && (
+                                      <div className="mt-3 p-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-700 italic">
+                                        “{renderValue(personaData.quote)}”
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                                  <div>
+                                    <h5 className="text-sm font-semibold text-stone-900 uppercase tracking-wide mb-2">Background</h5>
+                                    <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-wrap">
+                                      {renderValue(background) || 'No background information available.'}
+                                    </p>
+                                  </div>
+                                  <div className="space-y-4">
+                                    <div>
+                                      <h5 className="text-sm font-semibold text-stone-900 uppercase tracking-wide mb-2">Goals</h5>
+                                      {goals.length ? (
+                                        <ul className="list-disc list-inside space-y-1 text-sm text-stone-700">
+                                          {goals.map((g: any, idx: number) => (
+                                            <li key={idx}>{renderValue(g)}</li>
+                                          ))}
+                                        </ul>
+                                      ) : (
+                                        <p className="text-sm text-stone-400">No goals listed.</p>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <h5 className="text-sm font-semibold text-stone-900 uppercase tracking-wide mb-2">Frustrations</h5>
+                                      {frustrations.length ? (
+                                        <ul className="list-disc list-inside space-y-1 text-sm text-stone-700">
+                                          {frustrations.map((f: any, idx: number) => (
+                                            <li key={idx}>{renderValue(f)}</li>
+                                          ))}
+                                        </ul>
+                                      ) : (
+                                        <p className="text-sm text-stone-400">No frustrations listed.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Persona messages (≈ 1/4 width) */}
+                    <div className="lg:w-1/4 w-full">
+                      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden flex flex-col min-h-[420px] max-h-[70vh]">
+                        <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between">
+                          <div className="text-sm font-semibold text-stone-900">Messages</div>
+                          <div className="text-xs text-stone-400">
+                            {personaFocusedMessages.length} total
+                          </div>
+                        </div>
+                        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+                          {!selectedPersonaId ? (
+                            <div className="text-sm text-stone-500">Select a persona.</div>
+                          ) : personaFocusedMessages.length === 0 ? (
+                            <div className="text-sm text-stone-500">
+                              No messages from this persona yet.
+                            </div>
+                          ) : (
+                            (() => {
+                              let lastTurn: number | null = null;
+                              return personaFocusedMessages.map((m) => {
+                                const showTurn = lastTurn !== m.turn_number;
+                                lastTurn = m.turn_number;
+                                return (
+                                  <div key={m.id}>
+                                    {showTurn && (
+                                      <div className="sticky top-0 z-10 -mx-3 px-3 py-1.5 bg-white/95 backdrop-blur border-y border-stone-100">
+                                        <span className="text-xs font-semibold text-stone-500">Turn {m.turn_number}</span>
+                                      </div>
+                                    )}
+                                    <div className="mt-2 rounded-xl bg-stone-50 border border-stone-200 px-3 py-2">
+                                      <div className="flex items-center justify-between gap-2 mb-1">
+                                        <span className="text-xs font-medium text-stone-700 truncate">
+                                          {m.persona_name}
+                                        </span>
+                                        {m.persona_drift_score !== undefined && (
+                                          <span
+                                            className={`text-[11px] px-1.5 py-0.5 rounded-full ${
+                                              m.persona_drift_score > 0.6 ? 'bg-red-50 text-red-600' :
+                                              m.persona_drift_score > 0.3 ? 'bg-amber-50 text-amber-600' :
+                                              'bg-green-50 text-green-600'
+                                            }`}
+                                            title={`Persona drift: ${(m.persona_drift_score * 100).toFixed(0)}%`}
+                                          >
+                                            drift {(m.persona_drift_score * 100).toFixed(0)}%
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-stone-800 leading-relaxed whitespace-pre-wrap">
+                                        {m.content}
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Agreement History Panel */}
               {showAgreementHistory && agreementHistory && agreementHistory.evaluations.length > 0 && (

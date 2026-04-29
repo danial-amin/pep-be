@@ -186,76 +186,26 @@ export default function PersonaDetailPage() {
       sourceEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      // Width at capture time so line breaks match the profile card as laid out on screen
-      const captureWidthPx = Math.max(320, Math.ceil(sourceEl.getBoundingClientRect().width));
-
-      // Create a temporary wrapper so the exported image has a consistent solid background.
-      const exportBg = '#0b1220'; // deep navy, prints well and keeps good contrast
-      const wrapper = document.createElement('div');
-      wrapper.style.position = 'fixed';
-      wrapper.style.left = '-10000px';
-      wrapper.style.top = '0';
-      wrapper.style.padding = '24px';
-      wrapper.style.width = `${captureWidthPx + 48}px`;
-      wrapper.style.background = exportBg;
-      wrapper.style.borderRadius = '24px';
-      wrapper.style.boxSizing = 'border-box';
-
-      const clone = sourceEl.cloneNode(true) as HTMLElement;
-      clone.style.width = `${captureWidthPx}px`;
-      clone.style.maxWidth = 'none';
-      clone.style.boxSizing = 'border-box';
-      wrapper.appendChild(clone);
-      document.body.appendChild(wrapper);
-
-      let canvas: HTMLCanvasElement;
-      try {
-        canvas = await html2canvas(wrapper, {
-          backgroundColor: exportBg,
-        scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 2)),
+      // Capture the card exactly as it is currently rendered on screen.
+      // NOTE: This intentionally avoids any export-only restyling so colors/gradients/shadows match the UI.
+      const canvas = await html2canvas(sourceEl, {
+        backgroundColor: null,
+        scale: Math.min(3, Math.max(2, window.devicePixelRatio || 2)),
         useCORS: true,
         allowTaint: true,
         logging: false,
         imageTimeout: 20000,
-        removeContainer: false,
-        foreignObjectRendering: false,
+        removeContainer: true,
+        foreignObjectRendering: true,
         scrollX: 0,
         scrollY: 0,
-        onclone: (_doc: Document, cloned: HTMLElement) => {
-          // Hide export-only UI (e.g. image generation overlay)
+        onclone: (_doc: Document, cloned: Document) => {
+          // Hide export-only UI (e.g. hover-only buttons) inside the cloned DOM if present.
           cloned.querySelectorAll('.persona-export-hide').forEach((el: Element) => {
             (el as HTMLElement).style.display = 'none';
           });
-
-          // Ensure long fields wrap (avoid ellipsis/truncation in export)
-          cloned.querySelectorAll('.persona-export-text').forEach((el: Element) => {
-            const node = el as HTMLElement;
-            node.style.whiteSpace = 'normal';
-            node.style.overflow = 'visible';
-            node.style.textOverflow = 'clip';
-            node.style.wordBreak = 'break-word';
-          });
-
-          // html2canvas does not rasterize backdrop-filter reliably; approximate the real card look
-          const exportedCard = cloned.querySelector(
-            '[data-persona-profile-card="true"]'
-          ) as HTMLElement | null;
-          if (exportedCard) {
-            exportedCard.style.backdropFilter = 'none';
-            exportedCard.style.setProperty('-webkit-backdrop-filter', 'none');
-            exportedCard.style.background =
-              'linear-gradient(135deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.22) 100%), linear-gradient(135deg, rgba(173, 216, 230, 0.42), rgba(176, 224, 230, 0.28))';
-            exportedCard.style.backgroundColor = 'rgba(255, 255, 255, 0.25)';
-            exportedCard.style.border = '1px solid rgba(255, 255, 255, 0.45)';
-            exportedCard.style.boxShadow = '0 8px 32px 0 rgba(31, 38, 135, 0.22)';
-          }
         },
-        } as any);
-      } finally {
-        if (wrapper.parentNode) {
-          wrapper.parentNode.removeChild(wrapper);
-        }
-      }
+      } as any);
       
       // Convert to blob and download
       canvas.toBlob((blob) => {
