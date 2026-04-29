@@ -51,7 +51,7 @@ const isHumanMessage = (m: SimulationMessage) =>
 
 export default function SimulationPersonaChatsPage() {
   const navigate = useNavigate();
-  const { simulationId } = useParams<{ simulationId: string }>();
+  const { simulationId, personaId } = useParams<{ simulationId: string; personaId?: string; personaSlug?: string }>();
 
   const [simulation, setSimulation] = useState<Simulation | null>(null);
   const [loadingSimulation, setLoadingSimulation] = useState(false);
@@ -60,6 +60,14 @@ export default function SimulationPersonaChatsPage() {
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
   const [loadingPersona, setLoadingPersona] = useState(false);
 
+  const slugify = (s: string) =>
+    (s || 'persona')
+      .toLowerCase()
+      .trim()
+      .replace(/['"]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '') || 'persona';
+
   useEffect(() => {
     const run = async () => {
       if (!simulationId) return;
@@ -67,8 +75,10 @@ export default function SimulationPersonaChatsPage() {
       try {
         const data = await simulationsApi.getById(parseInt(simulationId));
         setSimulation(data);
+        const fromUrl = personaId ? parseInt(personaId) : null;
         const first = data.participants?.[0]?.persona_id;
-        if (first) setSelectedPersonaId(prev => prev ?? first);
+        const initial = (fromUrl && !Number.isNaN(fromUrl)) ? fromUrl : (first ?? null);
+        if (initial) setSelectedPersonaId(initial);
       } catch (e) {
         console.error('Failed to load simulation:', e);
         setSimulation(null);
@@ -77,7 +87,7 @@ export default function SimulationPersonaChatsPage() {
       }
     };
     run();
-  }, [simulationId]);
+  }, [simulationId, personaId]);
 
   useEffect(() => {
     const run = async () => {
@@ -89,6 +99,15 @@ export default function SimulationPersonaChatsPage() {
       try {
         const p = await personasApi.getPersona(selectedPersonaId);
         setSelectedPersona(p);
+
+        // Keep URL in sync with selected persona (include name slug).
+        if (simulationId) {
+          const slug = slugify(p.persona_data?.name || p.name || 'persona');
+          navigate(
+            `/simulations/${simulationId}/persona-chats/${selectedPersonaId}/${encodeURIComponent(slug)}`,
+            { replace: true }
+          );
+        }
       } catch (e) {
         console.error('Failed to load persona:', e);
         setSelectedPersona(null);
@@ -97,7 +116,7 @@ export default function SimulationPersonaChatsPage() {
       }
     };
     run();
-  }, [selectedPersonaId]);
+  }, [selectedPersonaId, simulationId]);
 
   const selectedParticipant = useMemo(() => {
     if (!simulation || !selectedPersonaId) return null;
@@ -210,10 +229,10 @@ export default function SimulationPersonaChatsPage() {
         </div>
       </div>
 
-      {/* 50/50 layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* 65/35 layout */}
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Left: Persona profile */}
-        <div className="glass-card rounded-2xl p-5">
+        <div className="glass-card rounded-2xl p-5 lg:w-[65%] w-full">
           {loadingPersona ? (
             <div className="flex items-center gap-2 text-stone-600">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -314,7 +333,7 @@ export default function SimulationPersonaChatsPage() {
         </div>
 
         {/* Right: Messages from persona */}
-        <div className="glass-card rounded-2xl overflow-hidden flex flex-col min-h-[520px] max-h-[75vh]">
+        <div className="glass-card rounded-2xl overflow-hidden flex flex-col min-h-[520px] max-h-[75vh] lg:w-[35%] w-full">
           <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between">
             <div className="flex items-center gap-2 text-stone-900 font-semibold">
               <MessageSquare className="w-4 h-4" />
@@ -343,9 +362,14 @@ export default function SimulationPersonaChatsPage() {
                       )}
                       <div className="mt-2 rounded-2xl bg-stone-50 border border-stone-200 px-4 py-3">
                         <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="text-xs font-semibold text-stone-700 truncate">
-                            {m.persona_name}
-                          </span>
+                          <div className="min-w-0 flex items-center gap-2">
+                            <span className="text-xs font-semibold text-stone-700 truncate">
+                              {m.persona_name}
+                            </span>
+                            <span className="text-[11px] text-stone-400 whitespace-nowrap">
+                              Turn {m.turn_number}
+                            </span>
+                          </div>
                           {m.persona_drift_score !== undefined && (
                             <span
                               className={`text-[11px] px-1.5 py-0.5 rounded-full ${

@@ -73,6 +73,7 @@ function App() {
             <Route path="/simulations" element={<SimulationPage />} />
             <Route path="/simulations/:simulationId" element={<SimulationPage />} />
             <Route path="/simulations/:simulationId/persona-chats" element={<SimulationPersonaChatsPage />} />
+            <Route path="/simulations/:simulationId/persona-chats/:personaId/:personaSlug" element={<SimulationPersonaChatsPage />} />
             <Route path="/prompts" element={<PromptsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
           </Routes>
