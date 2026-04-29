@@ -229,10 +229,10 @@ export default function SimulationPersonaChatsPage() {
         </div>
       </div>
 
-      {/* 65/35 layout */}
+      {/* 55/45 layout */}
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Left: Persona profile */}
-        <div className="glass-card rounded-2xl p-5 lg:w-[65%] w-full">
+        <div className="glass-card rounded-2xl p-5 lg:w-[55%] w-full">
           {loadingPersona ? (
             <div className="flex items-center gap-2 text-stone-600">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -333,7 +333,7 @@ export default function SimulationPersonaChatsPage() {
         </div>
 
         {/* Right: Messages from persona */}
-        <div className="glass-card rounded-2xl overflow-hidden flex flex-col min-h-[520px] max-h-[75vh] lg:w-[35%] w-full">
+        <div className="glass-card rounded-2xl overflow-hidden flex flex-col min-h-[520px] max-h-[75vh] lg:w-[45%] w-full">
           <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between">
             <div className="flex items-center gap-2 text-stone-900 font-semibold">
               <MessageSquare className="w-4 h-4" />
@@ -362,14 +362,9 @@ export default function SimulationPersonaChatsPage() {
                       )}
                       <div className="mt-2 rounded-2xl bg-stone-50 border border-stone-200 px-4 py-3">
                         <div className="flex items-center justify-between gap-2 mb-1">
-                          <div className="min-w-0 flex items-center gap-2">
-                            <span className="text-xs font-semibold text-stone-700 truncate">
-                              {m.persona_name}
-                            </span>
-                            <span className="text-[11px] text-stone-400 whitespace-nowrap">
-                              Turn {m.turn_number}
-                            </span>
-                          </div>
+                          <span className="text-xs font-semibold text-stone-700 whitespace-nowrap">
+                            Turn {m.turn_number}
+                          </span>
                           {m.persona_drift_score !== undefined && (
                             <span
                               className={`text-[11px] px-1.5 py-0.5 rounded-full ${
