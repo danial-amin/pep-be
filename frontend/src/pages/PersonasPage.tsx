@@ -25,32 +25,32 @@ function ExpandedPersonaCard({ persona }: { persona: Persona }) {
   };
 
   return (
-    <div className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue">
+    <div className="glass-card rounded-2xl p-6 border border-stone-200">
       {/* Persona Image and Name */}
       <div className="flex items-center gap-4 mb-4">
         {(persona.image_url || persona.id) && !imageError ? (
           <img
             src={getPersonaImageUrl(persona.image_url, persona.id) || ''}
             alt={persona.name}
-            className="w-20 h-20 object-cover rounded-xl border-4 border-white/30 shadow-lg flex-shrink-0"
+            className="w-20 h-20 object-cover rounded-xl border-4 border-stone-200 shadow-lg flex-shrink-0"
             onError={() => setImageError(true)}
           />
         ) : (
-          <div className="w-20 h-20 rounded-xl border-4 border-white/30 bg-white/10 flex items-center justify-center flex-shrink-0">
-            <span className="text-white/40 text-2xl font-bold">
+          <div className="w-20 h-20 rounded-xl border-4 border-stone-200 bg-stone-50 flex items-center justify-center flex-shrink-0">
+            <span className="text-stone-300 text-2xl font-bold">
               {(personaData.name || persona.name).charAt(0).toUpperCase()}
             </span>
           </div>
         )}
         <div className="flex-1">
-          <h4 className="text-2xl font-bold text-white mb-1">{personaData.name || persona.name}</h4>
+          <h4 className="text-2xl font-bold text-stone-900 mb-1">{personaData.name || persona.name}</h4>
         </div>
       </div>
 
       {/* Background */}
       <div className="mb-4">
-        <h5 className="text-sm font-semibold text-white uppercase tracking-wide mb-2">Background</h5>
-        <p className="text-sm text-white/90 leading-relaxed">
+        <h5 className="text-sm font-semibold text-stone-900 uppercase tracking-wide mb-2">Background</h5>
+        <p className="text-sm text-stone-700 leading-relaxed">
           {(() => {
             const getStringValue = (value: any): string | null => {
               if (!value) return null;
@@ -84,14 +84,14 @@ function ExpandedPersonaCard({ persona }: { persona: Persona }) {
         <button
           type="button"
           onClick={() => navigate(`/personas/${persona.persona_set_id}/${persona.id}`)}
-          className="flex flex-1 items-center justify-center rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 px-4 py-2.5 font-medium text-white shadow-lg transition-all duration-200 hover:from-purple-600 hover:to-indigo-700 sm:py-2"
+          className="flex flex-1 items-center justify-center rounded-lg bg-stone-900 hover:bg-stone-800 px-4 py-2.5 font-medium text-white shadow-sm transition-all duration-200 sm:py-2"
         >
           View complete persona
         </button>
         <button
           type="button"
           onClick={downloadPersonaJson}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/40 bg-white/15 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/25 sm:py-2"
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-4 py-2.5 text-sm font-medium text-stone-900 transition-colors hover:bg-stone-100 sm:py-2"
         >
           <FileJson className="h-4 w-4 shrink-0" />
           <span className="text-center leading-snug">Download JSON</span>
@@ -250,12 +250,12 @@ export default function PersonasPage() {
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Personas</h2>
-          <p className="text-white/80 text-lg">Generate and manage user personas from your documents</p>
+          <h2 className="text-3xl font-bold text-stone-900 mb-2 ">Personas</h2>
+          <p className="text-stone-600 text-lg">Generate and manage user personas from your documents</p>
         </div>
         <button
           onClick={() => navigate('/simulations')}
-          className="px-6 py-3 bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 hover:from-purple-600 hover:via-pink-600 hover:to-rose-600 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 flex items-center gap-2"
+          className="px-6 py-3 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-semibold transition-all duration-200 flex items-center gap-2"
         >
           <Play className="w-5 h-5" />
           Launch Simulation
@@ -263,9 +263,9 @@ export default function PersonasPage() {
       </div>
 
       {/* Generate New Persona Set */}
-      <div className="glass-card rounded-2xl p-6 mb-6 pastel-blue">
+      <div className="glass-card rounded-2xl p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-semibold text-white">Generate New Persona Set</h3>
+          <h3 className="text-xl font-semibold text-stone-900">Generate New Persona Set</h3>
           <button
             onClick={async () => {
               try {
@@ -287,7 +287,7 @@ export default function PersonasPage() {
               }
             }}
             disabled={generating}
-            className="px-4 py-2 text-sm font-medium rounded-xl text-white bg-gradient-to-r from-purple-400 to-pink-400 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
+            className="px-4 py-2 text-sm font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 disabled:opacity-50 transition-all duration-200"
           >
             {generating ? 'Loading...' : 'Load Default Personas (Manual)'}
           </button>
@@ -296,7 +296,7 @@ export default function PersonasPage() {
         {/* Basic Options */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-white/90 mb-1">
+            <label className="block text-sm font-medium text-stone-700 mb-1">
               Number of Personas
             </label>
             <input
@@ -305,17 +305,17 @@ export default function PersonasPage() {
               max="10"
               value={numPersonas}
               onChange={(e) => setNumPersonas(parseInt(e.target.value) || 3)}
-              className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-white/90 mb-1">
+            <label className="block text-sm font-medium text-stone-700 mb-1">
               Output Format
             </label>
             <select
               value={outputFormat}
               onChange={(e) => setOutputFormat(e.target.value)}
-              className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
             >
               <option value="json">JSON</option>
               <option value="profile">Profile</option>
@@ -333,16 +333,16 @@ export default function PersonasPage() {
         {/* Advanced Options Toggle */}
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-sm text-white/90 hover:text-white mb-4 font-medium transition-all duration-200"
+          className="text-sm text-stone-700 hover:text-stone-900 mb-4 font-medium transition-all duration-200"
         >
           {showAdvanced ? '▼ Hide' : '▶ Show'} Advanced Options
         </button>
 
         {/* Advanced Options */}
         {showAdvanced && (
-          <div className="space-y-4 border-t border-white/20 pt-4">
+          <div className="space-y-4 border-t border-stone-200 pt-4">
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-1">
+              <label className="block text-sm font-medium text-stone-700 mb-1">
                 Context Details (Optional)
               </label>
               <textarea
@@ -350,12 +350,12 @@ export default function PersonasPage() {
                 onChange={(e) => setContextDetails(e.target.value)}
                 placeholder="Additional context about the research, market, or domain..."
                 rows={3}
-                className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-1">
+              <label className="block text-sm font-medium text-stone-700 mb-1">
                 Interview Topic (Optional)
               </label>
               <input
@@ -363,12 +363,12 @@ export default function PersonasPage() {
                 value={interviewTopic}
                 onChange={(e) => setInterviewTopic(e.target.value)}
                 placeholder="e.g., user experience with mobile app, customer pain points..."
-                className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-1">
+              <label className="block text-sm font-medium text-stone-700 mb-1">
                 User Study Design (Optional)
               </label>
               <textarea
@@ -376,7 +376,7 @@ export default function PersonasPage() {
                 onChange={(e) => setUserStudyDesign(e.target.value)}
                 placeholder="Description of user study design, methodology, and research approach..."
                 rows={3}
-                className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
               />
             </div>
 
@@ -386,9 +386,9 @@ export default function PersonasPage() {
                 id="ethical-guardrails"
                 checked={includeEthicalGuardrails}
                 onChange={(e) => setIncludeEthicalGuardrails(e.target.checked)}
-                className="h-4 w-4 text-purple-400 focus:ring-purple-300 border-white/30 rounded bg-white/20"
+                className="h-4 w-4 text-purple-400 focus:ring-purple-300 border-stone-200 rounded bg-stone-100"
               />
-              <label htmlFor="ethical-guardrails" className="ml-2 block text-sm text-white/90">
+              <label htmlFor="ethical-guardrails" className="ml-2 block text-sm text-stone-700">
                 Include Ethical and Fairness Guardrails
               </label>
             </div>
@@ -400,7 +400,7 @@ export default function PersonasPage() {
           <button
             onClick={handleGenerateSet}
             disabled={generating}
-            className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 hover:from-purple-500 hover:via-pink-500 hover:to-rose-500 disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
+            className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 disabled:opacity-50 transition-all duration-200"
           >
             <Plus className="mr-2 h-4 w-4" />
             {generating ? 'Generating...' : 'Generate Personas'}
@@ -410,25 +410,25 @@ export default function PersonasPage() {
 
       {/* Workflow Steps */}
       {selectedSet && (
-        <div className="glass-card rounded-2xl p-6 mb-6 pastel-green">
-          <h3 className="text-xl font-semibold text-white mb-4">Persona Generation Workflow</h3>
+        <div className="glass-card rounded-2xl p-6 mb-6">
+          <h3 className="text-xl font-semibold text-stone-900 mb-4">Persona Generation Workflow</h3>
           <div className="space-y-4">
             {/* Step 1: Generation */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.personas.length > 0 ? 'bg-green-400' : 'bg-white/20'
+                selectedSet.personas.length > 0 ? 'bg-green-400' : 'bg-stone-100'
               }`}>
                 {selectedSet.personas.length > 0 ? (
-                  <CheckCircle className="h-5 w-5 text-white" />
+                  <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
-                  <Circle className="h-5 w-5 text-white" />
+                  <Circle className="h-5 w-5 text-stone-900" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-medium text-white">Step 1: Persona Set Generation</h4>
-                <p className="text-sm text-white/80">Generate initial persona set with basic demographics</p>
+                <h4 className="font-medium text-stone-900">Step 1: Persona Set Generation</h4>
+                <p className="text-sm text-stone-600">Generate initial persona set with basic demographics</p>
                 {selectedSet.personas.length > 0 && (
-                  <p className="text-xs text-white/60 mt-1">✓ {selectedSet.personas.length} personas generated</p>
+                  <p className="text-xs text-stone-400 mt-1">✓ {selectedSet.personas.length} personas generated</p>
                 )}
               </div>
             </div>
@@ -436,19 +436,19 @@ export default function PersonasPage() {
             {/* Step 2: Diversity Measurement */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.diversity_score ? 'bg-green-400' : 'bg-white/20'
+                selectedSet.diversity_score ? 'bg-green-400' : 'bg-stone-100'
               }`}>
                 {selectedSet.diversity_score ? (
-                  <CheckCircle className="h-5 w-5 text-white" />
+                  <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
-                  <Circle className="h-5 w-5 text-white" />
+                  <Circle className="h-5 w-5 text-stone-900" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-medium text-white">Step 2: Measure Diversity (RQE)</h4>
-                <p className="text-sm text-white/80">Calculate RQE scores to measure persona set diversity</p>
+                <h4 className="font-medium text-stone-900">Step 2: Measure Diversity (RQE)</h4>
+                <p className="text-sm text-stone-600">Calculate RQE scores to measure persona set diversity</p>
                 {selectedSet.diversity_score && (
-                  <p className="text-xs text-white/60 mt-1">
+                  <p className="text-xs text-stone-400 mt-1">
                     ✓ RQE: {(selectedSet.diversity_score.rqe_score * 100).toFixed(1)}%
                   </p>
                 )}
@@ -456,7 +456,7 @@ export default function PersonasPage() {
                   <button
                     onClick={() => handleMeasureDiversity(selectedSet.id)}
                     disabled={measuringDiversity === selectedSet.id}
-                    className="mt-2 text-xs px-3 py-1 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50"
+                    className="mt-2 text-xs px-3 py-1 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50"
                   >
                     {measuringDiversity === selectedSet.id ? 'Measuring...' : 'Measure Diversity'}
                   </button>
@@ -467,22 +467,22 @@ export default function PersonasPage() {
             {/* Step 3: Expansion */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.personas.some(p => p.persona_data.detailed_description) ? 'bg-green-400' : 'bg-white/20'
+                selectedSet.personas.some(p => p.persona_data.detailed_description) ? 'bg-green-400' : 'bg-stone-100'
               }`}>
                 {selectedSet.personas.some(p => p.persona_data.detailed_description) ? (
-                  <CheckCircle className="h-5 w-5 text-white" />
+                  <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
-                  <Circle className="h-5 w-5 text-white" />
+                  <Circle className="h-5 w-5 text-stone-900" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-medium text-white">Step 3: Expand Personas</h4>
-                <p className="text-sm text-white/80">Expand basic personas into full-fledged personas</p>
+                <h4 className="font-medium text-stone-900">Step 3: Expand Personas</h4>
+                <p className="text-sm text-stone-600">Expand basic personas into full-fledged personas</p>
                 {selectedSet.personas.length > 0 && (
                   <button
                     onClick={() => handleExpand(selectedSet.id)}
                     disabled={expanding === selectedSet.id}
-                    className="mt-2 text-xs px-3 py-1 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50"
+                    className="mt-2 text-xs px-3 py-1 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50"
                   >
                     {expanding === selectedSet.id ? 'Expanding...' : 'Expand All'}
                   </button>
@@ -493,24 +493,24 @@ export default function PersonasPage() {
             {/* Step 4: Validation */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.validation_scores ? 'bg-green-400' : 'bg-white/20'
+                selectedSet.validation_scores ? 'bg-green-400' : 'bg-stone-100'
               }`}>
                 {selectedSet.validation_scores ? (
-                  <CheckCircle className="h-5 w-5 text-white" />
+                  <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
-                  <Circle className="h-5 w-5 text-white" />
+                  <Circle className="h-5 w-5 text-stone-900" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-medium text-white">Step 4: Validate Against Transcripts</h4>
-                <p className="text-sm text-white/80">Calculate cosine similarity with real interview data</p>
+                <h4 className="font-medium text-stone-900">Step 4: Validate Against Transcripts</h4>
+                <p className="text-sm text-stone-600">Calculate cosine similarity with real interview data</p>
                 {selectedSet.validation_scores && (
                   <div className="mt-1">
-                    <p className="text-xs text-white/60">
+                    <p className="text-xs text-stone-400">
                       ✓ {selectedSet.validation_scores.filter((v: any) => v.validation_status === 'validated').length} validated
                     </p>
                     {selectedSet.validation_scores.some((v: any) => v.dummy) && (
-                      <p className="text-xs text-yellow-300 mt-1">
+                      <p className="text-xs text-amber-600 mt-1">
                         ⚠ Using simulated validation (no interview documents available)
                       </p>
                     )}
@@ -521,14 +521,14 @@ export default function PersonasPage() {
                     <button
                       onClick={() => handleValidate(selectedSet.id)}
                       disabled={validating === selectedSet.id}
-                      className="text-xs px-3 py-1 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50"
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50"
                     >
                       {validating === selectedSet.id ? 'Validating...' : 'Validate'}
                     </button>
                     {selectedSet.validation_scores && (
                       <button
                         onClick={() => handleViewReport(selectedSet.id)}
-                        className="text-xs px-3 py-1 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-lg hover:from-purple-500 hover:to-pink-500"
+                        className="text-xs px-3 py-1 bg-stone-900 hover:bg-stone-800 text-white rounded-lg"
                       >
                         <BarChart3 className="inline h-3 w-3 mr-1" />
                         View Report
@@ -544,35 +544,35 @@ export default function PersonasPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Persona Sets List */}
-        <div className="glass-card rounded-2xl overflow-hidden pastel-purple">
-          <div className="px-6 py-4 border-b border-white/20">
-            <h3 className="text-lg font-semibold text-white">Persona Sets</h3>
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-200">
+            <h3 className="text-lg font-semibold text-stone-900">Persona Sets</h3>
           </div>
-          <div className="divide-y divide-white/10">
+          <div className="divide-y divide-stone-100">
             {loading ? (
-              <div className="px-6 py-8 text-center text-white/80">Loading...</div>
+              <div className="px-6 py-8 text-center text-stone-600">Loading...</div>
             ) : personaSets.length === 0 ? (
-              <div className="px-6 py-8 text-center text-white/80">
+              <div className="px-6 py-8 text-center text-stone-600">
                 No persona sets found. Generate your first set above.
               </div>
             ) : (
               personaSets.map((set) => (
-                <div key={set.id} className="px-6 py-4 hover:bg-white/10 transition-all duration-200">
+                <div key={set.id} className="px-6 py-4 hover:bg-stone-50 transition-all duration-200">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium text-white">
+                    <h4 className="text-sm font-medium text-stone-900">
                       {set.name || `Persona Set #${set.id}`}
                     </h4>
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleViewSet(set.id)}
-                        className="text-white/80 hover:text-white transition-colors"
+                        className="text-stone-600 hover:text-stone-900 transition-colors"
                         title="View in sidebar"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleViewExpanded(set.id)}
-                        className="text-white/80 hover:text-white transition-colors"
+                        className="text-stone-600 hover:text-stone-900 transition-colors"
                         title="View expanded"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -583,15 +583,15 @@ export default function PersonasPage() {
                       </button>
                     </div>
                   </div>
-                  <p className="text-sm text-white/70 mb-3">
+                  <p className="text-sm text-stone-500 mb-3">
                     {set.description || 'No description'}
                   </p>
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs text-white/70">
+                    <span className="text-xs text-stone-500">
                       {set.personas.length} persona{set.personas.length !== 1 ? 's' : ''}
                     </span>
-                    <span className="text-xs text-white/50">•</span>
-                    <span className="text-xs text-white/70">
+                    <span className="text-xs text-stone-400">•</span>
+                    <span className="text-xs text-stone-500">
                       {new Date(set.created_at).toLocaleDateString()}
                     </span>
                   </div>
@@ -599,7 +599,7 @@ export default function PersonasPage() {
                     <button
                       onClick={() => handleExpand(set.id)}
                       disabled={expanding === set.id}
-                      className="text-xs px-3 py-1 bg-purple-400/30 text-white rounded-lg hover:bg-purple-400/40 disabled:opacity-50 transition-all duration-200 border border-purple-300/30"
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded-lg hover:bg-stone-200 disabled:opacity-50 transition-all duration-150 border border-stone-200"
                     >
                       <Sparkles className="inline h-3 w-3 mr-1" />
                       {expanding === set.id ? 'Expanding...' : 'Expand'}
@@ -607,7 +607,7 @@ export default function PersonasPage() {
                     <button
                       onClick={() => handleGenerateImages(set.id)}
                       disabled={generatingImages === set.id}
-                      className="text-xs px-3 py-1 bg-pink-400/30 text-white rounded-lg hover:bg-pink-400/40 disabled:opacity-50 transition-all duration-200 border border-pink-300/30"
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded-lg hover:bg-stone-200 disabled:opacity-50 transition-all duration-150 border border-stone-200"
                     >
                       <ImageIcon className="inline h-3 w-3 mr-1" />
                       {generatingImages === set.id ? 'Generating...' : 'Images'}
@@ -620,20 +620,20 @@ export default function PersonasPage() {
         </div>
 
         {/* Selected Persona Set Details */}
-        <div className="glass-card rounded-2xl overflow-hidden pastel-pink">
-          <div className="px-6 py-4 border-b border-white/20">
-            <h3 className="text-lg font-semibold text-white">Persona Details</h3>
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-200">
+            <h3 className="text-lg font-semibold text-stone-900">Persona Details</h3>
           </div>
           <div className="p-6">
             {selectedSet ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-white">
+                  <h4 className="text-lg font-semibold text-stone-900">
                     {selectedSet.personas.length} Persona{selectedSet.personas.length !== 1 ? 's' : ''}
                   </h4>
                   <button
                     onClick={() => handleViewExpanded(selectedSet.id)}
-                    className="px-4 py-2 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-lg hover:from-purple-500 hover:to-pink-500 transition-all duration-200 flex items-center space-x-2"
+                    className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg transition-all duration-200 flex items-center space-x-2"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h3a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1z"/>
@@ -650,7 +650,7 @@ export default function PersonasPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-center text-white/80 py-8">
+              <div className="text-center text-stone-600 py-8">
                 Select a persona set to view details
               </div>
             )}

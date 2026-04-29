@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
@@ -10,64 +10,48 @@ import NewProjectPage from './pages/NewProjectPage';
 import ProjectWorkflowPage from './pages/ProjectWorkflowPage';
 import SimulationPage from './pages/SimulationPage';
 
+function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
+  const location = useLocation();
+  const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
+  return (
+    <Link
+      to={to}
+      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-150 ${
+        isActive
+          ? 'bg-stone-100 text-stone-900'
+          : 'text-stone-500 hover:text-stone-900 hover:bg-stone-50'
+      }`}
+    >
+      <Icon className="mr-2 h-4 w-4" />
+      {label}
+    </Link>
+  );
+}
+
 function App() {
   return (
     <Router>
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-[#f8f7f4]">
         {/* Navigation */}
-        <nav className="glass-strong sticky top-0 z-50">
+        <nav className="glass-strong sticky top-0 z-50 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16">
-              <div className="flex">
-                <div className="flex-shrink-0 flex items-center">
-                  <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent">
-                    PEP
-                  </h1>
-                  <span className="ml-2 text-sm text-white/90 font-medium">Persona Generator</span>
+            <div className="flex justify-between h-14">
+              <div className="flex items-center gap-6">
+                <div className="flex-shrink-0 flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center">
+                    <span className="text-white text-xs font-bold tracking-tight">P</span>
+                  </div>
+                  <span className="text-sm font-semibold text-stone-900">PEP</span>
+                  <span className="text-stone-300 text-sm">|</span>
+                  <span className="text-sm text-stone-400 font-normal">Persona Generator</span>
                 </div>
-                <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                  <Link
-                    to="/projects"
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105"
-                  >
-                    <FolderOpen className="mr-2 h-4 w-4" />
-                    Projects
-                  </Link>
-                  <Link
-                    to="/"
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105"
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    Documents
-                  </Link>
-                  <Link
-                    to="/personas"
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105"
-                  >
-                    <Users className="mr-2 h-4 w-4" />
-                    Personas
-                  </Link>
-                  <Link
-                    to="/simulations"
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105 bg-gradient-to-r from-purple-500/20 to-pink-500/20"
-                  >
-                    <Play className="mr-2 h-4 w-4" />
-                    Simulation
-                  </Link>
-                  <Link
-                    to="/prompts"
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105"
-                  >
-                    <MessageSquare className="mr-2 h-4 w-4" />
-                    Q&A Prompts
-                  </Link>
-                  <Link
-                    to="/reports"
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/20 transition-all duration-200 hover:scale-105"
-                  >
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    Reports
-                  </Link>
+                <div className="hidden sm:flex sm:items-center sm:gap-1">
+                  <NavLink to="/projects" icon={FolderOpen} label="Projects" />
+                  <NavLink to="/documents" icon={FileText} label="Documents" />
+                  <NavLink to="/personas" icon={Users} label="Personas" />
+                  <NavLink to="/simulations" icon={Play} label="Simulation" />
+                  <NavLink to="/prompts" icon={MessageSquare} label="Q&A Prompts" />
+                  <NavLink to="/reports" icon={BarChart3} label="Reports" />
                 </div>
               </div>
             </div>
@@ -75,7 +59,7 @@ function App() {
         </nav>
 
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
           <Routes>
             <Route path="/" element={<ProjectsPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
@@ -97,4 +81,3 @@ function App() {
 }
 
 export default App;
-

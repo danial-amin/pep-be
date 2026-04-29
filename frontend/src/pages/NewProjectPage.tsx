@@ -40,21 +40,21 @@ export default function NewProjectPage() {
     <div className="px-4 py-6 sm:px-0 max-w-3xl mx-auto">
       <button
         onClick={() => navigate('/projects')}
-        className="mb-6 inline-flex items-center text-white/80 hover:text-white transition-colors"
+        className="mb-6 inline-flex items-center text-stone-600 hover:text-stone-900 transition-colors"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to Projects
       </button>
 
       <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Create New Project</h2>
-        <p className="text-white/80 text-lg">Set up a new persona generation project</p>
+        <h2 className="text-3xl font-bold text-stone-900 mb-2 ">Create New Project</h2>
+        <p className="text-stone-600 text-lg">Set up a new persona generation project</p>
       </div>
 
       <form onSubmit={handleSubmit} className="glass-card rounded-2xl p-6 space-y-6">
         <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
-            Project Name <span className="text-red-400">*</span>
+          <label className="block text-sm font-medium text-stone-700 mb-2">
+            Project Name <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -62,12 +62,12 @@ export default function NewProjectPage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g., Finnish Electric Vehicle Transition"
             required
-            className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+            className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
+          <label className="block text-sm font-medium text-stone-700 mb-2">
             Field of Study
           </label>
           <input
@@ -75,12 +75,12 @@ export default function NewProjectPage() {
             value={fieldOfStudy}
             onChange={(e) => setFieldOfStudy(e.target.value)}
             placeholder="e.g., Electric Vehicle Transition, Healthcare AI, User Experience"
-            className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+            className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
+          <label className="block text-sm font-medium text-stone-700 mb-2">
             Core Objective
           </label>
           <textarea
@@ -88,13 +88,13 @@ export default function NewProjectPage() {
             onChange={(e) => setCoreObjective(e.target.value)}
             placeholder="Describe the main objective for generating personas in this project..."
             rows={4}
-            className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+            className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
           />
         </div>
 
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-white">Document Types</h3>
-          <p className="text-sm text-white/70">Select which types of documents this project will use:</p>
+          <h3 className="text-lg font-semibold text-stone-900">Document Types</h3>
+          <p className="text-sm text-stone-500">Select which types of documents this project will use:</p>
           
           <div className="flex items-center space-x-3">
             <input
@@ -102,9 +102,9 @@ export default function NewProjectPage() {
               id="includes_context"
               checked={includesContext}
               onChange={(e) => setIncludesContext(e.target.checked)}
-              className="h-5 w-5 text-purple-400 focus:ring-purple-300 border-white/30 rounded bg-white/20"
+              className="h-5 w-5 text-purple-400 focus:ring-purple-300 border-stone-200 rounded bg-stone-100"
             />
-            <label htmlFor="includes_context" className="text-white/90">
+            <label htmlFor="includes_context" className="text-stone-700">
               Context Documents (research, reports, background information)
             </label>
           </div>
@@ -115,15 +115,15 @@ export default function NewProjectPage() {
               id="includes_interviews"
               checked={includesInterviews}
               onChange={(e) => setIncludesInterviews(e.target.checked)}
-              className="h-5 w-5 text-purple-400 focus:ring-purple-300 border-white/30 rounded bg-white/20"
+              className="h-5 w-5 text-purple-400 focus:ring-purple-300 border-stone-200 rounded bg-stone-100"
             />
-            <label htmlFor="includes_interviews" className="text-white/90">
+            <label htmlFor="includes_interviews" className="text-stone-700">
               Interview Documents (transcripts, user research)
             </label>
           </div>
 
           {!includesContext && !includesInterviews && (
-            <p className="text-sm text-yellow-400">
+            <p className="text-sm text-amber-600">
               ⚠ At least one document type must be selected
             </p>
           )}
@@ -133,14 +133,14 @@ export default function NewProjectPage() {
           <button
             type="button"
             onClick={() => navigate('/projects')}
-            className="px-6 py-3 border border-white/30 text-white rounded-xl hover:bg-white/20 transition-all duration-200"
+            className="px-6 py-3 border border-stone-200 text-stone-900 rounded-xl hover:bg-stone-100 transition-all duration-200"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={creating || (!includesContext && !includesInterviews)}
-            className="flex-1 inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 hover:from-purple-500 hover:via-pink-500 hover:to-rose-500 disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
+            className="flex-1 inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 disabled:opacity-50 transition-all duration-200"
           >
             <Save className="mr-2 h-4 w-4" />
             {creating ? 'Creating...' : 'Create Project'}

@@ -182,7 +182,7 @@ export default function ProjectWorkflowPage() {
   };
 
   if (!project) {
-    return <div className="px-4 py-6 text-white">Loading project...</div>;
+    return <div className="px-4 py-6 text-stone-900">Loading project...</div>;
   }
 
   const steps = [
@@ -199,14 +199,14 @@ export default function ProjectWorkflowPage() {
         <div>
           <button
             onClick={() => navigate('/projects')}
-            className="mb-2 inline-flex items-center text-white/80 hover:text-white transition-colors"
+            className="mb-2 inline-flex items-center text-stone-600 hover:text-stone-900 transition-colors"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Projects
           </button>
-          <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">{project.name}</h2>
+          <h2 className="text-3xl font-bold text-stone-900 mb-2 ">{project.name}</h2>
           {project.field_of_study && (
-            <p className="text-white/80">{project.field_of_study}</p>
+            <p className="text-stone-600">{project.field_of_study}</p>
           )}
         </div>
       </div>
@@ -224,10 +224,10 @@ export default function ProjectWorkflowPage() {
                   onClick={() => setCurrentStep(step.id as WorkflowStep)}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
                     isActive
-                      ? 'bg-white/30 text-white'
+                      ? 'bg-stone-100 text-stone-900'
                       : isCompleted
-                      ? 'text-white/80 hover:text-white'
-                      : 'text-white/50'
+                      ? 'text-stone-600 hover:text-stone-900'
+                      : 'text-stone-400'
                   }`}
                 >
                   {isCompleted ? (
@@ -238,7 +238,7 @@ export default function ProjectWorkflowPage() {
                   <span className="hidden sm:inline">{step.label}</span>
                 </button>
                 {index < steps.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-2 ${isCompleted ? 'bg-white/30' : 'bg-white/10'}`} />
+                  <div className={`flex-1 h-0.5 mx-2 ${isCompleted ? 'bg-stone-100' : 'bg-stone-50'}`} />
                 )}
               </div>
             );
@@ -250,14 +250,14 @@ export default function ProjectWorkflowPage() {
       <div className="glass-card rounded-2xl p-6">
         {currentStep === 'upload' && (
           <div>
-            <h3 className="text-2xl font-semibold text-white mb-6">Upload Documents</h3>
+            <h3 className="text-2xl font-semibold text-stone-900 mb-6">Upload Documents</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {project.includes_context && (
-                <div className="glass-card rounded-xl p-6 pastel-purple">
-                  <FileText className="mx-auto h-12 w-12 text-white/90 mb-4" />
-                  <h4 className="text-lg font-semibold text-white mb-2">Context Document</h4>
-                  <p className="text-sm text-white/80 mb-4">Upload research, reports, or background information</p>
-                  <label className="inline-flex items-center px-6 py-3 text-sm font-medium rounded-xl text-white bg-gradient-to-r from-purple-400 to-pink-400 hover:from-purple-500 hover:to-pink-500 cursor-pointer transition-all">
+                <div className="glass-card rounded-xl p-6">
+                  <FileText className="mx-auto h-12 w-12 text-stone-700 mb-4" />
+                  <h4 className="text-lg font-semibold text-stone-900 mb-2">Context Document</h4>
+                  <p className="text-sm text-stone-600 mb-4">Upload research, reports, or background information</p>
+                  <label className="inline-flex items-center px-6 py-3 text-sm font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 cursor-pointer transition-all">
                     <Upload className="mr-2 h-4 w-4" />
                     {uploading ? 'Uploading...' : 'Upload File'}
                     <input
@@ -274,11 +274,11 @@ export default function ProjectWorkflowPage() {
                 </div>
               )}
               {project.includes_interviews && (
-                <div className="glass-card rounded-xl p-6 pastel-pink">
-                  <FileText className="mx-auto h-12 w-12 text-white/90 mb-4" />
-                  <h4 className="text-lg font-semibold text-white mb-2">Interview Document</h4>
-                  <p className="text-sm text-white/80 mb-4">Upload interview transcripts or user research</p>
-                  <label className="inline-flex items-center px-6 py-3 text-sm font-medium rounded-xl text-white bg-gradient-to-r from-pink-400 to-rose-400 hover:from-pink-500 hover:to-rose-500 cursor-pointer transition-all">
+                <div className="glass-card rounded-xl p-6">
+                  <FileText className="mx-auto h-12 w-12 text-stone-700 mb-4" />
+                  <h4 className="text-lg font-semibold text-stone-900 mb-2">Interview Document</h4>
+                  <p className="text-sm text-stone-600 mb-4">Upload interview transcripts or user research</p>
+                  <label className="inline-flex items-center px-6 py-3 text-sm font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 cursor-pointer transition-all">
                     <Upload className="mr-2 h-4 w-4" />
                     {uploading ? 'Uploading...' : 'Upload File'}
                     <input
@@ -297,14 +297,14 @@ export default function ProjectWorkflowPage() {
             </div>
             {documents.length > 0 && (
               <div className="mt-6">
-                <h4 className="text-lg font-semibold text-white mb-4">Uploaded Documents</h4>
+                <h4 className="text-lg font-semibold text-stone-900 mb-4">Uploaded Documents</h4>
                 <div className="space-y-2">
                   {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between gap-3 p-3 bg-white/10 rounded-lg">
-                      <span className="text-white/90 truncate">{doc.filename}</span>
+                    <div key={doc.id} className="flex items-center justify-between gap-3 p-3 bg-stone-50 rounded-lg">
+                      <span className="text-stone-700 truncate">{doc.filename}</span>
                       <div className="flex items-center gap-2">
                         <span className={`px-3 py-1 text-xs rounded-full ${
-                          doc.document_type === 'context' ? 'bg-purple-400/30' : 'bg-pink-400/30'
+                          doc.document_type === 'context' ? 'bg-violet-50 border border-violet-200 text-violet-700' : 'bg-pink-50 border border-pink-200 text-pink-700'
                         }`}>
                           {doc.document_type}
                         </span>
@@ -312,7 +312,7 @@ export default function ProjectWorkflowPage() {
                           type="button"
                           onClick={() => handleDeleteDocument(doc.id)}
                           disabled={deletingDocumentId === doc.id}
-                          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-white/80 hover:text-white hover:bg-white/10 disabled:opacity-50"
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-stone-600 hover:text-stone-900 hover:bg-stone-50 disabled:opacity-50"
                           aria-label={`Delete ${doc.filename}`}
                           title="Delete document"
                         >
@@ -324,7 +324,7 @@ export default function ProjectWorkflowPage() {
                 </div>
                 <button
                   onClick={() => setCurrentStep('create')}
-                  className="mt-4 px-6 py-3 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all"
+                  className="mt-4 px-6 py-3 bg-stone-900 text-white rounded-xl  transition-all"
                 >
                   Continue to Create Personas
                 </button>
@@ -335,26 +335,26 @@ export default function ProjectWorkflowPage() {
 
         {currentStep === 'create' && (
           <div>
-            <h3 className="text-2xl font-semibold text-white mb-6">Create Persona Set</h3>
+            <h3 className="text-2xl font-semibold text-stone-900 mb-6">Create Persona Set</h3>
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-white/90 mb-1">Number of Personas</label>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Number of Personas</label>
                   <input
                     type="number"
                     min="1"
                     max="10"
                     value={numPersonas}
                     onChange={(e) => setNumPersonas(parseInt(e.target.value) || 3)}
-                    className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white"
+                    className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white/90 mb-1">Output Format</label>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Output Format</label>
                   <select
                     value={outputFormat}
                     onChange={(e) => setOutputFormat(e.target.value)}
-                    className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white"
+                    className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
                   >
                     <option value="json">JSON</option>
                     <option value="profile">Profile</option>
@@ -363,27 +363,27 @@ export default function ProjectWorkflowPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-white/90 mb-1">Context Details (Optional)</label>
+                <label className="block text-sm font-medium text-stone-700 mb-1">Context Details (Optional)</label>
                 <textarea
                   value={contextDetails}
                   onChange={(e) => setContextDetails(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white"
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-white/90 mb-1">Interview Topic (Optional)</label>
+                <label className="block text-sm font-medium text-stone-700 mb-1">Interview Topic (Optional)</label>
                 <input
                   type="text"
                   value={interviewTopic}
                   onChange={(e) => setInterviewTopic(e.target.value)}
-                  className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white"
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
                 />
               </div>
               <button
                 onClick={handleGenerateSet}
                 disabled={generating || documents.length === 0}
-                className="w-full px-6 py-3 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-xl hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 transition-all"
+                className="w-full px-6 py-3 bg-stone-900 text-white rounded-xl  disabled:opacity-50 transition-all"
               >
                 {generating ? 'Generating...' : 'Generate Personas'}
               </button>
@@ -393,27 +393,27 @@ export default function ProjectWorkflowPage() {
 
         {currentStep === 'optimize' && selectedSet && (
           <div>
-            <h3 className="text-2xl font-semibold text-white mb-6">Persona Set: {selectedSet.name}</h3>
+            <h3 className="text-2xl font-semibold text-stone-900 mb-6">Persona Set: {selectedSet.name}</h3>
             <div className="space-y-4">
               <div className="flex items-center space-x-4">
                 <button
                   onClick={handleMeasureDiversity}
                   disabled={measuringDiversity}
-                  className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50"
+                  className="px-4 py-2 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50"
                 >
                   {measuringDiversity ? 'Measuring...' : 'Measure Diversity'}
                 </button>
                 {selectedSet.diversity_score && (
-                  <span className="text-white/90">
+                  <span className="text-stone-700">
                     RQE: {(selectedSet.diversity_score.rqe_score * 100).toFixed(1)}%
                   </span>
                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {selectedSet.personas.map((persona) => (
-                  <div key={persona.id} className="glass-card rounded-xl p-4 pastel-blue">
-                    <h4 className="text-lg font-semibold text-white mb-2">{persona.persona_data.name || persona.name}</h4>
-                    <p className="text-sm text-white/80 line-clamp-3">
+                  <div key={persona.id} className="glass-card rounded-xl p-4">
+                    <h4 className="text-lg font-semibold text-stone-900 mb-2">{persona.persona_data.name || persona.name}</h4>
+                    <p className="text-sm text-stone-600 line-clamp-3">
                       {(() => {
                         const getStringValue = (value: any): string | null => {
                           if (!value) return null;
@@ -437,7 +437,7 @@ export default function ProjectWorkflowPage() {
               </div>
               <button
                 onClick={() => setCurrentStep('expand')}
-                className="mt-4 px-6 py-3 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all"
+                className="mt-4 px-6 py-3 bg-stone-900 text-white rounded-xl  transition-all"
               >
                 Continue to Expand & Images
               </button>
@@ -447,24 +447,24 @@ export default function ProjectWorkflowPage() {
 
         {currentStep === 'expand' && selectedSet && (
           <div>
-            <h3 className="text-2xl font-semibold text-white mb-6">Expand Personas & Generate Images</h3>
+            <h3 className="text-2xl font-semibold text-stone-900 mb-6">Expand Personas & Generate Images</h3>
             <div className="space-y-4">
               <button
                 onClick={handleExpand}
                 disabled={expanding}
-                className="w-full px-6 py-3 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-xl hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 transition-all"
+                className="w-full px-6 py-3 bg-stone-900 text-white rounded-xl  disabled:opacity-50 transition-all"
               >
                 {expanding ? 'Expanding...' : 'Expand All Personas'}
               </button>
               <button
                 onClick={handleGenerateImages}
                 disabled={generatingImages}
-                className="w-full px-6 py-3 bg-gradient-to-r from-pink-400 to-rose-400 text-white rounded-xl hover:from-pink-500 hover:to-rose-500 disabled:opacity-50 transition-all"
+                className="w-full px-6 py-3 bg-stone-900 text-white rounded-xl  disabled:opacity-50 transition-all"
               >
                 {generatingImages ? 'Generating...' : 'Generate Images'}
               </button>
               {selectedSet.personas.map((persona) => (
-                <div key={persona.id} className="glass-card rounded-xl p-4 pastel-pink">
+                <div key={persona.id} className="glass-card rounded-xl p-4">
                   <div className="flex items-center space-x-4">
                     {(persona.image_url || persona.id) && (
                       <img
@@ -474,9 +474,9 @@ export default function ProjectWorkflowPage() {
                       />
                     )}
                     <div>
-                      <h4 className="text-lg font-semibold text-white">{persona.persona_data.name || persona.name}</h4>
+                      <h4 className="text-lg font-semibold text-stone-900">{persona.persona_data.name || persona.name}</h4>
                       {persona.persona_data.detailed_description && (
-                        <p className="text-sm text-white/80 mt-2">
+                        <p className="text-sm text-stone-600 mt-2">
                           {typeof persona.persona_data.detailed_description === 'string' 
                             ? persona.persona_data.detailed_description 
                             : (typeof persona.persona_data.detailed_description === 'object' 
@@ -490,7 +490,7 @@ export default function ProjectWorkflowPage() {
               ))}
               <button
                 onClick={() => setCurrentStep('reports')}
-                className="mt-4 px-6 py-3 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all"
+                className="mt-4 px-6 py-3 bg-stone-900 text-white rounded-xl  transition-all"
               >
                 View Reports
               </button>
@@ -500,10 +500,10 @@ export default function ProjectWorkflowPage() {
 
         {currentStep === 'reports' && selectedSet && (
           <div>
-            <h3 className="text-2xl font-semibold text-white mb-6">Reports</h3>
+            <h3 className="text-2xl font-semibold text-stone-900 mb-6">Reports</h3>
             <button
               onClick={() => navigate(`/reports?set=${selectedSet.id}`)}
-              className="px-6 py-3 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all"
+              className="px-6 py-3 bg-stone-900 text-white rounded-xl  transition-all"
             >
               View Full Report
             </button>

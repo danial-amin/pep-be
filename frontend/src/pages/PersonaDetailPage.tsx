@@ -287,7 +287,7 @@ export default function PersonaDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white/80">Loading persona details...</div>
+        <div className="text-stone-600">Loading persona details...</div>
       </div>
     );
   }
@@ -295,7 +295,7 @@ export default function PersonaDetailPage() {
   if (!personaSet || personaSet.personas.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white/80">No personas found</div>
+        <div className="text-stone-600">No personas found</div>
       </div>
     );
   }
@@ -346,11 +346,11 @@ export default function PersonaDetailPage() {
       <div className="mb-6">
         <div className="flex items-center space-x-2 mb-3">
           {icon}
-          <h5 className="text-sm font-semibold text-white uppercase tracking-wide">{title}</h5>
+          <h5 className="text-sm font-semibold text-stone-900 uppercase tracking-wide">{title}</h5>
         </div>
         <div className="ml-7 space-y-2">
           {isArray && Array.isArray(data) ? (
-            <ul className="list-disc list-inside space-y-1 text-sm text-white/90">
+            <ul className="list-disc list-inside space-y-1 text-sm text-stone-700">
               {data.map((item: any, idx: number) => (
                 <li key={idx}>{typeof item === 'string' ? item : JSON.stringify(item)}</li>
               ))}
@@ -359,10 +359,10 @@ export default function PersonaDetailPage() {
             <div className="space-y-2">
               {Object.entries(data).map(([key, value]) => (
                 <div key={key} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
-                  <span className="shrink-0 font-medium capitalize text-white/70 sm:min-w-[8.5rem]">
+                  <span className="shrink-0 font-medium capitalize text-stone-500 sm:min-w-[8.5rem]">
                     {key.replace(/_/g, ' ')}:
                   </span>
-                  <span className="min-w-0 flex-1 break-words text-white/90">
+                  <span className="min-w-0 flex-1 break-words text-stone-700">
                     {(() => {
                       if (value === null || value === undefined) return String(value || '');
                       if (typeof value === 'object') {
@@ -378,7 +378,7 @@ export default function PersonaDetailPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-white/90">{String(data)}</p>
+            <p className="text-sm text-stone-700">{String(data)}</p>
           )}
         </div>
       </div>
@@ -388,19 +388,19 @@ export default function PersonaDetailPage() {
   return (
     <div className="min-h-screen px-4 py-6">
       {/* Header with Navigation */}
-      <div className="glass-card rounded-2xl p-4 mb-6 pastel-purple">
+      <div className="glass-card rounded-2xl p-4 mb-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <button
               type="button"
               onClick={() => navigate('/personas')}
-              className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-white/20"
+              className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-stone-100"
             >
-              <X className="h-5 w-5 text-white" />
+              <X className="h-5 w-5 text-stone-900" />
             </button>
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-bold text-white sm:text-xl">{personaSet.name}</h1>
-              <p className="text-sm text-white/70">
+              <h1 className="truncate text-lg font-bold text-stone-900 sm:text-xl">{personaSet.name}</h1>
+              <p className="text-sm text-stone-500">
                 Persona {currentIndex + 1} of {personaSet.personas.length}
               </p>
             </div>
@@ -410,7 +410,7 @@ export default function PersonaDetailPage() {
               type="button"
               onClick={handleDownloadProfileImage}
               disabled={downloadingProfile}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-white/20 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-initial sm:px-4"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-left text-sm text-stone-900 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-initial sm:px-4"
             >
               <ImageIcon className="h-4 w-4 flex-shrink-0" />
               <span className="leading-snug">
@@ -420,7 +420,7 @@ export default function PersonaDetailPage() {
             <button
               type="button"
               onClick={handleDownloadCurrentPersonaJson}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-white/20 px-3 py-2.5 text-sm text-white transition-colors hover:bg-white/30 sm:flex-initial sm:px-4"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-sm text-stone-900 transition-colors hover:bg-stone-100 sm:flex-initial sm:px-4"
             >
               <FileJson className="h-4 w-4 flex-shrink-0" />
               <span className="leading-snug">This persona (JSON)</span>
@@ -428,7 +428,7 @@ export default function PersonaDetailPage() {
             <button
               type="button"
               onClick={handleDownloadFullSetJson}
-              className="inline-flex flex-1 basis-full items-center justify-center gap-2 rounded-lg bg-white/20 px-3 py-2.5 text-sm text-white transition-colors hover:bg-white/30 sm:basis-auto sm:flex-initial sm:px-4"
+              className="inline-flex flex-1 basis-full items-center justify-center gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-sm text-stone-900 transition-colors hover:bg-stone-100 sm:basis-auto sm:flex-initial sm:px-4"
             >
               <Download className="h-4 w-4 flex-shrink-0" />
               <span className="leading-snug">Full set (JSON)</span>
@@ -438,12 +438,12 @@ export default function PersonaDetailPage() {
       </div>
 
       {/* Persona Navigation */}
-      <div className="glass-card rounded-2xl p-4 mb-6 pastel-blue">
+      <div className="glass-card rounded-2xl p-4 mb-6">
         <div className="flex items-center justify-between">
           <button
             onClick={handlePrevious}
             disabled={currentIndex === 0}
-            className="flex items-center space-x-2 px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronLeft className="h-5 w-5" />
             <span>Previous</span>
@@ -461,7 +461,7 @@ export default function PersonaDetailPage() {
                 className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
                   index === currentIndex
                     ? 'border-white scale-110'
-                    : 'border-white/30 hover:border-white/50'
+                    : 'border-stone-200 hover:border-stone-300'
                 }`}
               >
                 {(persona.image_url || persona.id) && !imageErrors.has(persona.id) ? (
@@ -472,8 +472,8 @@ export default function PersonaDetailPage() {
                     onError={() => setImageErrors(prev => new Set(prev).add(persona.id))}
                   />
                 ) : (
-                  <div className="w-full h-full bg-white/10 flex items-center justify-center">
-                    <span className="text-white/40 text-lg font-bold">
+                  <div className="w-full h-full bg-stone-50 flex items-center justify-center">
+                    <span className="text-stone-300 text-lg font-bold">
                       {(persona.persona_data?.name || persona.name).charAt(0).toUpperCase()}
                     </span>
                   </div>
@@ -485,7 +485,7 @@ export default function PersonaDetailPage() {
           <button
             onClick={handleNext}
             disabled={currentIndex === personaSet.personas.length - 1}
-            className="flex items-center space-x-2 px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <span>Next</span>
             <ChevronRight className="h-5 w-5" />
@@ -497,10 +497,10 @@ export default function PersonaDetailPage() {
       <div
         ref={profileCardRef}
         data-persona-profile-card="true"
-        className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue max-w-7xl mx-auto"
+        className="glass-card rounded-2xl p-6 border border-stone-200 max-w-7xl mx-auto"
       >
         {/* Header with Image, Demographics, Quote and Overview */}
-        <div className="mb-4 flex flex-col gap-6 border-b border-white/20 pb-4 xl:flex-row xl:items-start">
+        <div className="mb-4 flex flex-col gap-6 border-b border-stone-200 pb-4 xl:flex-row xl:items-start">
           {/* Left: Image and Demographics */}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             {/* Persona Image */}
@@ -509,17 +509,17 @@ export default function PersonaDetailPage() {
                 <img
                   src={getPersonaImageUrl(currentPersona.image_url, currentPersona.id) || ''}
                   alt={currentPersona.name}
-                  className="w-32 h-32 object-cover rounded-xl border-4 border-white/30 shadow-lg"
+                  className="w-32 h-32 object-cover rounded-xl border-4 border-stone-200 shadow-lg"
                   onError={() => setImageErrors(prev => new Set(prev).add(currentPersona.id))}
                 />
               ) : (
-                <div className="w-32 h-32 rounded-xl border-4 border-white/30 bg-white/10 flex items-center justify-center relative">
-                  <span className="text-white/40 text-4xl font-bold">
+                <div className="w-32 h-32 rounded-xl border-4 border-stone-200 bg-stone-50 flex items-center justify-center relative">
+                  <span className="text-stone-300 text-4xl font-bold">
                     {(personaData.name || currentPersona.name).charAt(0).toUpperCase()}
                   </span>
                   {generatingImages.includes(currentPersona.id) ? (
                     <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
-                      <div className="text-white text-xs">Generating...</div>
+                      <div className="text-stone-900 text-xs">Generating...</div>
                     </div>
                   ) : (
                     <button
@@ -527,7 +527,7 @@ export default function PersonaDetailPage() {
                       onClick={() => handleGenerateImage(currentPersona.id)}
                       className="persona-export-hide absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 transition-opacity hover:opacity-100"
                     >
-                      <span className="text-xs text-white">Generate</span>
+                      <span className="text-xs text-stone-900">Generate</span>
                     </button>
                   )}
                 </div>
@@ -536,18 +536,18 @@ export default function PersonaDetailPage() {
             
             {/* Demographics - Four Rows */}
             <div className="flex min-w-0 max-w-full flex-col justify-center space-y-2 sm:min-w-[200px]">
-              <h4 className="mb-2 break-words text-2xl font-bold text-white">
+              <h4 className="mb-2 break-words text-2xl font-bold text-stone-900">
                 {personaData.name || currentPersona.name}
               </h4>
               {(getField('age')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <User className="h-4 w-4 text-white/70" />
+                <div className="flex items-center space-x-2 text-sm text-stone-700">
+                  <User className="h-4 w-4 text-stone-500" />
                   <span><strong>Age:</strong> {String(getField('age') || '')}</span>
                 </div>
               )}
               {(getField('location') || getField('nationality')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <MapPin className="h-4 w-4 text-white/70" />
+                <div className="flex items-center space-x-2 text-sm text-stone-700">
+                  <MapPin className="h-4 w-4 text-stone-500" />
                   <span className="persona-export-text break-words">
                     <strong>Location:</strong>{' '}
                     {
@@ -568,34 +568,34 @@ export default function PersonaDetailPage() {
                 </div>
               )}
               {(getField('occupation')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <Briefcase className="h-4 w-4 text-white/70" />
+                <div className="flex items-center space-x-2 text-sm text-stone-700">
+                  <Briefcase className="h-4 w-4 text-stone-500" />
                   <span className="persona-export-text break-words">
                     <strong>Occupation:</strong> {String(getField('occupation') || '')}
                   </span>
                 </div>
               )}
               {(getField('gender')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <User className="h-4 w-4 text-white/70" />
+                <div className="flex items-center space-x-2 text-sm text-stone-700">
+                  <User className="h-4 w-4 text-stone-500" />
                   <span><strong>Gender:</strong> {String(getField('gender') || '')}</span>
                 </div>
               )}
               {(getField('nationality') && !getField('location')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <MapPin className="h-4 w-4 text-white/70" />
+                <div className="flex items-center space-x-2 text-sm text-stone-700">
+                  <MapPin className="h-4 w-4 text-stone-500" />
                   <span><strong>Nationality:</strong> {String(getField('nationality') || '')}</span>
                 </div>
               )}
               {(getField('education_level')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <User className="h-4 w-4 text-white/70" />
+                <div className="flex items-center space-x-2 text-sm text-stone-700">
+                  <User className="h-4 w-4 text-stone-500" />
                   <span><strong>Education:</strong> {String(getField('education_level') || '')}</span>
                 </div>
               )}
               {(getField('income_bracket')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <User className="h-4 w-4 text-white/70" />
+                <div className="flex items-center space-x-2 text-sm text-stone-700">
+                  <User className="h-4 w-4 text-stone-500" />
                   <span><strong>Income:</strong> {String(getField('income_bracket') || '')}</span>
                 </div>
               )}
@@ -605,10 +605,10 @@ export default function PersonaDetailPage() {
           {/* Right: Quote and Overview */}
           <div className="min-w-0 flex-1 space-y-3">
             {(personaData.quote || personaData.quotes) && (
-              <div className="p-3 bg-white/10 rounded-lg border-l-4 border-purple-400">
+              <div className="p-3 bg-stone-50 rounded-lg border-l-4 border-purple-400">
                 <div className="flex items-start space-x-2">
-                  <Quote className="h-4 w-4 text-purple-300 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm italic leading-relaxed text-white/90 break-words">
+                  <Quote className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm italic leading-relaxed text-stone-700 break-words">
                     {Array.isArray(personaData.quotes) ? (
                       <ul className="list-disc list-inside space-y-1">
                         {personaData.quotes.map((q: any, idx: number) => (
@@ -624,8 +624,8 @@ export default function PersonaDetailPage() {
             )}
             {(personaData.basic_description || personaData.tagline || personaData.role) && (
               <div>
-                <h5 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Overview</h5>
-                <p className="text-sm leading-relaxed text-white/90 break-words">
+                <h5 className="text-xs font-semibold text-stone-900 uppercase tracking-wide mb-2">Overview</h5>
+                <p className="text-sm leading-relaxed text-stone-700 break-words">
                   {(() => {
                     const getStringValue = (value: any): string | null => {
                       if (!value) return null;
@@ -656,7 +656,7 @@ export default function PersonaDetailPage() {
           <div>
             {renderSection(
               'Background',
-              <User className="h-3 w-3 text-white/70" />,
+              <User className="h-3 w-3 text-stone-500" />,
               (() => {
                 const bg = personaData.background || personaData.other_information;
                 // If it's an object, renderSection will handle it, but ensure it's not null
@@ -670,16 +670,16 @@ export default function PersonaDetailPage() {
             {personaData.technology_profile && (
               <div className="mb-4">
                 <div className="flex items-center space-x-1 mb-2">
-                  <Smartphone className="h-3 w-3 text-white/70" />
-                  <h5 className="text-xs font-semibold text-white uppercase tracking-wide">Technology Profile</h5>
+                  <Smartphone className="h-3 w-3 text-stone-500" />
+                  <h5 className="text-xs font-semibold text-stone-900 uppercase tracking-wide">Technology Profile</h5>
                 </div>
                 <div className="ml-4 space-y-1.5">
                   {personaData.technology_profile.primary_devices && (
                     <div>
-                      <span className="text-xs text-white/70 font-medium">Devices:</span>
+                      <span className="text-xs text-stone-500 font-medium">Devices:</span>
                       <div className="flex flex-wrap gap-1 mt-0.5">
                         {personaData.technology_profile.primary_devices.map((device: any, idx: number) => (
-                          <span key={idx} className="px-1.5 py-0.5 bg-white/20 rounded text-xs text-white/90">
+                          <span key={idx} className="px-1.5 py-0.5 bg-stone-100 rounded text-xs text-stone-700">
                             {typeof device === 'string' ? device : (typeof device === 'object' ? JSON.stringify(device) : String(device))}
                           </span>
                         ))}
@@ -688,8 +688,8 @@ export default function PersonaDetailPage() {
                   )}
                   {personaData.technology_profile.comfort_level && (
                     <div className="text-xs">
-                      <span className="text-white/70 font-medium">Level:</span>
-                      <span className="ml-1 text-white/90">
+                      <span className="text-stone-500 font-medium">Level:</span>
+                      <span className="ml-1 text-stone-700">
                         {typeof personaData.technology_profile.comfort_level === 'string' 
                           ? personaData.technology_profile.comfort_level 
                           : (typeof personaData.technology_profile.comfort_level === 'object' 
@@ -700,10 +700,10 @@ export default function PersonaDetailPage() {
                   )}
                   {personaData.technology_profile.software_used && (
                     <div>
-                      <span className="text-xs text-white/70 font-medium">Software:</span>
+                      <span className="text-xs text-stone-500 font-medium">Software:</span>
                       <div className="flex flex-wrap gap-1 mt-0.5">
                         {personaData.technology_profile.software_used.map((software: any, idx: number) => (
-                          <span key={idx} className="px-1.5 py-0.5 bg-white/20 rounded text-xs text-white/90">
+                          <span key={idx} className="px-1.5 py-0.5 bg-stone-100 rounded text-xs text-stone-700">
                             {typeof software === 'string' ? software : (typeof software === 'object' ? JSON.stringify(software) : String(software))}
                           </span>
                         ))}
@@ -712,8 +712,8 @@ export default function PersonaDetailPage() {
                   )}
                   {personaData.technology_profile.interaction_preferences && (
                     <div>
-                      <span className="text-xs text-white/70 font-medium">Preferences:</span>
-                      <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-white/90">
+                      <span className="text-xs text-stone-500 font-medium">Preferences:</span>
+                      <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-stone-700">
                         {personaData.technology_profile.interaction_preferences.map((pref: any, idx: number) => (
                           <li key={idx} className="leading-tight">
                             {typeof pref === 'string' ? pref : (typeof pref === 'object' ? JSON.stringify(pref) : String(pref))}
@@ -724,8 +724,8 @@ export default function PersonaDetailPage() {
                   )}
                   {personaData.technology_profile.accessibility_needs && personaData.technology_profile.accessibility_needs.length > 0 && (
                     <div>
-                      <span className="text-xs text-white/70 font-medium">Accessibility:</span>
-                      <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-white/90">
+                      <span className="text-xs text-stone-500 font-medium">Accessibility:</span>
+                      <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-stone-700">
                         {personaData.technology_profile.accessibility_needs.map((need: any, idx: number) => (
                           <li key={idx} className="leading-tight">
                             {typeof need === 'string' ? need : (typeof need === 'object' ? JSON.stringify(need) : String(need))}
@@ -743,7 +743,7 @@ export default function PersonaDetailPage() {
           <div>
             {renderSection(
               'Goals',
-              <Target className="h-3 w-3 text-white/70" />,
+              <Target className="h-3 w-3 text-stone-500" />,
               // All personas now use arrays for goals
               Array.isArray(personaData.goals) ? personaData.goals : null,
               true
@@ -754,7 +754,7 @@ export default function PersonaDetailPage() {
           <div>
             {renderSection(
               personaData.frustrations && personaData.frustrations.length > 0 ? 'Frustrations' : 'Motivations',
-              <AlertCircle className="h-3 w-3 text-white/70" />,
+              <AlertCircle className="h-3 w-3 text-stone-500" />,
               // All personas now use arrays
               Array.isArray(personaData.frustrations) && personaData.frustrations.length > 0
                 ? personaData.frustrations
