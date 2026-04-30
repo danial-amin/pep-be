@@ -112,8 +112,8 @@ export default function LandingPage() {
 
         <div className="relative">
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <Badge><HighlightPersonaWords text="Persona Engineering Platform" /></Badge>
-            <Badge><HighlightPersonaWords text="RAG-grounded personas" /></Badge>
+            <Badge><HighlightPersonaWords text="Persona  Engineering Platform" /></Badge>
+            <Badge><HighlightPersonaWords text="RAG-grounded  personas" /></Badge>
             <Badge>Simulation playground</Badge>
           </div>
 
