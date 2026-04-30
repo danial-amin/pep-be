@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play } from 'lucide-react';
+import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Sparkles } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
@@ -10,6 +10,7 @@ import NewProjectPage from './pages/NewProjectPage';
 import ProjectWorkflowPage from './pages/ProjectWorkflowPage';
 import SimulationPage from './pages/SimulationPage';
 import SimulationPersonaChatsPage from './pages/SimulationPersonaChatsPage';
+import LandingPage from './pages/LandingPage';
 
 function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
   const location = useLocation();
@@ -47,6 +48,7 @@ function App() {
                   <span className="text-sm text-stone-400 font-normal">Persona Generator</span>
                 </div>
                 <div className="hidden sm:flex sm:items-center sm:gap-1">
+                  <NavLink to="/" icon={Sparkles} label="Home" />
                   <NavLink to="/projects" icon={FolderOpen} label="Projects" />
                   <NavLink to="/documents" icon={FileText} label="Documents" />
                   <NavLink to="/personas" icon={Users} label="Personas" />
@@ -62,7 +64,7 @@ function App() {
         {/* Main Content */}
         <main className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
           <Routes>
-            <Route path="/" element={<ProjectsPage />} />
+            <Route path="/" element={<LandingPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/new" element={<NewProjectPage />} />
             <Route path="/projects/:projectId/workflow" element={<ProjectWorkflowPage />} />
