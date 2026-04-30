@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Sparkles } from 'lucide-react';
+import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
@@ -39,16 +39,15 @@ function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-14">
               <div className="flex items-center gap-6">
-                <div className="flex-shrink-0 flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center">
+                <Link to="/" className="flex-shrink-0 flex items-center gap-2.5 group">
+                  <div className="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center group-hover:bg-stone-800 transition-colors">
                     <span className="text-white text-xs font-bold tracking-tight">P</span>
                   </div>
-                  <span className="text-sm font-semibold text-stone-900">PEP</span>
+                  <span className="text-sm font-semibold text-stone-900 group-hover:text-stone-800 transition-colors">PEP</span>
                   <span className="text-stone-300 text-sm">|</span>
-                  <span className="text-sm text-stone-400 font-normal">Persona Generator</span>
-                </div>
+                  <span className="text-sm text-stone-400 font-normal group-hover:text-stone-500 transition-colors">Persona Generator</span>
+                </Link>
                 <div className="hidden sm:flex sm:items-center sm:gap-1">
-                  <NavLink to="/" icon={Sparkles} label="Home" />
                   <NavLink to="/projects" icon={FolderOpen} label="Projects" />
                   <NavLink to="/documents" icon={FileText} label="Documents" />
                   <NavLink to="/personas" icon={Users} label="Personas" />

@@ -11,10 +11,9 @@ import {
 } from 'lucide-react';
 
 const PERSONA_BLUE = '#007aff';
-const DATA_PURPLE = '#6d28d9';
 
-function HighlightKeywords({ text }: { text: string }) {
-  const parts = text.split(/(\bpersonas?\b|\bdata\b)/gi);
+function HighlightPersonaWords({ text }: { text: string }) {
+  const parts = text.split(/(\bpersonas?\b)/gi);
   return (
     <>
       {parts.map((p, idx) => {
@@ -22,13 +21,6 @@ function HighlightKeywords({ text }: { text: string }) {
         if (lower === 'persona' || lower === 'personas') {
           return (
             <span key={idx} style={{ color: PERSONA_BLUE, fontWeight: 700 }}>
-              {p}
-            </span>
-          );
-        }
-        if (lower === 'data') {
-          return (
-            <span key={idx} style={{ color: DATA_PURPLE, fontWeight: 700 }}>
               {p}
             </span>
           );
@@ -64,10 +56,10 @@ function FeatureCard({
         </div>
         <div className="min-w-0">
           <h3 className="text-lg font-semibold text-stone-900">
-            <HighlightKeywords text={title} />
+            <HighlightPersonaWords text={title} />
           </h3>
           <p className="mt-1 text-sm leading-relaxed text-stone-600">
-            <HighlightKeywords text={description} />
+            <HighlightPersonaWords text={description} />
           </p>
         </div>
       </div>
@@ -93,10 +85,10 @@ function Step({
         <Icon className="h-5 w-5 text-stone-400" />
       </div>
       <h4 className="text-lg font-semibold text-stone-900">
-        <HighlightKeywords text={title} />
+        <HighlightPersonaWords text={title} />
       </h4>
       <p className="mt-2 text-sm leading-relaxed text-stone-600">
-        <HighlightKeywords text={body} />
+        <HighlightPersonaWords text={body} />
       </p>
     </div>
   );
@@ -109,21 +101,27 @@ export default function LandingPage() {
     <div className="px-4 py-6 sm:px-0">
       {/* Hero */}
       <div className="glass-card rounded-3xl p-8 sm:p-10 overflow-hidden relative">
-        <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-stone-900/5 blur-2xl" />
-        <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-stone-900/5 blur-2xl" />
+        {/* Soft animated background (subtle, chic) */}
+        <div className="pointer-events-none absolute -top-28 -right-28 h-72 w-72 rounded-full bg-stone-900/5 blur-3xl pep-float-slower" />
+        <div className="pointer-events-none absolute top-10 -left-20 h-56 w-56 rounded-full bg-stone-900/4 blur-3xl pep-float-slow" />
+        <div className="pointer-events-none absolute -bottom-28 left-24 h-80 w-80 rounded-full bg-stone-900/5 blur-3xl pep-drift" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{
+          backgroundImage:
+            'radial-gradient(closest-side at 12% 18%, rgba(0,0,0,0.08), transparent 60%), radial-gradient(closest-side at 88% 70%, rgba(0,0,0,0.06), transparent 58%)'
+        }} />
 
         <div className="relative">
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <Badge><HighlightKeywords text="Persona Engineering Platform" /></Badge>
-            <Badge><HighlightKeywords text="RAG-grounded personas" /></Badge>
+            <Badge><HighlightPersonaWords text="Persona Engineering Platform" /></Badge>
+            <Badge><HighlightPersonaWords text="RAG-grounded personas" /></Badge>
             <Badge>Simulation playground</Badge>
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-stone-900">
-            <HighlightKeywords text="Turn messy research into personas you can actually use." />
+            <HighlightPersonaWords text="Turn messy research into personas you can actually use." />
           </h1>
           <p className="mt-4 text-stone-600 text-base sm:text-lg leading-relaxed max-w-3xl">
-            <HighlightKeywords text="PEP helps you upload context + interview data, generate and refine persona sets, then run multi-persona simulations to pressure-test decisions. It’s built for clarity: clean profiles, fast workflows, and transcripts you can trust." />
+            <HighlightPersonaWords text="PEP helps you upload context + interview data, generate and refine persona sets, then run multi-persona simulations to pressure-test decisions. It’s built for clarity: clean profiles, fast workflows, and transcripts you can trust." />
           </p>
 
           <div className="mt-7 flex flex-col sm:flex-row gap-3">
@@ -167,7 +165,7 @@ export default function LandingPage() {
                 Output
               </div>
               <div className="mt-2 text-sm font-semibold text-stone-900">
-                <HighlightKeywords text="Persona Sets" />
+                <HighlightPersonaWords text="Persona Sets" />
               </div>
               <div className="mt-1 text-sm text-stone-600">
                 Profiles, images, diversity + validation.
@@ -181,7 +179,7 @@ export default function LandingPage() {
                 Simulations
               </div>
               <div className="mt-1 text-sm text-stone-600">
-                <HighlightKeywords text="See how personas debate a goal." />
+                <HighlightPersonaWords text="See how personas debate a goal." />
               </div>
             </div>
           </div>
@@ -193,7 +191,7 @@ export default function LandingPage() {
         <div className="glass-card rounded-3xl p-8">
           <h2 className="text-2xl font-bold text-stone-900">What PEP is</h2>
           <p className="mt-3 text-stone-600 leading-relaxed">
-            <HighlightKeywords text="PEP is a workflow for generating personas from your project data, keeping them consistent, and using them in simulations to explore decisions. The goal is not “pretty personas” — it’s actionable stakeholder perspectives you can inspect, compare, and replay." />
+            <HighlightPersonaWords text="PEP is a workflow for generating personas from your project data, keeping them consistent, and using them in simulations to explore decisions. The goal is not “pretty personas” — it’s actionable stakeholder perspectives you can inspect, compare, and replay." />
           </p>
 
           <div className="mt-6 space-y-3">
@@ -224,7 +222,7 @@ export default function LandingPage() {
         <div className="glass-card rounded-3xl p-8">
           <h2 className="text-2xl font-bold text-stone-900">How it works</h2>
           <p className="mt-3 text-stone-600 leading-relaxed">
-            <HighlightKeywords text="A simple loop: bring evidence in, generate personas, refine, and pressure-test with simulations." />
+            <HighlightPersonaWords text="A simple loop: bring evidence in, generate personas, refine, and pressure-test with simulations." />
           </p>
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Step
@@ -312,7 +310,7 @@ export default function LandingPage() {
           <div className="min-w-0">
             <h2 className="text-2xl font-bold text-stone-900">Start with a project</h2>
             <p className="mt-2 text-stone-600 leading-relaxed max-w-2xl">
-              <HighlightKeywords text="If you already have context docs or interview transcripts, you can be generating personas in minutes. If you just want to explore, open the simulation playground and try a set." />
+              <HighlightPersonaWords text="If you already have context docs or interview transcripts, you can be generating personas in minutes. If you just want to explore, open the simulation playground and try a set." />
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
