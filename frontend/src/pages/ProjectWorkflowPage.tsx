@@ -1,11 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Upload, FileText, Users, Sparkles, Image as ImageIcon, BarChart3, CheckCircle, ArrowLeft, Trash2 } from 'lucide-react';
+import { Upload, FileText, Users, Sparkles, Image as ImageIcon, BarChart3, CheckCircle, ArrowLeft, Trash2, Loader2, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { projectsApi, documentsApi, personasApi } from '../services/api';
 import { Project, Document, PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 
 type WorkflowStep = 'upload' | 'create' | 'optimize' | 'expand' | 'reports';
+const POLL_INTERVAL_MS = 3000;
+
+/** Normalize status for display (backend may omit for legacy docs). */
+function getDisplayStatus(doc: Document): 'pending' | 'processing' | 'completed' | 'failed' {
+  const s = doc.processing_status;
+  if (s === 'pending' || s === 'processing' || s === 'failed') return s;
+  return 'completed';
+}
 
 export default function ProjectWorkflowPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -16,6 +24,8 @@ export default function ProjectWorkflowPage() {
   const [selectedSet, setSelectedSet] = useState<PersonaSet | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null);
+  const [retryingDocumentId, setRetryingDocumentId] = useState<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Persona generation state
   const [numPersonas, setNumPersonas] = useState(3);
@@ -45,7 +55,7 @@ export default function ProjectWorkflowPage() {
     }
   };
 
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     if (!projectId) return;
     try {
       const data = await documentsApi.getAll(parseInt(projectId));
@@ -57,7 +67,25 @@ export default function ProjectWorkflowPage() {
     } catch (error) {
       console.error('Failed to load documents:', error);
     }
-  };
+  }, [projectId, currentStep]);
+
+  const hasProcessing = documents.some(
+    (d) => getDisplayStatus(d) === 'pending' || getDisplayStatus(d) === 'processing'
+  );
+
+  useEffect(() => {
+    if (!hasProcessing) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+    pollRef.current = setInterval(loadDocuments, POLL_INTERVAL_MS);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [hasProcessing, loadDocuments]);
 
   const loadPersonaSets = async () => {
     if (!projectId) return;
@@ -105,6 +133,19 @@ export default function ProjectWorkflowPage() {
       alert('Failed to delete document. Please try again.');
     } finally {
       setDeletingDocumentId(null);
+    }
+  };
+
+  const handleRetryDocument = async (documentId: number) => {
+    setRetryingDocumentId(documentId);
+    try {
+      await documentsApi.retry(documentId);
+      await loadDocuments();
+    } catch (error: any) {
+      const msg = error.response?.data?.detail || error.message || 'Retry failed';
+      alert(msg);
+    } finally {
+      setRetryingDocumentId(null);
     }
   };
 
@@ -297,17 +338,73 @@ export default function ProjectWorkflowPage() {
             </div>
             {documents.length > 0 && (
               <div className="mt-6">
-                <h4 className="text-lg font-semibold text-stone-900 mb-4">Uploaded Documents</h4>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h4 className="text-lg font-semibold text-stone-900">Uploaded Documents</h4>
+                  <button
+                    type="button"
+                    onClick={() => loadDocuments()}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-100 text-sm font-medium text-stone-900"
+                    title="Refresh"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {documents.map((doc) => (
                     <div key={doc.id} className="flex items-center justify-between gap-3 p-3 bg-stone-50 rounded-lg">
                       <span className="text-stone-700 truncate">{doc.filename}</span>
                       <div className="flex items-center gap-2">
+                        {(() => {
+                          const status = getDisplayStatus(doc);
+                          if (status === 'pending') {
+                            return (
+                              <span className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                <Clock className="h-3.5 w-3.5" /> Queued
+                              </span>
+                            );
+                          }
+                          if (status === 'processing') {
+                            return (
+                              <span className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing
+                              </span>
+                            );
+                          }
+                          if (status === 'failed') {
+                            return (
+                              <span className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-red-50 text-red-700 border border-red-200">
+                                <XCircle className="h-3.5 w-3.5" /> Failed
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700 border border-green-200">
+                              <CheckCircle className="h-3.5 w-3.5" /> Ready
+                            </span>
+                          );
+                        })()}
                         <span className={`px-3 py-1 text-xs rounded-full ${
                           doc.document_type === 'context' ? 'bg-violet-50 border border-violet-200 text-violet-700' : 'bg-pink-50 border border-pink-200 text-pink-700'
                         }`}>
                           {doc.document_type}
                         </span>
+                        {(getDisplayStatus(doc) === 'pending' || getDisplayStatus(doc) === 'processing' || getDisplayStatus(doc) === 'failed') && (
+                          <button
+                            type="button"
+                            onClick={() => handleRetryDocument(doc.id)}
+                            disabled={retryingDocumentId === doc.id}
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-stone-600 hover:text-stone-900 hover:bg-stone-50 disabled:opacity-50"
+                            aria-label={`Retry processing ${doc.filename}`}
+                            title="Retry processing"
+                          >
+                            {retryingDocumentId === doc.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" />
+                            )}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleDeleteDocument(doc.id)}

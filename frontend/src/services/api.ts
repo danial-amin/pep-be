@@ -51,6 +51,12 @@ export const documentsApi = {
     return response.data;
   },
 
+  /** Retry processing for a document stuck in pending/processing. */
+  retry: async (id: number) => {
+    const response = await api.post(`/documents/${id}/retry`);
+    return response.data;
+  },
+
   delete: async (id: number) => {
     await api.delete(`/documents/${id}`);
   },
