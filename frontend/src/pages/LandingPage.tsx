@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import {
   ArrowRight,
   BarChart3,
@@ -13,22 +14,28 @@ import {
 const PERSONA_BLUE = '#007aff';
 
 function HighlightPersonaWords({ text }: { text: string }) {
-  const parts = text.split(/(\bpersonas?\b)/gi);
-  return (
-    <>
-      {parts.map((p, idx) => {
-        const lower = p.toLowerCase();
-        if (lower === 'persona' || lower === 'personas') {
-          return (
-            <span key={idx} style={{ color: PERSONA_BLUE, fontWeight: 700 }}>
-              {p}
-            </span>
-          );
-        }
-        return <span key={idx}>{p}</span>;
-      })}
-    </>
-  );
+  // Avoid `split(/(match)/)` — it can drop whitespace between captures in some cases.
+  // This approach preserves the original spacing exactly.
+  const re = /\bpersonas?\b/gi;
+  const pieces: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let key = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) {
+      pieces.push(<span key={`t-${key++}`}>{text.slice(last, m.index)}</span>);
+    }
+    pieces.push(
+      <span key={`p-${key++}`} style={{ color: PERSONA_BLUE, fontWeight: 700 }}>
+        {m[0]}
+      </span>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) {
+    pieces.push(<span key={`t-${key++}`}>{text.slice(last)}</span>);
+  }
+  return <>{pieces}</>;
 }
 
 function Badge({ children }: { children: React.ReactNode }) {
@@ -100,29 +107,30 @@ export default function LandingPage() {
   return (
     <div className="px-4 py-6 sm:px-0">
       {/* Hero */}
-      <div className="rounded-3xl p-8 sm:p-10 overflow-hidden relative border border-stone-200 shadow-sm bg-white/70 backdrop-blur">
-        {/* Soft animated background (subtle, chic) */}
+      <div className="rounded-3xl overflow-hidden relative border border-stone-200 shadow-sm">
+        {/* Animated background layer (must sit *behind* translucent content) */}
+        <div className="pointer-events-none absolute inset-0 pep-aurora" />
         <div
           className="pointer-events-none absolute -top-28 -right-28 h-72 w-72 rounded-full blur-3xl pep-float-slower"
-          style={{ backgroundColor: 'rgba(28, 25, 23, 0.08)' }}
+          style={{ backgroundColor: 'rgba(0, 122, 255, 0.18)' }}
         />
         <div
           className="pointer-events-none absolute top-10 -left-20 h-56 w-56 rounded-full blur-3xl pep-float-slow"
-          style={{ backgroundColor: 'rgba(28, 25, 23, 0.06)' }}
+          style={{ backgroundColor: 'rgba(109, 40, 217, 0.14)' }}
         />
         <div
           className="pointer-events-none absolute -bottom-28 left-24 h-80 w-80 rounded-full blur-3xl pep-drift"
-          style={{ backgroundColor: 'rgba(28, 25, 23, 0.08)' }}
+          style={{ backgroundColor: 'rgba(28, 25, 23, 0.10)' }}
         />
-        <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{
+        <div className="pointer-events-none absolute inset-0 opacity-[0.07]" style={{
           backgroundImage:
-            'radial-gradient(closest-side at 12% 18%, rgba(0,0,0,0.08), transparent 60%), radial-gradient(closest-side at 88% 70%, rgba(0,0,0,0.06), transparent 58%)'
+            'radial-gradient(closest-side at 12% 18%, rgba(0,0,0,0.10), transparent 60%), radial-gradient(closest-side at 88% 70%, rgba(0,0,0,0.08), transparent 58%)'
         }} />
 
-        <div className="relative">
+        <div className="relative p-8 sm:p-10 bg-white/65 backdrop-blur">
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <Badge><HighlightPersonaWords text="Persona  Engineering Platform" /></Badge>
-            <Badge><HighlightPersonaWords text="RAG-grounded  personas" /></Badge>
+            <Badge><HighlightPersonaWords text="Persona Engineering Platform" /></Badge>
+            <Badge><HighlightPersonaWords text="RAG-grounded personas" /></Badge>
             <Badge>Simulation playground</Badge>
           </div>
 

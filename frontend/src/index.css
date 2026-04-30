@@ -52,6 +52,21 @@
     100% { transform: translate3d(0, 0, 0); }
   }
 
+  @keyframes pep-aurora-shift {
+    0% {
+      transform: rotate(0deg) scale(1);
+      opacity: 0.55;
+    }
+    50% {
+      transform: rotate(8deg) scale(1.05);
+      opacity: 0.75;
+    }
+    100% {
+      transform: rotate(0deg) scale(1);
+      opacity: 0.55;
+    }
+  }
+
   .pep-float-slow {
     animation: pep-float 9s ease-in-out infinite;
     will-change: transform;
@@ -65,5 +80,16 @@
   .pep-drift {
     animation: pep-drift 14s ease-in-out infinite;
     will-change: transform;
+  }
+
+  /* Visible-but-subtle animated mesh behind translucent cards */
+  .pep-aurora {
+    background:
+      radial-gradient(900px 420px at 18% 22%, rgba(0, 122, 255, 0.22), transparent 60%),
+      radial-gradient(820px 420px at 82% 30%, rgba(109, 40, 217, 0.18), transparent 62%),
+      radial-gradient(900px 520px at 55% 88%, rgba(28, 25, 23, 0.10), transparent 58%);
+    filter: saturate(1.05);
+    animation: pep-aurora-shift 18s ease-in-out infinite;
+    will-change: transform, opacity;
   }
 }
