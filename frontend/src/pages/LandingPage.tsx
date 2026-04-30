@@ -100,11 +100,20 @@ export default function LandingPage() {
   return (
     <div className="px-4 py-6 sm:px-0">
       {/* Hero */}
-      <div className="glass-card rounded-3xl p-8 sm:p-10 overflow-hidden relative">
+      <div className="rounded-3xl p-8 sm:p-10 overflow-hidden relative border border-stone-200 shadow-sm bg-white/70 backdrop-blur">
         {/* Soft animated background (subtle, chic) */}
-        <div className="pointer-events-none absolute -top-28 -right-28 h-72 w-72 rounded-full bg-stone-900/5 blur-3xl pep-float-slower" />
-        <div className="pointer-events-none absolute top-10 -left-20 h-56 w-56 rounded-full bg-stone-900/4 blur-3xl pep-float-slow" />
-        <div className="pointer-events-none absolute -bottom-28 left-24 h-80 w-80 rounded-full bg-stone-900/5 blur-3xl pep-drift" />
+        <div
+          className="pointer-events-none absolute -top-28 -right-28 h-72 w-72 rounded-full blur-3xl pep-float-slower"
+          style={{ backgroundColor: 'rgba(28, 25, 23, 0.08)' }}
+        />
+        <div
+          className="pointer-events-none absolute top-10 -left-20 h-56 w-56 rounded-full blur-3xl pep-float-slow"
+          style={{ backgroundColor: 'rgba(28, 25, 23, 0.06)' }}
+        />
+        <div
+          className="pointer-events-none absolute -bottom-28 left-24 h-80 w-80 rounded-full blur-3xl pep-drift"
+          style={{ backgroundColor: 'rgba(28, 25, 23, 0.08)' }}
+        />
         <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{
           backgroundImage:
             'radial-gradient(closest-side at 12% 18%, rgba(0,0,0,0.08), transparent 60%), radial-gradient(closest-side at 88% 70%, rgba(0,0,0,0.06), transparent 58%)'
