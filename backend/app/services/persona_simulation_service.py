@@ -269,21 +269,22 @@ facilitator's intervention.
             if other_participant_names else ""
         )
 
+        goal_context_block = ""
+        if simulation.goal_context and str(simulation.goal_context).strip():
+            goal_context_block = str(simulation.goal_context).strip() + "\n\n"
+
         # ── Opening turn (blind) ──────────────────────────────────────────────
         if is_first_turn_for_agent:
+            # Must follow simulation.goal only — never inject unrelated product/study
+            # names (e.g. a fixed chatbot scenario) or the personas will hallucinate them.
             return f"""The topic for this discussion is: {simulation.goal}
 
-{simulation.goal_context if simulation.goal_context else ""}
-
-State your position clearly: what should Cipherbot do when a student asks a
-question, and what should it not do? Name one behaviour you support and one you
-oppose, with one short reason each. {_SIMULATION_REPLY_LENGTH}"""
+{goal_context_block}State your position clearly on this topic: what do you advocate for, and what do you oppose or resist?
+Name one stance you support and one you oppose, each with one short reason. {_SIMULATION_REPLY_LENGTH}"""
 
         # ── Final round ───────────────────────────────────────────────────────
         if is_final_round:
-            return f"""This is the final round of the discussion. State your final position:
-what should Cipherbot do when a student asks a question, and what should it
-not do?
+            return f"""This is the final round of the discussion. State your final position on the topic: {simulation.goal}
 
 If your view has changed from what you said at the start, name specifically
 which argument changed your mind. If your view has not changed, say so and
