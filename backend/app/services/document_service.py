@@ -239,6 +239,12 @@ class DocumentService:
 
                 file_ext = fp.suffix.lower()
                 content = await extract_text_from_file(str(fp), file_ext)
+                if not (content and content.strip()):
+                    document.processing_status = ProcessingStatus.FAILED
+                    document.processing_error = "No text extracted from file"
+                    await session.commit()
+                    content = None
+                    return
             except Exception as e:
                 logger.exception(f"Error loading document {document_id} for background processing: {e}")
                 async with AsyncSessionLocal() as session2:

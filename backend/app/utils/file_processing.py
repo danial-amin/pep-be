@@ -7,6 +7,7 @@ import re
 import unicodedata
 from pathlib import Path
 from typing import Optional
+import csv
 
 
 def _clean_pdf_text(raw_text: str) -> str:
@@ -83,6 +84,48 @@ async def extract_text_from_file(file_path: str, file_extension: str) -> str:
     if file_ext in [".txt", ".md"]:
         async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
             return await f.read()
+
+    elif file_ext == ".csv":
+        async with aiofiles.open(file_path, "r", encoding="utf-8-sig", errors="replace") as f:
+            raw = await f.read()
+        if not raw.strip():
+            return ""
+        try:
+            dialect = csv.Sniffer().sniff(raw[:4096])
+        except Exception:
+            dialect = csv.excel
+        reader = csv.reader(io.StringIO(raw), dialect=dialect)
+        rows = list(reader)
+        if not rows:
+            return ""
+
+        header = [h.strip() for h in (rows[0] or [])]
+        has_header = any(h for h in header)
+        data_rows = rows[1:] if has_header else rows
+
+        max_rows = 10000
+        lines = []
+        for i, row in enumerate(data_rows[:max_rows], start=1):
+            if not row or not any((c or "").strip() for c in row):
+                continue
+            if has_header:
+                pairs = []
+                for j, cell in enumerate(row):
+                    key = header[j] if j < len(header) and header[j] else f"col_{j+1}"
+                    val = (cell or "").strip()
+                    if val:
+                        pairs.append(f"{key}: {val}")
+                if pairs:
+                    lines.append(f"Row {i}: " + " | ".join(pairs))
+            else:
+                vals = [((c or "").strip()) for c in row if (c or "").strip()]
+                if vals:
+                    lines.append(f"Row {i}: " + " | ".join(vals))
+
+        if len(data_rows) > max_rows:
+            lines.append(f"[Truncated: {len(data_rows) - max_rows} more rows not included]")
+
+        return "\n".join(lines).strip()
 
     elif file_ext == ".pdf":
         return await _extract_pdf(file_path)

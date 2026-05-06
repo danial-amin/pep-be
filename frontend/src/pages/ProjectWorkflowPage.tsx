@@ -304,7 +304,7 @@ export default function ProjectWorkflowPage() {
                     <input
                       type="file"
                       className="hidden"
-                      accept=".pdf,.docx,.txt,.md"
+                      accept=".pdf,.docx,.txt,.md,.csv"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileUpload(file, 'context');
@@ -325,7 +325,7 @@ export default function ProjectWorkflowPage() {
                     <input
                       type="file"
                       className="hidden"
-                      accept=".pdf,.docx,.txt,.md"
+                      accept=".pdf,.docx,.txt,.md,.csv"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileUpload(file, 'interview');

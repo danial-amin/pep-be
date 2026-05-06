@@ -152,7 +152,7 @@ export default function DocumentsPage() {
               <input
                 type="file"
                 className="hidden"
-                accept=".pdf,.docx,.txt,.md"
+                accept=".pdf,.docx,.txt,.md,.csv"
                 onChange={(e) => handleFileInput(e, 'context')}
                 disabled={uploading}
               />
@@ -184,7 +184,7 @@ export default function DocumentsPage() {
               <input
                 type="file"
                 className="hidden"
-                accept=".pdf,.docx,.txt,.md"
+                accept=".pdf,.docx,.txt,.md,.csv"
                 onChange={(e) => handleFileInput(e, 'interview')}
                 disabled={uploading}
               />
