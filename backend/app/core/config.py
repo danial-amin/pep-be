@@ -77,6 +77,29 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 100 * 1024 * 1024  # 100MB
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt", ".md", ".csv"]
 
+    @field_validator("ALLOWED_EXTENSIONS", mode="before")
+    @classmethod
+    def parse_allowed_extensions(cls, v):
+        """Allow env var ALLOWED_EXTENSIONS as JSON or comma-separated string."""
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if str(x).strip()]
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return [".pdf", ".docx", ".txt", ".md", ".csv"]
+            # JSON list
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+            except Exception:
+                pass
+            # Comma-separated
+            if "," in s:
+                return [p.strip() for p in s.split(",") if p.strip()]
+            return [s]
+        return [".pdf", ".docx", ".txt", ".md", ".csv"]
+
     # Storage: "local" (Volume/filesystem) or "s3" (Railway Storage Buckets)
     STORAGE_TYPE: str = "local"
 
