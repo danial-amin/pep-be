@@ -122,6 +122,9 @@ class Settings(BaseSettings):
     MAX_TOKENS_PER_CHUNK: int = 20000  # Max tokens per processing chunk (leaving room for prompt)
     CHUNK_OVERLAP_TOKENS: int = 500  # Overlap between chunks
     PROCESSING_DELAY_SECONDS: float = 2.0  # Delay between chunk processing to avoid rate limits
+    # If true, run expensive chat-completions summarization during ingestion.
+    # Default false: ingestion should be parse+chunk+embed only.
+    DOCUMENT_SUMMARIZE_ON_INGEST: bool = False
     
     class Config:
         env_file = ".env"

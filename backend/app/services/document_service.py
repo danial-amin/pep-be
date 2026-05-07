@@ -31,23 +31,27 @@ class DocumentService:
         content: str,
         project_id: Optional[int] = None
     ) -> Document:
-        """Process a document: extract text, process with LLM, create embeddings."""
-        
-        # Process with LLM (skip if content is too short or if it's a default document)
-        # For default documents, skip LLM processing to avoid API calls and errors
-        if len(content) > 100 and not filename.startswith("default_") and not filename.startswith("transcripts-"):
+        """
+        Process a document for retrieval (RAG): store text + chunk + embed + upsert vectors.
+
+        IMPORTANT: Ingestion should not call chat-completions per chunk; that is slow/expensive
+        and will routinely exceed background job timeouts. If you want an LLM-generated summary,
+        enable it explicitly via DOCUMENT_SUMMARIZE_ON_INGEST.
+        """
+
+        processed_content = content
+        if (
+            settings.DOCUMENT_SUMMARIZE_ON_INGEST
+            and len(content) > 100
+            and not filename.startswith("default_")
+            and not filename.startswith("transcripts-")
+        ):
             try:
-                # Try to use process_large_document if available, otherwise use process_document
-                if hasattr(llm_service, 'process_large_document'):
-                    processed_data = await llm_service.process_large_document(content, document_type.value)
-                else:
-                    processed_data = await llm_service.process_document(content, document_type.value)
+                processed_data = await llm_service.process_document(content, document_type.value)
                 processed_content = str(processed_data)
             except Exception as e:
-                logger.warning(f"LLM processing failed, using raw content: {e}")
+                logger.warning(f"LLM summarization failed, using raw content: {e}")
                 processed_content = content
-        else:
-            processed_content = content
         
         # Store document in database first to get the document ID
         # This allows us to include document_id in vector metadata for filtering
@@ -153,23 +157,28 @@ class DocumentService:
         document: Document,
         content: str,
     ) -> None:
-        """Run LLM processing, chunking, and vector storage for an existing document. Updates document in place."""
+        """
+        Update an existing document: store text + chunk + embed + upsert vectors.
+
+        By default, does NOT run chat-completions summarization. See DOCUMENT_SUMMARIZE_ON_INGEST.
+        """
         filename = document.filename
         document_type = document.document_type
         project_id = document.project_id
 
-        if len(content) > 100 and not filename.startswith("default_") and not filename.startswith("transcripts-"):
+        processed_content = content
+        if (
+            settings.DOCUMENT_SUMMARIZE_ON_INGEST
+            and len(content) > 100
+            and not filename.startswith("default_")
+            and not filename.startswith("transcripts-")
+        ):
             try:
-                if hasattr(llm_service, "process_large_document"):
-                    processed_data = await llm_service.process_large_document(content, document_type.value)
-                else:
-                    processed_data = await llm_service.process_document(content, document_type.value)
+                processed_data = await llm_service.process_document(content, document_type.value)
                 processed_content = str(processed_data)
             except Exception as e:
-                logger.warning(f"LLM processing failed, using raw content: {e}")
+                logger.warning(f"LLM summarization failed, using raw content: {e}")
                 processed_content = content
-        else:
-            processed_content = content
 
         document.content = content
         document.processed_content = processed_content
