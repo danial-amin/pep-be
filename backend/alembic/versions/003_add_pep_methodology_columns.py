@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '003_pep_methodology'
-down_revision = '002_project_id'
+down_revision = '003_projects'
 branch_labels = None
 depends_on = None
 

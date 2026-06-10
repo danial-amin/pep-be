@@ -97,7 +97,7 @@ JUDGE_MODELS=["gpt-4o","gpt-4o-mini","gpt-4.1-mini"]
 JUDGE_PASS_COUNT=1
 JUDGE_TEMPERATURE=0
 ```
-The backend runs `alembic upgrade head` on container start so `judge_runs` / `judge_scores` tables are created automatically.
+The backend does **not** run Alembic on container start (protects existing Railway data). New tables such as `judge_runs` / `judge_scores` are created via SQLAlchemy `create_all` on startup, which only adds missing tables and does not drop or overwrite existing rows. To run Alembic manually: `railway run --service <backend> alembic upgrade head`.
 ```
 
 **For document processing (uploads → vectors):** use a **Railway Volume** and a **worker service** so uploads are processed reliably (see [Document processing on Railway](#document-processing-on-railway)):
