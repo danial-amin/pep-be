@@ -221,6 +221,56 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            # LLM-as-judge score tables (additive only — does not touch existing simulation data)
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='simulations') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='judge_runs') THEN
+                            CREATE TABLE judge_runs (
+                                id SERIAL PRIMARY KEY,
+                                judge_model VARCHAR(128) NOT NULL,
+                                model_version VARCHAR(128) NOT NULL,
+                                pass_number INTEGER NOT NULL,
+                                temperature DOUBLE PRECISION NOT NULL,
+                                level VARCHAR(32) NOT NULL,
+                                simulation_id INTEGER NOT NULL REFERENCES simulations(id),
+                                target_id INTEGER NOT NULL,
+                                prompt_template_hash VARCHAR(64) NOT NULL,
+                                system_prompt TEXT NOT NULL,
+                                user_prompt TEXT NOT NULL,
+                                run_timestamp TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+                            );
+                            CREATE INDEX ix_judge_runs_simulation_id ON judge_runs(simulation_id);
+                            CREATE UNIQUE INDEX ix_judge_runs_unique
+                                ON judge_runs(judge_model, level, simulation_id, target_id, pass_number);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='judge_scores') THEN
+                            CREATE TABLE judge_scores (
+                                id SERIAL PRIMARY KEY,
+                                judge_run_id INTEGER NOT NULL REFERENCES judge_runs(id),
+                                judge_model VARCHAR(128) NOT NULL,
+                                model_version VARCHAR(128) NOT NULL,
+                                pass_number INTEGER NOT NULL,
+                                temperature DOUBLE PRECISION NOT NULL,
+                                level VARCHAR(32) NOT NULL,
+                                simulation_id INTEGER NOT NULL REFERENCES simulations(id),
+                                target_id INTEGER NOT NULL,
+                                item VARCHAR(64) NOT NULL,
+                                item_type VARCHAR(32) NOT NULL,
+                                response_code INTEGER,
+                                response_label TEXT NOT NULL,
+                                justification TEXT NOT NULL,
+                                run_timestamp TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+                            );
+                            CREATE INDEX ix_judge_scores_judge_run_id ON judge_scores(judge_run_id);
+                            CREATE INDEX ix_judge_scores_simulation_id ON judge_scores(simulation_id);
+                            CREATE UNIQUE INDEX ix_judge_scores_unique
+                                ON judge_scores(judge_model, pass_number, level, simulation_id, target_id, item);
+                        END IF;
+                    END IF;
+                END $$;
+            """))
         except Exception as e:
             logger.warning(f"Could not add columns automatically: {e}. Run migrations manually if needed.", exc_info=True)
     

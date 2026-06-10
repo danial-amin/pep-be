@@ -29,14 +29,10 @@ COPY ./alembic /app/alembic
 # Create uploads and static directories
 RUN mkdir -p /app/uploads /app/static/images/personas
 
-# Startup script (migrations + uvicorn)
-COPY ./start.sh /app/start.sh
-RUN chmod +x /app/start.sh
-
 # Expose port (Railway will provide PORT env var)
 EXPOSE 8080
 
-# Run the application
+# Run the application (same as pre-judge deploys — no Alembic on boot)
 # Railway provides PORT env var, fallback to 8080 for local development
-CMD ["/app/start.sh"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
 
