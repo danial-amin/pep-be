@@ -18,10 +18,19 @@ import {
   TrendingUp,
   Activity,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  BarChart3
 } from 'lucide-react';
 import { simulationsApi, personasApi, API_BASE_URL } from '../services/api';
-import { Simulation, SimulationMessage, PersonaSet, Persona, SimulationListItem, AgreementEvaluation, AgreementHistory } from '../types';
+import {
+  Simulation,
+  SimulationMessage,
+  PersonaSet,
+  Persona,
+  SimulationListItem,
+  AgreementHistory,
+  SimulationEvaluationScores,
+} from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 
 // Persona Avatar Component (use personaId when available so API serves from file or base64)
@@ -219,6 +228,11 @@ export default function SimulationPage() {
   const [showAgreementHistory, setShowAgreementHistory] = useState(false);
   const [evaluatingAgreement, setEvaluatingAgreement] = useState(false);
 
+  // LLM-as-judge evaluation state
+  const [evaluatingDiscussion, setEvaluatingDiscussion] = useState(false);
+  const [evaluationScores, setEvaluationScores] = useState<SimulationEvaluationScores | null>(null);
+  const [showEvaluationScores, setShowEvaluationScores] = useState(false);
+
   // Load data on mount
   useEffect(() => {
     loadPersonaSets();
@@ -268,6 +282,18 @@ export default function SimulationPage() {
     }
   };
 
+  const loadEvaluationScores = async (id: number) => {
+    try {
+      const data = await simulationsApi.getEvaluationScores(id);
+      setEvaluationScores(data);
+      if (data.has_evaluation) {
+        setShowEvaluationScores(true);
+      }
+    } catch (error) {
+      console.error('Failed to load evaluation scores:', error);
+    }
+  };
+
   const loadSimulation = async (id: number) => {
     if (streamRef.current) {
       streamRef.current.abort();
@@ -279,6 +305,12 @@ export default function SimulationPage() {
       const data = await simulationsApi.getById(id);
       setCurrentSimulation(data);
       setShowSetup(false);
+      if (data.status === 'completed' || data.status === 'stopped') {
+        await loadEvaluationScores(id);
+      } else {
+        setEvaluationScores(null);
+        setShowEvaluationScores(false);
+      }
     } catch (error) {
       console.error('Failed to load simulation:', error);
     } finally {
@@ -621,6 +653,24 @@ export default function SimulationPage() {
     }
   };
 
+  const handleEvaluateDiscussion = async () => {
+    if (!currentSimulation) return;
+    const force = evaluationScores?.has_evaluation ?? false;
+    if (force && !window.confirm('Re-run evaluation? Existing scores for this simulation will be replaced.')) {
+      return;
+    }
+    setEvaluatingDiscussion(true);
+    try {
+      await simulationsApi.evaluate(currentSimulation.id, force);
+      await loadEvaluationScores(currentSimulation.id);
+      setShowEvaluationScores(true);
+    } catch (error: any) {
+      alert(`Failed to evaluate discussion: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setEvaluatingDiscussion(false);
+    }
+  };
+
   const handleNewSimulation = () => {
     closeStream();
     setStreamingMessage(null);
@@ -635,6 +685,8 @@ export default function SimulationPage() {
     setAgreementThreshold(0.7);
     setAgreementHistory(null);
     setShowAgreementHistory(false);
+    setEvaluationScores(null);
+    setShowEvaluationScores(false);
     navigate('/simulations');
   };
 
@@ -1152,6 +1204,19 @@ export default function SimulationPage() {
                 )}
 
                 {(currentSimulation.status === 'completed' || currentSimulation.status === 'stopped') &&
+                  currentSimulation.messages.length > 0 && (
+                  <button
+                    onClick={handleEvaluateDiscussion}
+                    disabled={evaluatingDiscussion}
+                    className="px-4 py-2 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
+                    title="Score this discussion and every participating persona with LLM judges"
+                  >
+                    {evaluatingDiscussion ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
+                    {evaluationScores?.has_evaluation ? 'Re-evaluate Discussion' : 'Evaluate Discussion'}
+                  </button>
+                )}
+
+                {(currentSimulation.status === 'completed' || currentSimulation.status === 'stopped') &&
                   currentSimulation.messages.length > 0 &&
                   !(currentSimulation.persona_summaries?.length) && !currentSimulation.summary && (
                   <button
@@ -1161,6 +1226,16 @@ export default function SimulationPage() {
                   >
                     {generatingSummary ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
                     Generate Summary
+                  </button>
+                )}
+
+                {evaluationScores?.has_evaluation && (
+                  <button
+                    onClick={() => setShowEvaluationScores(v => !v)}
+                    className="px-4 py-2 bg-stone-100 hover:bg-stone-100 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    {showEvaluationScores ? 'Hide' : 'Show'} Evaluation
                   </button>
                 )}
               </div>
@@ -1224,6 +1299,84 @@ export default function SimulationPage() {
                   </div>
                 )}
               </div>
+
+              {/* LLM-as-judge Evaluation Panel */}
+              {showEvaluationScores && evaluationScores?.has_evaluation && (
+                <div className="glass-card rounded-2xl p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-stone-900 flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5" />
+                      Discussion Evaluation
+                    </h4>
+                    {evaluationScores.last_evaluated_at && (
+                      <span className="text-sm text-stone-400">
+                        {new Date(evaluationScores.last_evaluated_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+
+                  {evaluationScores.judge_models.map((model) => {
+                    const discussionScores = evaluationScores.scores.filter(
+                      s => s.judge_model === model && s.level === 'discussion'
+                    );
+                    const personaScores = evaluationScores.scores.filter(
+                      s => s.judge_model === model && s.level === 'persona'
+                    );
+                    const personaIds = [...new Set(personaScores.map(s => s.target_id))];
+
+                    return (
+                      <div key={model} className="mb-6 last:mb-0">
+                        <p className="text-sm font-medium text-stone-600 mb-3">{model}</p>
+
+                        {discussionScores.length > 0 && (
+                          <div className="bg-stone-50 rounded-xl p-4 mb-3">
+                            <h5 className="text-sm font-semibold text-stone-900 mb-2">Discussion</h5>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {discussionScores.map((score) => (
+                                <div key={`${model}-d-${score.item}`} className="text-sm">
+                                  <div className="flex justify-between gap-2">
+                                    <span className="text-stone-500">{score.item}</span>
+                                    <span className="text-stone-900 font-medium text-right">
+                                      {score.item_type === 'likert' && score.response_code != null
+                                        ? `${score.response_code}/7`
+                                        : score.response_label}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-stone-400 mt-0.5 line-clamp-2">{score.justification}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {personaIds.map((personaId) => {
+                          const scores = personaScores.filter(s => s.target_id === personaId);
+                          const name = scores[0]?.persona_name || `Persona ${personaId}`;
+                          return (
+                            <div key={`${model}-p-${personaId}`} className="bg-stone-50 rounded-xl p-4 mb-3 last:mb-0">
+                              <h5 className="text-sm font-semibold text-stone-900 mb-2">{name}</h5>
+                              <div className="space-y-2 max-h-40 overflow-y-auto">
+                                {scores.map((score) => (
+                                  <div key={`${model}-p-${personaId}-${score.item}`} className="text-sm">
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-stone-500">{score.item}</span>
+                                      <span className="text-stone-900 font-medium text-right">
+                                        {score.item_type === 'likert' && score.response_code != null
+                                          ? `${score.response_code}/7`
+                                          : score.response_label}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Agreement History Panel */}
               {showAgreementHistory && agreementHistory && agreementHistory.evaluations.length > 0 && (

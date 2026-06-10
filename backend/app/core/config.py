@@ -118,6 +118,37 @@ class Settings(BaseSettings):
     # Persona images subdir under STATIC_DIR (so full path = STATIC_DIR + /images/personas)
     PERSONA_IMAGES_DIR: str = "/app/static/images/personas"
     
+    # Simulation LLM-as-judge evaluation
+    JUDGE_MODELS: Union[str, List[str]] = '["gpt-4o","gpt-4o-mini","gpt-4.1-mini"]'
+    JUDGE_PASS_COUNT: int = 1
+    JUDGE_TEMPERATURE: float = 0.0
+
+    @field_validator("JUDGE_MODELS", mode="before")
+    @classmethod
+    def parse_judge_models(cls, v):
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return ["gpt-4o", "gpt-4o-mini", "gpt-4.1-mini"]
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    return [str(m).strip() for m in parsed if str(m).strip()]
+            except (json.JSONDecodeError, ValueError):
+                pass
+            if "," in s:
+                return [m.strip() for m in s.split(",") if m.strip()]
+            return [s]
+        return ["gpt-4o", "gpt-4o-mini", "gpt-4.1-mini"]
+
+    def judge_models_list(self) -> List[str]:
+        models = self.JUDGE_MODELS
+        if isinstance(models, str):
+            return [models]
+        return list(models)
+
     # Document Processing
     MAX_TOKENS_PER_CHUNK: int = 20000  # Max tokens per processing chunk (leaving room for prompt)
     CHUNK_OVERLAP_TOKENS: int = 500  # Overlap between chunks

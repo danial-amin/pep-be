@@ -45,6 +45,8 @@ from app.schemas.simulation import (
 from app.services.persona_simulation_service import simulation_service
 from app.services.persona_evaluation_service import persona_evaluation_service
 from app.services.agreement_evaluator_service import agreement_evaluator_service
+from app.services.simulation_judge_service import simulation_judge_service
+from app.schemas.judge import SimulationEvaluateRequest
 
 router = APIRouter()
 
@@ -857,6 +859,57 @@ async def evaluate_agreement_now(
 
 
 # ─── Adherence evaluation & summary ──────────────────────────────────────────
+
+@router.post("/{simulation_id}/evaluate")
+async def evaluate_simulation(
+    simulation_id: int,
+    body: SimulationEvaluateRequest = SimulationEvaluateRequest(),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Run LLM-as-judge evaluation for this simulation.
+
+    Scores the full discussion and every participating persona. Only available
+    when the simulation is completed or stopped.
+    """
+    try:
+        return await simulation_judge_service.evaluate_simulation(
+            session,
+            simulation_id,
+            force=body.force,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error(
+            "Simulation evaluation error: %s", exc, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Simulation evaluation failed: {str(exc)}",
+        ) from exc
+
+
+@router.get("/{simulation_id}/evaluation-scores")
+async def get_simulation_evaluation_scores(
+    simulation_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Return stored LLM-as-judge scores for a simulation."""
+    result = await session.execute(
+        select(Simulation).where(Simulation.id == simulation_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Simulation with ID {simulation_id} not found",
+        )
+    return await simulation_judge_service.get_evaluation_scores(session, simulation_id)
+
 
 @router.post("/{simulation_id}/evaluate-adherence")
 async def evaluate_simulation_adherence(

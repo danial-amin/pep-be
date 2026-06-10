@@ -13,6 +13,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.v1.router import api_router
+import app.models  # noqa: F401 — register ORM tables before create_all
 
 logger = logging.getLogger(__name__)
 

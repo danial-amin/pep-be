@@ -294,6 +294,18 @@ export const simulationsApi = {
     const response = await api.post(`/simulations/${id}/evaluate-agreement`);
     return response.data;
   },
+
+  /** Run LLM-as-judge evaluation for a completed/stopped simulation */
+  evaluate: async (id: number, force = false) => {
+    const response = await api.post(`/simulations/${id}/evaluate`, { force });
+    return response.data;
+  },
+
+  /** Get stored LLM-as-judge scores for a simulation */
+  getEvaluationScores: async (id: number) => {
+    const response = await api.get(`/simulations/${id}/evaluation-scores`);
+    return response.data;
+  },
 };
 
 // Projects API

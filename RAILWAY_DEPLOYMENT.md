@@ -91,6 +91,15 @@ CORS_ORIGINS=<your-frontend-url>
 LOG_LEVEL=INFO
 ```
 
+**For simulation LLM-as-judge evaluation (optional):**
+```
+JUDGE_MODELS=["gpt-4o","gpt-4o-mini","gpt-4.1-mini"]
+JUDGE_PASS_COUNT=1
+JUDGE_TEMPERATURE=0
+```
+The backend runs `alembic upgrade head` on container start so `judge_runs` / `judge_scores` tables are created automatically.
+```
+
 **For document processing (uploads → vectors):** use a **Railway Volume** and a **worker service** so uploads are processed reliably (see [Document processing on Railway](#document-processing-on-railway)):
 ```
 UPLOAD_DIR=/data/uploads

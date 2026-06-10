@@ -283,6 +283,40 @@ export interface AgreementHistory {
   evaluations: AgreementEvaluation[];
 }
 
+// ─── LLM-as-judge evaluation types ───────────────────────────────────────────
+
+export interface JudgeScoreEntry {
+  judge_model: string;
+  level: 'persona' | 'discussion';
+  simulation_id: number;
+  target_id: number;
+  persona_name?: string | null;
+  item: string;
+  item_type: 'likert' | 'categorical';
+  response_code: number | null;
+  response_label: string;
+  justification: string;
+  run_timestamp?: string | null;
+}
+
+export interface SimulationEvaluationScores {
+  simulation_id: number;
+  has_evaluation: boolean;
+  judge_models: string[];
+  last_evaluated_at?: string | null;
+  scores: JudgeScoreEntry[];
+}
+
+export interface SimulationEvaluationResult {
+  simulation_ids: number[];
+  judge_models: string[];
+  pass_count: number;
+  temperature: number;
+  persona_targets: number;
+  attempted_runs: number;
+  score_rows_written: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface Simulation {

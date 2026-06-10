@@ -2,7 +2,7 @@
 Main API router for v1 endpoints.
 """
 from fastapi import APIRouter
-from app.api.v1.endpoints import documents, personas, prompts, analytics, projects, simulations
+from app.api.v1.endpoints import documents, personas, prompts, analytics, projects, simulations, judge
 
 api_router = APIRouter()
 
@@ -19,7 +19,8 @@ async def api_root():
             "personas": "/api/v1/personas",
             "prompts": "/api/v1/prompts",
             "analytics": "/api/v1/analytics",
-            "simulations": "/api/v1/simulations"
+            "simulations": "/api/v1/simulations",
+            "judge": "/api/v1/judge"
         }
     }
 
@@ -29,4 +30,5 @@ api_router.include_router(personas.router, prefix="/personas", tags=["personas"]
 api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(simulations.router, prefix="/simulations", tags=["simulations"])
+api_router.include_router(judge.router, prefix="/judge", tags=["judge"])
 
