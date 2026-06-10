@@ -72,6 +72,7 @@ class JudgeLLMOutput(BaseModel):
 
 class SimulationEvaluateRequest(BaseModel):
     force: bool = False
+    judge_models: Optional[list[str]] = None
 
 
 class JudgeScoreRow(BaseModel):

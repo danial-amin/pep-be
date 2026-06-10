@@ -876,6 +876,7 @@ async def evaluate_simulation(
         return await simulation_judge_service.evaluate_simulation(
             session,
             simulation_id,
+            judge_models=body.judge_models,
             force=body.force,
         )
     except ValueError as exc:
