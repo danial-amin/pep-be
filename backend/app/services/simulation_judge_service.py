@@ -59,6 +59,7 @@ class SimulationJudgeService:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=temperature,
+            max_tokens=16384,
             response_format={
                 "type": "json_schema",
                 "json_schema": {

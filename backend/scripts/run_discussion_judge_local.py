@@ -20,15 +20,13 @@ import asyncio
 import json
 import os
 import sys
-
-# Satisfy Settings() for imports that pull in SQLAlchemy models; real key checked in _run().
-os.environ.setdefault("DATABASE_URL", "postgresql://local:local@127.0.0.1:5432/local")
+from types import SimpleNamespace
+from typing import Dict, List, Optional
 
 import httpx
 from openai import AsyncOpenAI
 
-from app.schemas.judge import parse_judge_response
-from app.services.transcript_builder import build_discussion_transcript
+from app.schemas.judge import JudgeLLMOutput, parse_judge_response
 from app.utils.judge_prompts import build_full_prompt
 
 
@@ -51,9 +49,6 @@ async def _fetch_simulation(api_base: str, simulation_id: int) -> dict:
 
 
 def _simulation_from_payload(payload: dict):
-    """Minimal stand-in for ORM Simulation used by transcript_builder."""
-    from types import SimpleNamespace
-
     messages = []
     for row in payload.get("messages", []):
         persona_name = row.get("persona_name") or f"Persona {row.get('persona_id')}"
@@ -88,6 +83,64 @@ def _simulation_from_payload(payload: dict):
     )
 
 
+def _participant_names(simulation) -> Dict[int, str]:
+    names: Dict[int, str] = {}
+    for participant in simulation.participants:
+        if participant.persona:
+            names[participant.persona_id] = participant.persona.name
+    for message in simulation.messages:
+        if message.persona_id and message.persona:
+            names[message.persona_id] = message.persona.name
+    return names
+
+
+def _ordered_messages(simulation) -> List:
+    return sorted(simulation.messages, key=lambda m: (m.turn_number, m.id))
+
+
+def _build_discussion_transcript(simulation) -> str:
+    names = _participant_names(simulation)
+    lines = [
+        f"Discussion ID: {simulation.id}",
+        f"Discussion name: {simulation.name}",
+        "",
+        "Policy framing:",
+        (
+            "This is a multi-persona policy discussion in PEP on whether Cipherbot should "
+            "provide direct explanatory answers to academic content questions or redirect "
+            "students to existing resources. It is a wicked problem with no objectively correct answer."
+        ),
+        "",
+        f"Goal: {simulation.goal}",
+    ]
+    if simulation.goal_context:
+        lines.extend(["", f"Goal context: {simulation.goal_context}"])
+
+    lines.extend([
+        "",
+        "Turn structure:",
+        "- Turn 1: each persona wrote an independent opening statement without seeing others' messages.",
+        "- Turns 2 onward: each persona could see the full conversation history.",
+        "",
+        "=== FULL DISCUSSION TRANSCRIPT ===",
+    ])
+
+    current_turn: Optional[int] = None
+    for message in _ordered_messages(simulation):
+        if message.is_moderator_message:
+            continue
+        if message.turn_number != current_turn:
+            current_turn = message.turn_number
+            lines.append(f"\n--- Turn {current_turn} ---")
+        if message.is_human_message or message.persona_id is None:
+            lines.append(f"[Facilitator]: {message.content}")
+            continue
+        speaker = names.get(message.persona_id, f"Persona {message.persona_id}")
+        lines.append(f"[{speaker} (persona_id={message.persona_id})]: {message.content}")
+
+    return "\n".join(lines)
+
+
 async def _run(args: argparse.Namespace) -> dict:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -95,10 +148,8 @@ async def _run(args: argparse.Namespace) -> dict:
 
     payload = await _fetch_simulation(args.api_base, args.simulation_id)
     simulation = _simulation_from_payload(payload)
-    transcript = build_discussion_transcript(simulation)
+    transcript = _build_discussion_transcript(simulation)
     system_prompt, user_prompt, _template_hash = build_full_prompt("discussion", transcript)
-
-    from app.schemas.judge import JudgeLLMOutput
 
     schema = JudgeLLMOutput.json_schema_for_level("discussion")
     client = AsyncOpenAI(api_key=api_key)
@@ -109,6 +160,7 @@ async def _run(args: argparse.Namespace) -> dict:
             {"role": "user", "content": user_prompt},
         ],
         temperature=args.temperature,
+        max_tokens=16384,
         response_format={
             "type": "json_schema",
             "json_schema": {

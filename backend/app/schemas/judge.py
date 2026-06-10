@@ -31,10 +31,14 @@ class JudgeLLMOutput(BaseModel):
                     "enum": list(item.options),
                     "description": "Must be exactly one of the listed verbatim options",
                 }
-                code_schema: dict = {
-                    "type": "null",
-                    "description": "Must be null for categorical items",
+                item_properties = {
+                    "response_label": label_schema,
+                    "justification": {
+                        "type": "string",
+                        "description": "One sentence with quote or turn reference",
+                    },
                 }
+                item_required = ["response_label", "justification"]
             else:
                 likert_labels = list(LIKERT_ANCHOR_LIST)
                 if item.allows_na:
@@ -44,21 +48,22 @@ class JudgeLLMOutput(BaseModel):
                     "enum": likert_labels,
                     "description": "Must be exactly one of the Likert anchor labels",
                 }
-                code_schema = {
-                    "type": ["integer", "null"],
-                    "description": "1-7 for Likert; null only when response_label is NA",
-                }
-            properties[item.name] = {
-                "type": "object",
-                "properties": {
-                    "response_code": code_schema,
+                item_properties = {
+                    "response_code": {
+                        "type": ["integer", "null"],
+                        "description": "1-7 for Likert; null only when response_label is NA",
+                    },
                     "response_label": label_schema,
                     "justification": {
                         "type": "string",
                         "description": "One sentence with quote or turn reference",
                     },
-                },
-                "required": ["response_code", "response_label", "justification"],
+                }
+                item_required = ["response_code", "response_label", "justification"]
+            properties[item.name] = {
+                "type": "object",
+                "properties": item_properties,
+                "required": item_required,
                 "additionalProperties": False,
             }
             required.append(item.name)
@@ -100,7 +105,9 @@ def parse_judge_response(level: str, raw: dict) -> Dict[str, ItemResponse]:
         raise ValueError(f"Judge response missing items: {sorted(missing)}")
     parsed: Dict[str, ItemResponse] = {}
     for name in expected:
-        entry = raw[name]
+        entry = dict(raw[name])
+        if ALL_ITEMS[name].item_type == "categorical":
+            entry.setdefault("response_code", None)
         item_response = ItemResponse(**entry)
         item_def = ALL_ITEMS[name]
         if item_def.item_type == "categorical":
