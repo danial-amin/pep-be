@@ -20,11 +20,26 @@ class ItemResponse(BaseModel):
 class JudgeLLMOutput(BaseModel):
     @classmethod
     def json_schema_for_level(cls, level: Literal["persona", "discussion"]) -> dict:
-        from app.utils.judge_survey_items import items_for_level
+        from app.utils.judge_survey_items import LIKERT_ANCHOR_LIST, items_for_level
 
         properties = {}
         required = []
         for item in items_for_level(level):
+            if item.item_type == "categorical" and item.options:
+                label_schema: dict = {
+                    "type": "string",
+                    "enum": list(item.options),
+                    "description": "Must be exactly one of the listed verbatim options",
+                }
+            else:
+                likert_labels = list(LIKERT_ANCHOR_LIST)
+                if item.allows_na:
+                    likert_labels = likert_labels + ["NA"]
+                label_schema = {
+                    "type": "string",
+                    "enum": likert_labels,
+                    "description": "Must be exactly one of the Likert anchor labels",
+                }
             properties[item.name] = {
                 "type": "object",
                 "properties": {
@@ -32,7 +47,7 @@ class JudgeLLMOutput(BaseModel):
                         "type": ["integer", "null"],
                         "description": "1-7 for Likert; null for NA or categorical",
                     },
-                    "response_label": {"type": "string"},
+                    "response_label": label_schema,
                     "justification": {
                         "type": "string",
                         "description": "One sentence with quote or turn reference",
@@ -80,12 +95,22 @@ def parse_judge_response(level: str, raw: dict) -> Dict[str, ItemResponse]:
     parsed: Dict[str, ItemResponse] = {}
     for name in expected:
         entry = raw[name]
-        parsed[name] = ItemResponse(**entry)
+        item_response = ItemResponse(**entry)
         item_def = ALL_ITEMS[name]
-        if item_def.item_type == "likert":
-            from app.utils.judge_survey_items import validate_likert_response
-            validate_likert_response(item_def, parsed[name].response_code, parsed[name].response_label)
+        if item_def.item_type == "categorical":
+            from app.utils.judge_survey_items import (
+                normalize_categorical_label,
+                validate_categorical_response,
+            )
+            canonical_label = normalize_categorical_label(item_def, item_response.response_label)
+            item_response = ItemResponse(
+                response_code=item_response.response_code,
+                response_label=canonical_label,
+                justification=item_response.justification,
+            )
+            validate_categorical_response(item_def, item_response.response_code, item_response.response_label)
         else:
-            from app.utils.judge_survey_items import validate_categorical_response
-            validate_categorical_response(item_def, parsed[name].response_code, parsed[name].response_label)
+            from app.utils.judge_survey_items import validate_likert_response
+            validate_likert_response(item_def, item_response.response_code, item_response.response_label)
+        parsed[name] = item_response
     return parsed

@@ -47,7 +47,7 @@ Likert anchors (use these verbatim labels):
 
 For reverse-keyed items (argumentation3, convergence3): store the raw agreement rating; do not reverse-code.
 
-For stance_full, select exactly one option verbatim from the list provided."""
+For stance_full, set response_label to the complete option string exactly as written. Do not abbreviate."""
 
 DISCUSSION_INSTRUCTIONS = """You are rating the FULL multi-persona discussion.
 
@@ -71,7 +71,7 @@ Construct definitions:
 - Overall pattern — """ + CONSTRUCT_DEFINITIONS["discussion_pattern"] + """
 - Coordination — """ + CONSTRUCT_DEFINITIONS["coordination"] + """
 
-For categorical items, select exactly one option verbatim. Do not invent categories."""
+For categorical items, set response_label to the complete option string exactly as written in the list (including text after the colon). Do not abbreviate to the category name alone. Do not invent categories."""
 
 
 def _format_item_block(items: List[SurveyItem]) -> str:

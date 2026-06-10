@@ -131,10 +131,30 @@ def validate_likert_response(item: SurveyItem, response_code: Optional[int], res
         )
 
 
+def normalize_categorical_label(item: SurveyItem, response_label: str) -> str:
+    """Map judge output to a verbatim option (models often return the short prefix only)."""
+    label = response_label.strip()
+    if not item.options:
+        return label
+    if label in item.options:
+        return label
+    lower = label.lower()
+    for opt in item.options:
+        if lower == opt.lower():
+            return opt
+        prefix = opt.split(":", 1)[0].strip()
+        if lower == prefix.lower() or lower.startswith(prefix.lower()):
+            return opt
+        if opt.lower().startswith(lower):
+            return opt
+    return label
+
+
 def validate_categorical_response(item: SurveyItem, response_code: Optional[int], response_label: str) -> None:
     if response_code is not None:
         raise ValueError(f"{item.name}: categorical response_code must be null")
-    if not item.options or response_label.strip() not in item.options:
+    canonical = normalize_categorical_label(item, response_label)
+    if not item.options or canonical not in item.options:
         raise ValueError(f"{item.name}: response_label must be one of the verbatim options")
 
 
