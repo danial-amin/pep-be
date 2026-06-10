@@ -29,6 +29,7 @@ import {
   Persona,
   SimulationListItem,
   AgreementHistory,
+  AgreementEvaluation,
   SimulationEvaluationScores,
 } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
