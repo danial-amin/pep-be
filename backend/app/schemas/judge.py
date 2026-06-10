@@ -31,6 +31,10 @@ class JudgeLLMOutput(BaseModel):
                     "enum": list(item.options),
                     "description": "Must be exactly one of the listed verbatim options",
                 }
+                code_schema: dict = {
+                    "type": "null",
+                    "description": "Must be null for categorical items",
+                }
             else:
                 likert_labels = list(LIKERT_ANCHOR_LIST)
                 if item.allows_na:
@@ -40,13 +44,14 @@ class JudgeLLMOutput(BaseModel):
                     "enum": likert_labels,
                     "description": "Must be exactly one of the Likert anchor labels",
                 }
+                code_schema = {
+                    "type": ["integer", "null"],
+                    "description": "1-7 for Likert; null only when response_label is NA",
+                }
             properties[item.name] = {
                 "type": "object",
                 "properties": {
-                    "response_code": {
-                        "type": ["integer", "null"],
-                        "description": "1-7 for Likert; null for NA or categorical",
-                    },
+                    "response_code": code_schema,
                     "response_label": label_schema,
                     "justification": {
                         "type": "string",
@@ -104,13 +109,21 @@ def parse_judge_response(level: str, raw: dict) -> Dict[str, ItemResponse]:
             )
             canonical_label = normalize_categorical_label(item_def, item_response.response_label)
             item_response = ItemResponse(
-                response_code=item_response.response_code,
+                response_code=None,
                 response_label=canonical_label,
                 justification=item_response.justification,
             )
-            validate_categorical_response(item_def, item_response.response_code, item_response.response_label)
+            validate_categorical_response(item_def, item_response.response_label)
         else:
-            from app.utils.judge_survey_items import validate_likert_response
+            from app.utils.judge_survey_items import normalize_likert_response, validate_likert_response
+            code, label = normalize_likert_response(
+                item_def, item_response.response_code, item_response.response_label
+            )
+            item_response = ItemResponse(
+                response_code=code,
+                response_label=label,
+                justification=item_response.justification,
+            )
             validate_likert_response(item_def, item_response.response_code, item_response.response_label)
         parsed[name] = item_response
     return parsed

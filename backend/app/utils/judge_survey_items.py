@@ -112,6 +112,16 @@ ALL_ITEMS: Dict[str, SurveyItem] = {
 }
 
 
+def likert_code_from_label(label: str) -> Optional[int]:
+    normalized = label.strip()
+    if normalized.upper() == "NA":
+        return None
+    for code, anchor in LIKERT_ANCHORS.items():
+        if anchor == normalized:
+            return code
+    return None
+
+
 def items_for_level(level: Level) -> List[SurveyItem]:
     if level == "persona":
         return PERSONA_ITEMS
@@ -150,12 +160,23 @@ def normalize_categorical_label(item: SurveyItem, response_label: str) -> str:
     return label
 
 
-def validate_categorical_response(item: SurveyItem, response_code: Optional[int], response_label: str) -> None:
-    if response_code is not None:
-        raise ValueError(f"{item.name}: categorical response_code must be null")
+def validate_categorical_response(item: SurveyItem, response_label: str) -> None:
     canonical = normalize_categorical_label(item, response_label)
     if not item.options or canonical not in item.options:
         raise ValueError(f"{item.name}: response_label must be one of the verbatim options")
+
+
+def normalize_likert_response(item: SurveyItem, response_code: Optional[int], response_label: str) -> tuple[Optional[int], str]:
+    """Align Likert code and label; prefer label when the model sends a mismatched code."""
+    label = response_label.strip()
+    if item.allows_na and label.upper() == "NA":
+        return None, "NA"
+    code_from_label = likert_code_from_label(label)
+    if code_from_label is not None:
+        return code_from_label, LIKERT_ANCHORS[code_from_label]
+    if response_code is not None and 1 <= response_code <= 7:
+        return response_code, LIKERT_ANCHORS[response_code]
+    raise ValueError(f"{item.name}: invalid Likert response")
 
 
 CONSTRUCT_DEFINITIONS: Dict[str, str] = {
