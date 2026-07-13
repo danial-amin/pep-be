@@ -1,11 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Bot, Send, Loader2, Shield, AlertCircle, RefreshCw, FolderOpen } from 'lucide-react';
+import { Bot, Send, Loader2, Shield, AlertCircle, RefreshCw, FolderOpen, Download } from 'lucide-react';
 import { personaChatApi, personasApi, projectsApi } from '../services/api';
 import { PersonaSet, PersonaChatMessage, PersonaChatSession, Project } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 
 const PROJECT_STORAGE_KEY = 'persona-chat-project-id';
+
+const sanitizeFilename = (name: string) =>
+  name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'persona';
+
+const downloadFile = (content: string, filename: string, mimeType: string) => {
+  const blob = new Blob([content], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};
 
 function PersonaAvatar({
   name,
@@ -240,6 +255,77 @@ export default function PersonaChatPage() {
     }
   };
 
+  const handleDownloadChat = (format: 'txt' | 'json') => {
+    if (!selectedPersona || messages.length === 0) return;
+
+    const project = projects.find((p) => p.id === selectedProjectId);
+    const personaSlug = sanitizeFilename(selectedPersona.name);
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+    if (format === 'json') {
+      const payload = {
+        exported_at: new Date().toISOString(),
+        persona: {
+          id: selectedPersona.id,
+          name: selectedPersona.name,
+          set_name: selectedPersona.setName,
+        },
+        project: project
+          ? { id: project.id, name: project.name, field_of_study: project.field_of_study }
+          : null,
+        session_id: session?.id ?? null,
+        strict_mode: strictMode,
+        messages: messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          refused: m.refused ?? false,
+          refusal_reason: m.refusal_reason ?? null,
+          retrieval_score: m.retrieval_score ?? null,
+          sources_used: m.sources_used ?? [],
+          created_at: m.created_at,
+        })),
+      };
+      downloadFile(
+        JSON.stringify(payload, null, 2),
+        `persona_chat_${personaSlug}_${timestamp}.json`,
+        'application/json',
+      );
+      return;
+    }
+
+    const lines = [
+      'Persona Chat Transcript',
+      '=======================',
+      `Persona: ${selectedPersona.name}`,
+      `Persona set: ${selectedPersona.setName}`,
+      `Project: ${project?.name ?? 'Unknown'}`,
+      `Session ID: ${session?.id ?? 'N/A'}`,
+      `Strict mode: ${strictMode ? 'on' : 'off'}`,
+      `Exported: ${new Date().toLocaleString()}`,
+      '',
+      '---',
+      '',
+    ];
+
+    for (const msg of messages) {
+      const speaker = msg.role === 'user' ? 'User' : selectedPersona.name;
+      const time = msg.created_at ? new Date(msg.created_at).toLocaleString() : '';
+      lines.push(`[${time}] ${speaker}:`);
+      lines.push(msg.content);
+      if (msg.role === 'assistant' && msg.refused) {
+        lines.push(`(refused — ${msg.refusal_reason ?? 'out of scope'})`);
+      }
+      lines.push('');
+    }
+
+    downloadFile(
+      lines.join('\n'),
+      `persona_chat_${personaSlug}_${timestamp}.txt`,
+      'text/plain',
+    );
+  };
+
   const handleProjectChange = (projectId: number) => {
     setSelectedProjectId(projectId);
     setSelectedPersonaId(null);
@@ -372,6 +458,23 @@ export default function PersonaChatPage() {
                     />
                     Strict mode
                   </label>
+                  <button
+                    onClick={() => handleDownloadChat('txt')}
+                    disabled={messages.length === 0}
+                    title="Download transcript"
+                    className="inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download
+                  </button>
+                  <button
+                    onClick={() => handleDownloadChat('json')}
+                    disabled={messages.length === 0}
+                    title="Download JSON"
+                    className="inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    JSON
+                  </button>
                   <button
                     onClick={handleNewChat}
                     disabled={initializing}
