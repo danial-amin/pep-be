@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play } from 'lucide-react';
+import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Bot } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
@@ -10,6 +10,7 @@ import NewProjectPage from './pages/NewProjectPage';
 import ProjectWorkflowPage from './pages/ProjectWorkflowPage';
 import SimulationPage from './pages/SimulationPage';
 import SimulationPersonaChatsPage from './pages/SimulationPersonaChatsPage';
+import PersonaChatPage from './pages/PersonaChatPage';
 import LandingPage from './pages/LandingPage';
 
 function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
@@ -52,6 +53,7 @@ function App() {
                   <NavLink to="/documents" icon={FileText} label="Documents" />
                   <NavLink to="/personas" icon={Users} label="Personas" />
                   <NavLink to="/simulations" icon={Play} label="Simulation" />
+                  <NavLink to="/persona-chat" icon={Bot} label="Persona Chat" />
                   <NavLink to="/prompts" icon={MessageSquare} label="Q&A Prompts" />
                   <NavLink to="/reports" icon={BarChart3} label="Reports" />
                 </div>
@@ -75,6 +77,8 @@ function App() {
             <Route path="/simulations/:simulationId" element={<SimulationPage />} />
             <Route path="/simulations/:simulationId/persona-chats" element={<SimulationPersonaChatsPage />} />
             <Route path="/simulations/:simulationId/persona-chats/:personaId/:personaSlug" element={<SimulationPersonaChatsPage />} />
+            <Route path="/persona-chat" element={<PersonaChatPage />} />
+            <Route path="/persona-chat/:personaId" element={<PersonaChatPage />} />
             <Route path="/prompts" element={<PromptsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
           </Routes>

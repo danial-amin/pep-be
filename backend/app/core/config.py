@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # Persona simulation: max output tokens per persona message (API max_tokens).
     # Clamped in PersonaSimulationService to 100–150 per turn. Override via env in that band.
     SIMULATION_MAX_OUTPUT_TOKENS: int = 128
+
+    # Controlled 1:1 persona chat
+    PERSONA_CHAT_REFUSAL_THRESHOLD: float = 0.72  # Min RAG score to answer factual questions
+    PERSONA_CHAT_TEMPERATURE: float = 0.25
+    PERSONA_CHAT_MAX_OUTPUT_TOKENS: int = 300
     
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod

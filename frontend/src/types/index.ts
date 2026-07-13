@@ -390,3 +390,41 @@ export interface SimulationSummary {
   total_tokens: number;
   duration_seconds?: number;
 }
+
+// Persona Chat — controlled 1:1 persona conversations
+export interface PersonaChatSourceUsed {
+  chunk_id?: string | null;
+  score: number;
+  preview: string;
+}
+
+export interface PersonaChatMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  refused?: boolean;
+  retrieval_score?: number | null;
+  sources_used?: PersonaChatSourceUsed[];
+  refusal_reason?: string | null;
+  created_at: string;
+}
+
+export interface PersonaChatSession {
+  id: number;
+  persona_id: number;
+  persona_name: string;
+  persona_image_url?: string | null;
+  project_id?: number | null;
+  messages: PersonaChatMessage[];
+  created_at: string;
+}
+
+export interface PersonaChatReply {
+  reply: string;
+  refused: boolean;
+  retrieval_score?: number | null;
+  sources_used: PersonaChatSourceUsed[];
+  refusal_reason?: string | null;
+  message_id: number;
+  session_id: number;
+}

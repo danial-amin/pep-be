@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, FileJson } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, FileJson, Bot } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
@@ -385,6 +385,14 @@ export default function PersonaDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-stretch justify-start gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => navigate(`/persona-chat/${currentPersona.id}`)}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-900 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-stone-800 sm:flex-initial sm:px-4"
+            >
+              <Bot className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">Chat with persona</span>
+            </button>
             <button
               type="button"
               onClick={handleDownloadProfileImage}

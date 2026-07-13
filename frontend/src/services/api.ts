@@ -347,5 +347,33 @@ export const projectsApi = {
   },
 };
 
+// Persona Chat API — controlled 1:1 persona conversations
+export const personaChatApi = {
+  createSession: async (personaId: number, projectId?: number) => {
+    const response = await api.post('/persona-chats/', {
+      persona_id: personaId,
+      project_id: projectId,
+    });
+    return response.data;
+  },
+
+  getSession: async (sessionId: number) => {
+    const response = await api.get(`/persona-chats/${sessionId}`);
+    return response.data;
+  },
+
+  sendMessage: async (sessionId: number, message: string, strictMode = true) => {
+    const response = await api.post(`/persona-chats/${sessionId}/messages`, {
+      message,
+      strict_mode: strictMode,
+    });
+    return response.data;
+  },
+
+  deleteSession: async (sessionId: number) => {
+    await api.delete(`/persona-chats/${sessionId}`);
+  },
+};
+
 export default api;
 
