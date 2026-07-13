@@ -98,6 +98,7 @@ export interface PersonaSet {
   }>;
   generation_cycle?: number;
   status?: string;
+  project_id?: number;
   created_at: string;
   updated_at?: string;
 }

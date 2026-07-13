@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
-import { Bot, Send, Loader2, Shield, AlertCircle, RefreshCw } from 'lucide-react';
-import { personaChatApi, personasApi } from '../services/api';
-import { PersonaSet, PersonaChatMessage, PersonaChatSession } from '../types';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { Bot, Send, Loader2, Shield, AlertCircle, RefreshCw, FolderOpen } from 'lucide-react';
+import { personaChatApi, personasApi, projectsApi } from '../services/api';
+import { PersonaSet, PersonaChatMessage, PersonaChatSession, Project } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
+
+const PROJECT_STORAGE_KEY = 'persona-chat-project-id';
 
 function PersonaAvatar({
   name,
@@ -77,10 +79,13 @@ function ChatBubble({ message, personaName, personaImageUrl, personaId }: {
                     : 'Out of scope'}
               </span>
             )}
-            {message.retrieval_score != null && !refused && (
+            {message.retrieval_score != null && !refused && message.sources_used && message.sources_used.length > 0 && (
               <span className="text-xs text-stone-400">
                 relevance {(message.retrieval_score * 100).toFixed(0)}%
               </span>
+            )}
+            {!refused && (!message.sources_used || message.sources_used.length === 0) && (
+              <span className="text-xs text-stone-400">from profile</span>
             )}
           </div>
           <p className={`text-sm leading-relaxed ${refused ? 'text-amber-800 italic' : 'text-stone-800'}`}>
@@ -99,7 +104,13 @@ function ChatBubble({ message, personaName, personaImageUrl, personaId }: {
 
 export default function PersonaChatPage() {
   const { personaId: personaIdParam } = useParams<{ personaId?: string }>();
+  const [searchParams] = useSearchParams();
+  const projectFromUrl = searchParams.get('project');
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [personaSets, setPersonaSets] = useState<PersonaSet[]>([]);
+  const [loadingPersonas, setLoadingPersonas] = useState(false);
   const [selectedPersonaId, setSelectedPersonaId] = useState<number | null>(
     personaIdParam ? parseInt(personaIdParam, 10) : null
   );
@@ -108,29 +119,64 @@ export default function PersonaChatPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(false);
-  const [strictMode, setStrictMode] = useState(true);
+  const [strictMode, setStrictMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    personasApi.getAllSets().then(setPersonaSets).catch(() => setError('Failed to load personas'));
-  }, []);
+    projectsApi.getAll()
+      .then((data) => {
+        setProjects(data);
+        const urlProject = projectFromUrl ? parseInt(projectFromUrl, 10) : null;
+        const stored = localStorage.getItem(PROJECT_STORAGE_KEY);
+        const storedProject = stored ? parseInt(stored, 10) : null;
+        const initial =
+          (urlProject && data.some((p: Project) => p.id === urlProject) ? urlProject : null) ||
+          (storedProject && data.some((p: Project) => p.id === storedProject) ? storedProject : null) ||
+          (data.length > 0 ? data[0].id : null);
+        setSelectedProjectId(initial);
+      })
+      .catch(() => setError('Failed to load projects'));
+  }, [projectFromUrl]);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setPersonaSets([]);
+      return;
+    }
+    localStorage.setItem(PROJECT_STORAGE_KEY, String(selectedProjectId));
+    setLoadingPersonas(true);
+    personasApi.getAllSets(selectedProjectId)
+      .then((sets) => {
+        setPersonaSets(sets);
+        const allIds = sets.flatMap((s: PersonaSet) => s.personas.map((p) => p.id));
+        if (selectedPersonaId && !allIds.includes(selectedPersonaId)) {
+          setSelectedPersonaId(null);
+          setSession(null);
+          setMessages([]);
+        }
+      })
+      .catch(() => setError('Failed to load personas for this project'))
+      .finally(() => setLoadingPersonas(false));
+  }, [selectedProjectId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const selectedPersona = personaSets
-    .flatMap((s) => s.personas.map((p) => ({ ...p, setName: s.name })))
-    .find((p) => p.id === selectedPersonaId);
+  const projectPersonas = personaSets.flatMap((s) =>
+    s.personas.map((p) => ({ ...p, setName: s.name }))
+  );
 
-  const startSession = async (personaId: number) => {
+  const selectedPersona = projectPersonas.find((p) => p.id === selectedPersonaId);
+
+  const startSession = async (personaId: number, projectId: number) => {
     setInitializing(true);
     setError(null);
     setMessages([]);
     setSession(null);
     try {
-      const newSession = await personaChatApi.createSession(personaId);
+      const newSession = await personaChatApi.createSession(personaId, projectId);
       setSession(newSession);
       setMessages(newSession.messages || []);
     } catch (err: any) {
@@ -141,10 +187,10 @@ export default function PersonaChatPage() {
   };
 
   useEffect(() => {
-    if (selectedPersonaId) {
-      startSession(selectedPersonaId);
+    if (selectedPersonaId && selectedProjectId) {
+      startSession(selectedPersonaId, selectedProjectId);
     }
-  }, [selectedPersonaId]);
+  }, [selectedPersonaId, selectedProjectId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,7 +224,9 @@ export default function PersonaChatPage() {
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Failed to send message');
+      const detail = err.response?.data?.detail || err.message || 'Failed to send message';
+      const timedOut = err.code === 'ECONNABORTED';
+      setError(timedOut ? 'Request timed out — try again or pick a shorter question.' : detail);
       setMessages((prev) => prev.filter((m) => m.id !== optimisticUser.id));
       setInput(userText);
     } finally {
@@ -187,7 +235,17 @@ export default function PersonaChatPage() {
   };
 
   const handleNewChat = () => {
-    if (selectedPersonaId) startSession(selectedPersonaId);
+    if (selectedPersonaId && selectedProjectId) {
+      startSession(selectedPersonaId, selectedProjectId);
+    }
+  };
+
+  const handleProjectChange = (projectId: number) => {
+    setSelectedProjectId(projectId);
+    setSelectedPersonaId(null);
+    setSession(null);
+    setMessages([]);
+    setError(null);
   };
 
   return (
@@ -210,7 +268,7 @@ export default function PersonaChatPage() {
             Strict knowledge control
           </span>
           <span className="text-xs text-stone-400">
-            Out-of-scope questions receive: &ldquo;I don&apos;t know.&rdquo;
+            Out-of-scope questions receive: &ldquo;I don&apos;t know.&rdquo; — toggle Strict mode for tighter control
           </span>
         </div>
       </div>
@@ -218,36 +276,65 @@ export default function PersonaChatPage() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6" style={{ minHeight: 'calc(100vh - 220px)' }}>
         {/* Persona picker */}
         <div className="lg:col-span-1 glass-card rounded-2xl overflow-hidden flex flex-col">
-          <div className="px-4 py-3 border-b border-stone-200">
-            <h3 className="text-sm font-semibold text-stone-900">Select Persona</h3>
+          <div className="px-4 py-3 border-b border-stone-200 space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-stone-500 mb-1.5">Project</label>
+              <div className="relative">
+                <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 pointer-events-none" />
+                <select
+                  value={selectedProjectId ?? ''}
+                  onChange={(e) => handleProjectChange(parseInt(e.target.value, 10))}
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900/20"
+                >
+                  {projects.length === 0 && <option value="">No projects</option>}
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <h3 className="text-sm font-semibold text-stone-900">
+              Personas
+              {projectPersonas.length > 0 && (
+                <span className="ml-1.5 text-stone-400 font-normal">({projectPersonas.length})</span>
+              )}
+            </h3>
           </div>
           <div className="flex-1 overflow-y-auto p-2 max-h-[60vh] lg:max-h-none">
-            {personaSets.map((set) => (
-              <div key={set.id} className="mb-3">
-                <p className="text-xs font-medium text-stone-400 uppercase tracking-wide px-2 mb-1">
-                  {set.name}
-                </p>
-                {set.personas.map((persona) => (
-                  <button
-                    key={persona.id}
-                    onClick={() => setSelectedPersonaId(persona.id)}
-                    className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-xl text-left transition-colors ${
-                      selectedPersonaId === persona.id
-                        ? 'bg-stone-100 text-stone-900'
-                        : 'text-stone-600 hover:bg-stone-50'
-                    }`}
-                  >
-                    <PersonaAvatar
-                      name={persona.name}
-                      imageUrl={persona.image_url}
-                      personaId={persona.id}
-                      size="sm"
-                    />
-                    <span className="text-sm font-medium truncate">{persona.name}</span>
-                  </button>
-                ))}
+            {loadingPersonas ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-stone-400" />
               </div>
-            ))}
+            ) : !selectedProjectId ? (
+              <p className="text-sm text-stone-400 text-center py-8 px-2">Select a project first</p>
+            ) : projectPersonas.length === 0 ? (
+              <p className="text-sm text-stone-400 text-center py-8 px-2">
+                No personas in this project yet. Generate or attach a persona set first.
+              </p>
+            ) : (
+              projectPersonas.map((persona) => (
+                <button
+                  key={persona.id}
+                  onClick={() => setSelectedPersonaId(persona.id)}
+                  className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-xl text-left transition-colors mb-1 ${
+                    selectedPersonaId === persona.id
+                      ? 'bg-stone-100 text-stone-900'
+                      : 'text-stone-600 hover:bg-stone-50'
+                  }`}
+                >
+                  <PersonaAvatar
+                    name={persona.name}
+                    imageUrl={persona.image_url}
+                    personaId={persona.id}
+                    size="sm"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium truncate block">{persona.name}</span>
+                    <span className="text-xs text-stone-400 truncate block">{persona.setName}</span>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
@@ -257,7 +344,7 @@ export default function PersonaChatPage() {
             <div className="flex-1 flex items-center justify-center text-stone-400">
               <div className="text-center">
                 <Bot className="mx-auto h-12 w-12 mb-3 opacity-40" />
-                <p>Select a persona to start chatting</p>
+                <p>Select a project, then pick a persona to start chatting</p>
               </div>
             </div>
           ) : (

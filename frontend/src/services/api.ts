@@ -106,8 +106,10 @@ export const personasApi = {
     return response.data;
   },
 
-  getAllSets: async () => {
-    const response = await api.get('/personas/sets');
+  getAllSets: async (projectId?: number) => {
+    const params: Record<string, number> = {};
+    if (projectId !== undefined) params.project_id = projectId;
+    const response = await api.get('/personas/sets', { params });
     return response.data;
   },
 
@@ -362,11 +364,12 @@ export const personaChatApi = {
     return response.data;
   },
 
-  sendMessage: async (sessionId: number, message: string, strictMode = true) => {
-    const response = await api.post(`/persona-chats/${sessionId}/messages`, {
-      message,
-      strict_mode: strictMode,
-    });
+  sendMessage: async (sessionId: number, message: string, strictMode = false) => {
+    const response = await api.post(
+      `/persona-chats/${sessionId}/messages`,
+      { message, strict_mode: strictMode },
+      { timeout: 90000 },
+    );
     return response.data;
   },
 

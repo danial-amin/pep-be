@@ -13,7 +13,7 @@ class PersonaChatCreateRequest(BaseModel):
 
 class PersonaChatMessageRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
-    strict_mode: bool = True
+    strict_mode: bool = False
 
 
 class PersonaChatSourceUsed(BaseModel):

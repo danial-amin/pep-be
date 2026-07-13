@@ -387,7 +387,10 @@ export default function PersonaDetailPage() {
           <div className="flex flex-wrap items-stretch justify-start gap-2 sm:justify-end">
             <button
               type="button"
-              onClick={() => navigate(`/persona-chat/${currentPersona.id}`)}
+              onClick={() => {
+                const projectQuery = personaSet.project_id ? `?project=${personaSet.project_id}` : '';
+                navigate(`/persona-chat/${currentPersona.id}${projectQuery}`);
+              }}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-900 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-stone-800 sm:flex-initial sm:px-4"
             >
               <Bot className="h-4 w-4 flex-shrink-0" />

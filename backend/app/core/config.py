@@ -49,9 +49,9 @@ class Settings(BaseSettings):
     SIMULATION_MAX_OUTPUT_TOKENS: int = 128
 
     # Controlled 1:1 persona chat
-    PERSONA_CHAT_REFUSAL_THRESHOLD: float = 0.72  # Min RAG score to answer factual questions
-    PERSONA_CHAT_TEMPERATURE: float = 0.25
-    PERSONA_CHAT_MAX_OUTPUT_TOKENS: int = 300
+    PERSONA_CHAT_REFUSAL_THRESHOLD: float = 0.55  # Min RAG score to hard-refuse factual questions (strict mode)
+    PERSONA_CHAT_TEMPERATURE: float = 0.35
+    PERSONA_CHAT_MAX_OUTPUT_TOKENS: int = 400
     
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod
