@@ -4,6 +4,7 @@ import { Bot, Send, Loader2, Shield, AlertCircle, RefreshCw, FolderOpen, Downloa
 import { personaChatApi, personasApi, projectsApi } from '../services/api';
 import { PersonaSet, PersonaChatMessage, PersonaChatSession, Project } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
+import PersonaProfileCard from '../components/PersonaProfileCard';
 
 const PROJECT_STORAGE_KEY = 'persona-chat-project-id';
 
@@ -359,9 +360,12 @@ export default function PersonaChatPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6" style={{ minHeight: 'calc(100vh - 220px)' }}>
+      <div
+        className="grid grid-cols-1 xl:grid-cols-12 gap-6"
+        style={{ minHeight: 'calc(100vh - 220px)' }}
+      >
         {/* Persona picker */}
-        <div className="lg:col-span-1 glass-card rounded-2xl overflow-hidden flex flex-col">
+        <div className="xl:col-span-2 glass-card rounded-2xl overflow-hidden flex flex-col max-h-[70vh] xl:max-h-none">
           <div className="px-4 py-3 border-b border-stone-200 space-y-3">
             <div>
               <label className="block text-xs font-medium text-stone-500 mb-1.5">Project</label>
@@ -386,7 +390,7 @@ export default function PersonaChatPage() {
               )}
             </h3>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 max-h-[60vh] lg:max-h-none">
+          <div className="flex-1 overflow-y-auto p-2">
             {loadingPersonas ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-stone-400" />
@@ -425,7 +429,9 @@ export default function PersonaChatPage() {
         </div>
 
         {/* Chat area */}
-        <div className="lg:col-span-3 glass-card rounded-2xl overflow-hidden flex flex-col">
+        <div className={`glass-card rounded-2xl overflow-hidden flex flex-col min-h-[520px] max-h-[75vh] ${
+          selectedPersona ? 'xl:col-span-5' : 'xl:col-span-10'
+        }`}>
           {!selectedPersona ? (
             <div className="flex-1 flex items-center justify-center text-stone-400">
               <div className="text-center">
@@ -436,19 +442,19 @@ export default function PersonaChatPage() {
           ) : (
             <>
               {/* Chat header */}
-              <div className="px-5 py-3 border-b border-stone-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="px-5 py-3 border-b border-stone-200 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
                   <PersonaAvatar
                     name={selectedPersona.name}
                     imageUrl={selectedPersona.image_url}
                     personaId={selectedPersona.id}
                   />
-                  <div>
-                    <p className="font-semibold text-stone-900">{selectedPersona.name}</p>
-                    <p className="text-xs text-stone-400">{selectedPersona.setName}</p>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-stone-900 truncate">{selectedPersona.name}</p>
+                    <p className="text-xs text-stone-400 truncate">{selectedPersona.setName}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <label className="flex items-center gap-2 text-xs text-stone-600 cursor-pointer">
                     <input
                       type="checkbox"
@@ -487,7 +493,7 @@ export default function PersonaChatPage() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto px-5 py-4 min-h-[300px]">
+              <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0">
                 {initializing ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
@@ -549,6 +555,18 @@ export default function PersonaChatPage() {
             </>
           )}
         </div>
+
+        {/* Full persona profile — same card as detail page */}
+        {selectedPersona && (
+          <div className="xl:col-span-5 flex flex-col min-h-[520px] max-h-[75vh]">
+            <div className="px-1 pb-2">
+              <h3 className="text-sm font-semibold text-stone-900">Persona profile</h3>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <PersonaProfileCard persona={selectedPersona} compact />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
