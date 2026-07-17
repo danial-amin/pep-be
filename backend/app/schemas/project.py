@@ -32,6 +32,7 @@ class ProjectResponse(BaseModel):
     core_objective: Optional[str] = None
     includes_context: bool
     includes_interviews: bool
+    user_id: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     

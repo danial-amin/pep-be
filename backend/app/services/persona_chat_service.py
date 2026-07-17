@@ -1,11 +1,15 @@
 """
-Controlled 1:1 persona chat service.
+Controlled persona chat service.
 
-The persona may ONLY answer from:
+Supports:
+  - single mode: 1:1 with one persona
+  - set mode: chat with an entire persona set
+      * no @mention → all personas reply
+      * @Name → only that persona replies
+
+Knowledge boundaries:
   1. Verified persona profile (personality + structured knowledge)
-  2. Project-scoped RAG evidence chunks
-
-Out-of-scope questions receive a fixed refusal: "I don't know."
+  2. Study knowledge + project-scoped RAG evidence
 """
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +22,7 @@ import asyncio
 
 from app.core.config import settings
 from app.core.vector_db import vector_db
-from app.models.persona import Persona
+from app.models.persona import Persona, PersonaSet
 from app.models.persona_chat import PersonaChatSession, PersonaChatMessage
 from app.models.project import Project
 from app.utils.rag_filter import get_project_document_filter
@@ -515,39 +519,112 @@ When answering:
     async def _resolve_project_id(
         self,
         db: AsyncSession,
-        persona: Persona,
+        persona: Optional[Persona],
         project_id: Optional[int],
+        persona_set: Optional[PersonaSet] = None,
     ) -> Optional[int]:
         if project_id is not None:
             return project_id
-        if persona.persona_set and persona.persona_set.project_id is not None:
+        if persona and persona.persona_set and persona.persona_set.project_id is not None:
             return persona.persona_set.project_id
+        if persona_set and persona_set.project_id is not None:
+            return persona_set.project_id
         return None
+
+    @staticmethod
+    def _parse_mentions(message: str, personas: List[Persona]) -> Tuple[List[Persona], str]:
+        """
+        Detect @mentions against persona names.
+        Returns (matched personas, message with mentions stripped for clarity).
+        Longest name match wins to handle overlapping names.
+        """
+        if not personas:
+            return [], message
+
+        # Sort by name length descending so "Dr. Bashir" beats "Bashir"
+        sorted_personas = sorted(
+            personas,
+            key=lambda p: len((p.persona_data or {}).get("name") or p.name or ""),
+            reverse=True,
+        )
+        matched: List[Persona] = []
+        remaining = message
+        for persona in sorted_personas:
+            display = (persona.persona_data or {}).get("name") or persona.name
+            if not display:
+                continue
+            # Match @Name or @"Name with spaces"
+            pattern = re.compile(
+                r"@" + re.escape(display) + r"\b",
+                re.IGNORECASE,
+            )
+            if pattern.search(remaining):
+                matched.append(persona)
+                remaining = pattern.sub("", remaining)
+
+        cleaned = re.sub(r"\s{2,}", " ", remaining).strip()
+        # Prefer original message if stripping emptied it
+        return matched, (cleaned or message.strip())
 
     async def create_session(
         self,
         db: AsyncSession,
-        persona_id: int,
+        persona_id: Optional[int] = None,
+        persona_set_id: Optional[int] = None,
         project_id: Optional[int] = None,
+        user_id: Optional[int] = None,
     ) -> PersonaChatSession:
-        result = await db.execute(
-            select(Persona)
-            .options(selectinload(Persona.persona_set))
-            .where(Persona.id == persona_id)
-        )
-        persona = result.scalar_one_or_none()
-        if not persona:
-            raise ValueError(f"Persona {persona_id} not found")
+        if persona_id is not None:
+            result = await db.execute(
+                select(Persona)
+                .options(selectinload(Persona.persona_set))
+                .where(Persona.id == persona_id)
+            )
+            persona = result.scalar_one_or_none()
+            if not persona:
+                raise ValueError(f"Persona {persona_id} not found")
 
-        resolved_project_id = await self._resolve_project_id(db, persona, project_id)
-        chat_session = PersonaChatSession(
-            persona_id=persona.id,
-            project_id=resolved_project_id,
-            persona_name=persona.name,
-        )
-        db.add(chat_session)
-        await db.flush()
-        return chat_session
+            resolved_project_id = await self._resolve_project_id(db, persona, project_id)
+            chat_session = PersonaChatSession(
+                persona_id=persona.id,
+                persona_set_id=None,
+                project_id=resolved_project_id,
+                user_id=user_id,
+                persona_name=persona.name,
+                mode="single",
+            )
+            db.add(chat_session)
+            await db.flush()
+            return chat_session
+
+        if persona_set_id is not None:
+            result = await db.execute(
+                select(PersonaSet)
+                .options(selectinload(PersonaSet.personas).selectinload(Persona.persona_set))
+                .where(PersonaSet.id == persona_set_id)
+            )
+            persona_set = result.scalar_one_or_none()
+            if not persona_set:
+                raise ValueError(f"Persona set {persona_set_id} not found")
+            if not persona_set.personas:
+                raise ValueError(f"Persona set {persona_set_id} has no personas")
+
+            resolved_project_id = await self._resolve_project_id(
+                db, None, project_id, persona_set=persona_set
+            )
+            chat_session = PersonaChatSession(
+                persona_id=None,
+                persona_set_id=persona_set.id,
+                project_id=resolved_project_id,
+                user_id=user_id,
+                persona_name=persona_set.name,
+                mode="set",
+            )
+            db.add(chat_session)
+            await db.flush()
+            return chat_session
+
+        raise ValueError("Provide persona_id or persona_set_id")
 
     async def get_session(
         self,
@@ -557,97 +634,84 @@ When answering:
         result = await db.execute(
             select(PersonaChatSession)
             .options(
-                selectinload(PersonaChatSession.messages),
+                selectinload(PersonaChatSession.messages).selectinload(PersonaChatMessage.persona),
                 selectinload(PersonaChatSession.persona).selectinload(Persona.persona_set),
+                selectinload(PersonaChatSession.persona_set).selectinload(PersonaSet.personas).selectinload(Persona.persona_set),
             )
             .where(PersonaChatSession.id == session_id)
         )
         return result.scalar_one_or_none()
 
-    async def send_message(
+    def _build_history_for_persona(
+        self,
+        messages: List[PersonaChatMessage],
+        exclude_id: Optional[int],
+        speaking_persona_id: Optional[int],
+        is_set_mode: bool,
+    ) -> List[Dict[str, str]]:
+        history: List[Dict[str, str]] = []
+        for msg in messages:
+            if exclude_id is not None and msg.id == exclude_id:
+                continue
+            if msg.role == "user":
+                history.append({"role": "user", "content": msg.content})
+            elif msg.role == "assistant":
+                if is_set_mode:
+                    speaker = msg.persona_name or "Persona"
+                    # Only include this persona's own prior replies as assistant turns;
+                    # other personas' lines become user-context so the model stays in character.
+                    if speaking_persona_id and msg.persona_id == speaking_persona_id:
+                        history.append({"role": "assistant", "content": msg.content})
+                    else:
+                        history.append({
+                            "role": "user",
+                            "content": f"[Other participant {speaker} said]: {msg.content}",
+                        })
+                else:
+                    history.append({"role": "assistant", "content": msg.content})
+        return history
+
+    async def _generate_reply_for_persona(
         self,
         db: AsyncSession,
-        session_id: int,
-        user_message: str,
-        strict_mode: bool = False,
+        persona: Persona,
+        cleaned_message: str,
+        chat_session: PersonaChatSession,
+        user_msg: PersonaChatMessage,
+        project_id: Optional[int],
+        strict_mode: bool,
+        shared_evidence: Optional[Tuple[str, float, List[Dict[str, Any]]]] = None,
+        shared_study_knowledge: Optional[str] = None,
+        is_set_mode: bool = False,
+        addressed_directly: bool = True,
     ) -> Dict[str, Any]:
-        chat_session = await self.get_session(db, session_id)
-        if not chat_session:
-            raise ValueError(f"Session {session_id} not found")
-
-        persona = chat_session.persona
-        if not persona:
-            result = await db.execute(
-                select(Persona)
-                .options(selectinload(Persona.persona_set))
-                .where(Persona.id == chat_session.persona_id)
-            )
-            persona = result.scalar_one_or_none()
-        if not persona:
-            raise ValueError("Persona not found for session")
-
-        project_id = chat_session.project_id
-        if project_id is None:
-            project_id = await self._resolve_project_id(db, persona, None)
-
-        cleaned_message = user_message.strip()
-
-        # Jailbreak gate — refuse immediately, no LLM call.
-        if strict_mode and self._is_jailbreak_attempt(cleaned_message):
-            user_msg = PersonaChatMessage(
-                session_id=chat_session.id,
-                role="user",
-                content=cleaned_message,
-            )
-            db.add(user_msg)
-            await db.flush()
-            assistant_msg = PersonaChatMessage(
-                session_id=chat_session.id,
-                role="assistant",
-                content=REFUSAL_PHRASE,
-                refused=True,
-                retrieval_score=None,
-                sources_used=[],
-                refusal_reason="jailbreak_attempt",
-            )
-            db.add(assistant_msg)
-            await db.flush()
-            return {
-                "reply": REFUSAL_PHRASE,
-                "refused": True,
-                "retrieval_score": None,
-                "sources_used": [],
-                "refusal_reason": "jailbreak_attempt",
-                "message_id": assistant_msg.id,
-                "session_id": chat_session.id,
-            }
-
-        user_msg = PersonaChatMessage(
-            session_id=chat_session.id,
-            role="user",
-            content=cleaned_message,
-        )
-        db.add(user_msg)
-        await db.flush()
-
+        """Generate one persona's reply and persist the assistant message."""
         profile_data = self._get_chat_profile_data(persona)
         profile_text = self._format_persona_profile(profile_data)
-        persona_name = persona.name
+        persona_name = (persona.persona_data or {}).get("name") or persona.name
         scope_text = await self._get_scope_context(db, persona, project_id)
-        study_knowledge_text = await study_knowledge_service.build_study_knowledge(
-            db, persona, project_id
-        )
+
+        if shared_study_knowledge is not None:
+            study_knowledge_text = shared_study_knowledge
+        else:
+            study_knowledge_text = await study_knowledge_service.build_study_knowledge(
+                db, persona, project_id
+            )
+
         conversation_text = self._recent_conversation_text(
             chat_session.messages, exclude_id=user_msg.id
         )
 
-        rag_query = (
-            f"{cleaned_message}\n{conversation_text}\n{persona_name}\n"
-            f"{scope_text}\n{study_knowledge_text[:800]}\n{profile_text[:500]}"
-        )
-        evidence_text, retrieval_score, sources = await self._retrieve_evidence(
-            db, rag_query, project_id
-        )
+        if shared_evidence is not None:
+            evidence_text, retrieval_score, sources = shared_evidence
+        else:
+            rag_query = (
+                f"{cleaned_message}\n{conversation_text}\n{persona_name}\n"
+                f"{scope_text}\n{study_knowledge_text[:800]}\n{profile_text[:500]}"
+            )
+            evidence_text, retrieval_score, sources = await self._retrieve_evidence(
+                db, rag_query, project_id
+            )
 
         refuse, refusal_reason = self._should_refuse_before_llm(
             cleaned_message,
@@ -663,6 +727,8 @@ When answering:
                 session_id=chat_session.id,
                 role="assistant",
                 content=REFUSAL_PHRASE,
+                persona_id=persona.id,
+                persona_name=persona_name,
                 refused=True,
                 retrieval_score=retrieval_score,
                 sources_used=[],
@@ -673,23 +739,37 @@ When answering:
             return {
                 "reply": REFUSAL_PHRASE,
                 "refused": True,
+                "persona_id": persona.id,
+                "persona_name": persona_name,
+                "persona_image_url": persona.image_url,
                 "retrieval_score": retrieval_score,
                 "sources_used": [],
                 "refusal_reason": refusal_reason,
                 "message_id": assistant_msg.id,
-                "session_id": chat_session.id,
             }
 
         system_prompt = self._build_strict_system_prompt(
             persona_name, profile_text, scope_text, study_knowledge_text, evidence_text
         )
+        if is_set_mode:
+            if addressed_directly:
+                system_prompt += (
+                    f"\n\nYou were specifically addressed in this message. "
+                    f"Reply as {persona_name} only — do not speak for others."
+                )
+            else:
+                system_prompt += (
+                    f"\n\nThis question was asked to the whole group. "
+                    f"Reply as {persona_name} with your own perspective. "
+                    f"Keep it concise (2–4 sentences). Do not speak for other participants."
+                )
 
-        history: List[Dict[str, str]] = []
-        for msg in chat_session.messages:
-            if msg.id == user_msg.id:
-                continue
-            if msg.role in ("user", "assistant"):
-                history.append({"role": msg.role, "content": msg.content})
+        history = self._build_history_for_persona(
+            chat_session.messages,
+            exclude_id=user_msg.id,
+            speaking_persona_id=persona.id,
+            is_set_mode=is_set_mode,
+        )
         history.append({"role": "user", "content": cleaned_message})
 
         try:
@@ -701,7 +781,7 @@ When answering:
             )
             raw_reply = (response.choices[0].message.content or "").strip()
         except Exception as e:
-            logger.error("Persona chat LLM call failed: %s", e, exc_info=True)
+            logger.error("Persona chat LLM call failed for %s: %s", persona_name, e, exc_info=True)
             raise
 
         reply = self._normalize_refusal(raw_reply)
@@ -718,6 +798,8 @@ When answering:
             session_id=chat_session.id,
             role="assistant",
             content=reply,
+            persona_id=persona.id,
+            persona_name=persona_name,
             refused=model_refused,
             retrieval_score=retrieval_score,
             sources_used=final_sources,
@@ -729,11 +811,221 @@ When answering:
         return {
             "reply": reply,
             "refused": model_refused,
+            "persona_id": persona.id,
+            "persona_name": persona_name,
+            "persona_image_url": persona.image_url,
             "retrieval_score": retrieval_score,
             "sources_used": final_sources,
             "refusal_reason": final_reason,
             "message_id": assistant_msg.id,
+        }
+
+    async def send_message(
+        self,
+        db: AsyncSession,
+        session_id: int,
+        user_message: str,
+        strict_mode: bool = False,
+    ) -> Dict[str, Any]:
+        chat_session = await self.get_session(db, session_id)
+        if not chat_session:
+            raise ValueError(f"Session {session_id} not found")
+
+        mode = getattr(chat_session, "mode", None) or (
+            "set" if chat_session.persona_set_id else "single"
+        )
+        cleaned_message = user_message.strip()
+
+        # Jailbreak gate — refuse immediately for all speakers
+        if strict_mode and self._is_jailbreak_attempt(cleaned_message):
+            user_msg = PersonaChatMessage(
+                session_id=chat_session.id,
+                role="user",
+                content=cleaned_message,
+            )
+            db.add(user_msg)
+            await db.flush()
+
+            if mode == "set" and chat_session.persona_set:
+                personas = list(chat_session.persona_set.personas or [])
+                replies = []
+                for persona in personas:
+                    name = (persona.persona_data or {}).get("name") or persona.name
+                    assistant_msg = PersonaChatMessage(
+                        session_id=chat_session.id,
+                        role="assistant",
+                        content=REFUSAL_PHRASE,
+                        persona_id=persona.id,
+                        persona_name=name,
+                        refused=True,
+                        refusal_reason="jailbreak_attempt",
+                    )
+                    db.add(assistant_msg)
+                    await db.flush()
+                    replies.append({
+                        "reply": REFUSAL_PHRASE,
+                        "refused": True,
+                        "persona_id": persona.id,
+                        "persona_name": name,
+                        "persona_image_url": persona.image_url,
+                        "retrieval_score": None,
+                        "sources_used": [],
+                        "refusal_reason": "jailbreak_attempt",
+                        "message_id": assistant_msg.id,
+                    })
+                return {
+                    "reply": replies[0]["reply"] if replies else REFUSAL_PHRASE,
+                    "refused": True,
+                    "refusal_reason": "jailbreak_attempt",
+                    "message_id": replies[0]["message_id"] if replies else None,
+                    "session_id": chat_session.id,
+                    "replies": replies,
+                    "sources_used": [],
+                }
+
+            assistant_msg = PersonaChatMessage(
+                session_id=chat_session.id,
+                role="assistant",
+                content=REFUSAL_PHRASE,
+                persona_id=chat_session.persona_id,
+                persona_name=chat_session.persona_name,
+                refused=True,
+                refusal_reason="jailbreak_attempt",
+            )
+            db.add(assistant_msg)
+            await db.flush()
+            return {
+                "reply": REFUSAL_PHRASE,
+                "refused": True,
+                "retrieval_score": None,
+                "sources_used": [],
+                "refusal_reason": "jailbreak_attempt",
+                "message_id": assistant_msg.id,
+                "session_id": chat_session.id,
+                "replies": [{
+                    "reply": REFUSAL_PHRASE,
+                    "refused": True,
+                    "persona_id": chat_session.persona_id,
+                    "persona_name": chat_session.persona_name,
+                    "persona_image_url": chat_session.persona.image_url if chat_session.persona else None,
+                    "retrieval_score": None,
+                    "sources_used": [],
+                    "refusal_reason": "jailbreak_attempt",
+                    "message_id": assistant_msg.id,
+                }],
+            }
+
+        user_msg = PersonaChatMessage(
+            session_id=chat_session.id,
+            role="user",
+            content=cleaned_message,
+        )
+        db.add(user_msg)
+        await db.flush()
+
+        # ── Set mode ──────────────────────────────────────────────────────────
+        if mode == "set":
+            persona_set = chat_session.persona_set
+            if not persona_set:
+                result = await db.execute(
+                    select(PersonaSet)
+                    .options(selectinload(PersonaSet.personas))
+                    .where(PersonaSet.id == chat_session.persona_set_id)
+                )
+                persona_set = result.scalar_one_or_none()
+            if not persona_set or not persona_set.personas:
+                raise ValueError("Persona set not found for session")
+
+            all_personas = list(persona_set.personas)
+            project_id = chat_session.project_id
+            if project_id is None:
+                project_id = await self._resolve_project_id(
+                    db, all_personas[0], None, persona_set=persona_set
+                )
+
+            mentioned, question_text = self._parse_mentions(cleaned_message, all_personas)
+            speakers = mentioned if mentioned else all_personas
+            addressed_directly = bool(mentioned)
+
+            # Shared retrieval + study knowledge (one of the speakers as anchor)
+            anchor = speakers[0]
+            study_knowledge_text = await study_knowledge_service.build_study_knowledge(
+                db, anchor, project_id
+            )
+            conversation_text = self._recent_conversation_text(
+                chat_session.messages, exclude_id=user_msg.id
+            )
+            rag_query = (
+                f"{question_text}\n{conversation_text}\n"
+                f"{study_knowledge_text[:800]}"
+            )
+            shared_evidence = await self._retrieve_evidence(db, rag_query, project_id)
+
+            # Generate replies in parallel (cap concurrent LLM calls)
+            async def _one(persona: Persona) -> Dict[str, Any]:
+                return await self._generate_reply_for_persona(
+                    db=db,
+                    persona=persona,
+                    cleaned_message=question_text,
+                    chat_session=chat_session,
+                    user_msg=user_msg,
+                    project_id=project_id,
+                    strict_mode=strict_mode,
+                    shared_evidence=shared_evidence,
+                    shared_study_knowledge=study_knowledge_text,
+                    is_set_mode=True,
+                    addressed_directly=addressed_directly,
+                )
+
+            # Sequential is safer for shared session/db flush ordering; parallel LLM via gather
+            # with per-persona flush can race — keep sequential for DB consistency.
+            replies: List[Dict[str, Any]] = []
+            for persona in speakers:
+                replies.append(await _one(persona))
+
+            first = replies[0] if replies else {}
+            return {
+                "reply": first.get("reply"),
+                "refused": first.get("refused", False),
+                "retrieval_score": first.get("retrieval_score"),
+                "sources_used": first.get("sources_used", []),
+                "refusal_reason": first.get("refusal_reason"),
+                "message_id": first.get("message_id"),
+                "session_id": chat_session.id,
+                "replies": replies,
+            }
+
+        # ── Single mode ───────────────────────────────────────────────────────
+        persona = chat_session.persona
+        if not persona:
+            result = await db.execute(
+                select(Persona)
+                .options(selectinload(Persona.persona_set))
+                .where(Persona.id == chat_session.persona_id)
+            )
+            persona = result.scalar_one_or_none()
+        if not persona:
+            raise ValueError("Persona not found for session")
+
+        project_id = chat_session.project_id
+        if project_id is None:
+            project_id = await self._resolve_project_id(db, persona, None)
+
+        result = await self._generate_reply_for_persona(
+            db=db,
+            persona=persona,
+            cleaned_message=cleaned_message,
+            chat_session=chat_session,
+            user_msg=user_msg,
+            project_id=project_id,
+            strict_mode=strict_mode,
+            is_set_mode=False,
+            addressed_directly=True,
+        )
+        return {
+            **result,
             "session_id": chat_session.id,
+            "replies": [result],
         }
 
 

@@ -1,5 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Bot } from 'lucide-react';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Bot, LogOut, UserPlus } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
@@ -12,6 +12,11 @@ import SimulationPage from './pages/SimulationPage';
 import SimulationPersonaChatsPage from './pages/SimulationPersonaChatsPage';
 import PersonaChatPage from './pages/PersonaChatPage';
 import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import AcceptInvitePage from './pages/AcceptInvitePage';
+import InvitesPage from './pages/InvitesPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
   const location = useLocation();
@@ -31,16 +36,20 @@ function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementTyp
   );
 }
 
-function App() {
+function AppShell() {
+  const location = useLocation();
+  const { user, logout, isAuthenticated, loading } = useAuth();
+  const isAuthScreen =
+    location.pathname.startsWith('/login') || location.pathname.startsWith('/invite');
+
   return (
-    <Router>
-      <div className="min-h-screen bg-[#f8f7f4]">
-        {/* Navigation */}
+    <div className="min-h-screen bg-[#f8f7f4]">
+      {!isAuthScreen && (
         <nav className="glass-strong sticky top-0 z-50 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-14">
               <div className="flex items-center gap-6">
-                <Link to="/" className="flex-shrink-0 flex items-center gap-2.5 group">
+                <Link to={isAuthenticated ? '/projects' : '/'} className="flex-shrink-0 flex items-center gap-2.5 group">
                   <div className="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center group-hover:bg-stone-800 transition-colors">
                     <span className="text-white text-xs font-bold tracking-tight">P</span>
                   </div>
@@ -48,43 +57,84 @@ function App() {
                   <span className="text-stone-300 text-sm">|</span>
                   <span className="text-sm text-stone-400 font-normal group-hover:text-stone-500 transition-colors">Persona Generator</span>
                 </Link>
-                <div className="hidden sm:flex sm:items-center sm:gap-1">
-                  <NavLink to="/projects" icon={FolderOpen} label="Projects" />
-                  <NavLink to="/documents" icon={FileText} label="Documents" />
-                  <NavLink to="/personas" icon={Users} label="Personas" />
-                  <NavLink to="/simulations" icon={Play} label="Simulation" />
-                  <NavLink to="/persona-chat" icon={Bot} label="Persona Chat" />
-                  <NavLink to="/prompts" icon={MessageSquare} label="Q&A Prompts" />
-                  <NavLink to="/reports" icon={BarChart3} label="Reports" />
-                </div>
+                {isAuthenticated && (
+                  <div className="hidden sm:flex sm:items-center sm:gap-1">
+                    <NavLink to="/projects" icon={FolderOpen} label="Projects" />
+                    <NavLink to="/documents" icon={FileText} label="Documents" />
+                    <NavLink to="/personas" icon={Users} label="Personas" />
+                    <NavLink to="/simulations" icon={Play} label="Simulation" />
+                    <NavLink to="/persona-chat" icon={Bot} label="Persona Chat" />
+                    <NavLink to="/prompts" icon={MessageSquare} label="Q&A Prompts" />
+                    <NavLink to="/reports" icon={BarChart3} label="Reports" />
+                    {user?.is_admin && <NavLink to="/invites" icon={UserPlus} label="Invites" />}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {!loading && isAuthenticated && user && (
+                  <>
+                    <span className="hidden sm:inline text-xs text-stone-500 truncate max-w-[160px]" title={user.email}>
+                      {user.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={logout}
+                      className="inline-flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-900 px-2 py-1.5 rounded-lg hover:bg-stone-50"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Sign out
+                    </button>
+                  </>
+                )}
+                {!loading && !isAuthenticated && !isAuthScreen && (
+                  <Link
+                    to="/login"
+                    className="text-xs font-medium text-stone-600 hover:text-stone-900 px-3 py-1.5 rounded-lg hover:bg-stone-50"
+                  >
+                    Sign in
+                  </Link>
+                )}
               </div>
             </div>
           </div>
         </nav>
+      )}
 
-        {/* Main Content */}
-        <main className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/projects/new" element={<NewProjectPage />} />
-            <Route path="/projects/:projectId/workflow" element={<ProjectWorkflowPage />} />
-            <Route path="/documents" element={<DocumentsPage />} />
-            <Route path="/personas" element={<PersonasPage />} />
-            <Route path="/personas/:setId" element={<PersonaDetailPage />} />
-            <Route path="/personas/:setId/:personaId" element={<PersonaDetailPage />} />
-            <Route path="/simulations" element={<SimulationPage />} />
-            <Route path="/simulations/:simulationId" element={<SimulationPage />} />
-            <Route path="/simulations/:simulationId/persona-chats" element={<SimulationPersonaChatsPage />} />
-            <Route path="/simulations/:simulationId/persona-chats/:personaId/:personaSlug" element={<SimulationPersonaChatsPage />} />
-            <Route path="/persona-chat" element={<PersonaChatPage />} />
-            <Route path="/persona-chat/:personaId" element={<PersonaChatPage />} />
-            <Route path="/prompts" element={<PromptsPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-          </Routes>
-        </main>
-      </div>
-    </Router>
+      <main className={`mx-auto py-8 sm:px-6 lg:px-8 ${isAuthScreen ? 'max-w-7xl' : 'max-w-7xl'}`}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/invite/:token" element={<AcceptInvitePage />} />
+          <Route path="/" element={isAuthenticated ? <Navigate to="/projects" replace /> : <LandingPage />} />
+
+          <Route path="/projects" element={<ProtectedRoute><ProjectsPage /></ProtectedRoute>} />
+          <Route path="/projects/new" element={<ProtectedRoute><NewProjectPage /></ProtectedRoute>} />
+          <Route path="/projects/:projectId/workflow" element={<ProtectedRoute><ProjectWorkflowPage /></ProtectedRoute>} />
+          <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
+          <Route path="/personas" element={<ProtectedRoute><PersonasPage /></ProtectedRoute>} />
+          <Route path="/personas/:setId" element={<ProtectedRoute><PersonaDetailPage /></ProtectedRoute>} />
+          <Route path="/personas/:setId/:personaId" element={<ProtectedRoute><PersonaDetailPage /></ProtectedRoute>} />
+          <Route path="/simulations" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />
+          <Route path="/simulations/:simulationId" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />
+          <Route path="/simulations/:simulationId/persona-chats" element={<ProtectedRoute><SimulationPersonaChatsPage /></ProtectedRoute>} />
+          <Route path="/simulations/:simulationId/persona-chats/:personaId/:personaSlug" element={<ProtectedRoute><SimulationPersonaChatsPage /></ProtectedRoute>} />
+          <Route path="/persona-chat" element={<ProtectedRoute><PersonaChatPage /></ProtectedRoute>} />
+          <Route path="/persona-chat/:personaId" element={<ProtectedRoute><PersonaChatPage /></ProtectedRoute>} />
+          <Route path="/prompts" element={<ProtectedRoute><PromptsPage /></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+          <Route path="/invites" element={<ProtectedRoute><InvitesPage /></ProtectedRoute>} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <AppShell />
+      </Router>
+    </AuthProvider>
   );
 }
 

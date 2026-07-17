@@ -271,8 +271,106 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            # Persona chat set-mode columns (additive)
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='persona_chat_sessions') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='persona_chat_sessions' AND column_name='persona_set_id') THEN
+                            ALTER TABLE persona_chat_sessions ADD COLUMN persona_set_id INTEGER;
+                            CREATE INDEX IF NOT EXISTS ix_persona_chat_sessions_persona_set_id
+                                ON persona_chat_sessions(persona_set_id);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='persona_chat_sessions' AND column_name='mode') THEN
+                            ALTER TABLE persona_chat_sessions ADD COLUMN mode VARCHAR(32) NOT NULL DEFAULT 'single';
+                        END IF;
+                        -- Allow null persona_id for set sessions
+                        IF EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='persona_chat_sessions' AND column_name='persona_id'
+                                   AND is_nullable = 'NO') THEN
+                            ALTER TABLE persona_chat_sessions ALTER COLUMN persona_id DROP NOT NULL;
+                        END IF;
+                    END IF;
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='persona_chat_messages') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='persona_chat_messages' AND column_name='persona_id') THEN
+                            ALTER TABLE persona_chat_messages ADD COLUMN persona_id INTEGER;
+                            CREATE INDEX IF NOT EXISTS ix_persona_chat_messages_persona_id
+                                ON persona_chat_messages(persona_id);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='persona_chat_messages' AND column_name='persona_name') THEN
+                            ALTER TABLE persona_chat_messages ADD COLUMN persona_name VARCHAR(255);
+                        END IF;
+                    END IF;
+                END $$;
+            """))
+            # Auth: users, invites, ownership columns
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='users') THEN
+                        CREATE TABLE users (
+                            id SERIAL PRIMARY KEY,
+                            email VARCHAR(255) NOT NULL,
+                            name VARCHAR(255) NOT NULL,
+                            hashed_password VARCHAR(255) NOT NULL,
+                            is_admin BOOLEAN NOT NULL DEFAULT false,
+                            is_active BOOLEAN NOT NULL DEFAULT true,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                            updated_at TIMESTAMP WITH TIME ZONE
+                        );
+                        CREATE UNIQUE INDEX ix_users_email ON users(email);
+                        CREATE INDEX ix_users_id ON users(id);
+                    END IF;
+
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='invites') THEN
+                        CREATE TABLE invites (
+                            id SERIAL PRIMARY KEY,
+                            email VARCHAR(255) NOT NULL,
+                            token VARCHAR(64) NOT NULL,
+                            invited_by_id INTEGER NOT NULL REFERENCES users(id),
+                            accepted_at TIMESTAMP WITH TIME ZONE,
+                            expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                            note TEXT
+                        );
+                        CREATE INDEX ix_invites_email ON invites(email);
+                        CREATE UNIQUE INDEX ix_invites_token ON invites(token);
+                        CREATE INDEX ix_invites_id ON invites(id);
+                    END IF;
+
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='projects') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='projects' AND column_name='user_id') THEN
+                            ALTER TABLE projects ADD COLUMN user_id INTEGER REFERENCES users(id);
+                            CREATE INDEX IF NOT EXISTS ix_projects_user_id ON projects(user_id);
+                        END IF;
+                    END IF;
+
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='persona_chat_sessions') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='persona_chat_sessions' AND column_name='user_id') THEN
+                            ALTER TABLE persona_chat_sessions ADD COLUMN user_id INTEGER REFERENCES users(id);
+                            CREATE INDEX IF NOT EXISTS ix_persona_chat_sessions_user_id
+                                ON persona_chat_sessions(user_id);
+                        END IF;
+                    END IF;
+                END $$;
+            """))
         except Exception as e:
             logger.warning(f"Could not add columns automatically: {e}. Run migrations manually if needed.", exc_info=True)
+
+    # Bootstrap invite-only admin when users table is empty
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.services.auth_service import AuthService
+        async with AsyncSessionLocal() as session:
+            await AuthService.bootstrap_admin_if_needed(session)
+    except Exception as e:
+        logger.warning(f"Could not bootstrap admin user: {e}", exc_info=True)
     
     # Create default documents
     try:

@@ -23,7 +23,8 @@ class ProjectService:
         field_of_study: Optional[str] = None,
         core_objective: Optional[str] = None,
         includes_context: bool = True,
-        includes_interviews: bool = True
+        includes_interviews: bool = True,
+        user_id: Optional[int] = None,
     ) -> Project:
         """Create a new project."""
         project = Project(
@@ -31,7 +32,8 @@ class ProjectService:
             field_of_study=field_of_study,
             core_objective=core_objective,
             includes_context=includes_context,
-            includes_interviews=includes_interviews
+            includes_interviews=includes_interviews,
+            user_id=user_id,
         )
         session.add(project)
         await session.flush()
@@ -48,13 +50,26 @@ class ProjectService:
             select(Project).where(Project.id == project_id)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    def user_can_access(project: Project, user_id: int, is_admin: bool) -> bool:
+        if is_admin:
+            return True
+        return project.user_id is None or project.user_id == user_id
     
     @staticmethod
     async def get_all_projects(
-        session: AsyncSession
+        session: AsyncSession,
+        user_id: Optional[int] = None,
+        is_admin: bool = False,
     ) -> List[Project]:
-        """Get all projects."""
-        result = await session.execute(select(Project).order_by(Project.created_at.desc()))
+        """Get projects visible to the user (admins see all)."""
+        query = select(Project).order_by(Project.created_at.desc())
+        if user_id is not None and not is_admin:
+            query = query.where(
+                (Project.user_id == user_id) | (Project.user_id.is_(None))
+            )
+        result = await session.execute(query)
         return list(result.scalars().all())
     
     @staticmethod

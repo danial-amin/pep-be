@@ -13,12 +13,116 @@ export const getApiUrl = (): string => {
 const API_URL = getApiUrl();
 export const API_BASE_URL = API_URL;
 
+const AUTH_TOKEN_KEY = 'pep_access_token';
+
+export type AuthUser = {
+  id: number;
+  email: string;
+  name: string;
+  is_admin: boolean;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type InviteRecord = {
+  id: number;
+  email: string;
+  token: string;
+  invited_by_id: number;
+  accepted_at?: string | null;
+  expires_at: string;
+  created_at: string;
+  note?: string | null;
+  accept_path?: string;
+};
+
+export const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setAuthToken = (token: string) => {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+};
+
+export const clearAuthToken = () => {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+};
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+api.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      const url = String(error?.config?.url || '');
+      const isAuthPublic =
+        url.includes('/auth/login') ||
+        url.includes('/auth/accept-invite') ||
+        (url.includes('/auth/invites/') && url.includes('/preview'));
+      if (!isAuthPublic) {
+        clearAuthToken();
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/invite')) {
+          window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        }
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+
+export const authApi = {
+  login: async (email: string, password: string) => {
+    const response = await api.post('/auth/login', { email, password });
+    return response.data as { access_token: string; token_type: string; user: AuthUser };
+  },
+
+  me: async () => {
+    const response = await api.get('/auth/me');
+    return response.data as AuthUser;
+  },
+
+  previewInvite: async (token: string) => {
+    const response = await api.get(`/auth/invites/${token}/preview`);
+    return response.data as { email: string; expires_at: string; note?: string | null; valid: boolean };
+  },
+
+  acceptInvite: async (token: string, name: string, password: string) => {
+    const response = await api.post('/auth/accept-invite', { token, name, password });
+    return response.data as { access_token: string; token_type: string; user: AuthUser };
+  },
+
+  createInvite: async (email: string, note?: string, expiresInDays?: number) => {
+    const response = await api.post('/auth/invites', {
+      email,
+      note,
+      expires_in_days: expiresInDays,
+    });
+    return response.data as InviteRecord;
+  },
+
+  listInvites: async () => {
+    const response = await api.get('/auth/invites');
+    return response.data as InviteRecord[];
+  },
+};
 
 // Documents API
 export const documentsApi = {
@@ -349,11 +453,19 @@ export const projectsApi = {
   },
 };
 
-// Persona Chat API — controlled 1:1 persona conversations
+// Persona Chat API — single persona or full persona-set conversations
 export const personaChatApi = {
   createSession: async (personaId: number, projectId?: number) => {
     const response = await api.post('/persona-chats/', {
       persona_id: personaId,
+      project_id: projectId,
+    });
+    return response.data;
+  },
+
+  createSetSession: async (personaSetId: number, projectId?: number) => {
+    const response = await api.post('/persona-chats/', {
+      persona_set_id: personaSetId,
       project_id: projectId,
     });
     return response.data;
@@ -368,7 +480,7 @@ export const personaChatApi = {
     const response = await api.post(
       `/persona-chats/${sessionId}/messages`,
       { message, strict_mode: strictMode },
-      { timeout: 90000 },
+      { timeout: 180000 },
     );
     return response.data;
   },

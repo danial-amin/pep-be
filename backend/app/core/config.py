@@ -52,7 +52,15 @@ class Settings(BaseSettings):
     PERSONA_CHAT_REFUSAL_THRESHOLD: float = 0.55  # Min RAG score to hard-refuse factual questions (strict mode)
     PERSONA_CHAT_TEMPERATURE: float = 0.35
     PERSONA_CHAT_MAX_OUTPUT_TOKENS: int = 400
-    
+
+    # Auth (invite-only)
+    SECRET_KEY: str = "change-me-in-production-pep-secret"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    INVITE_EXPIRE_DAYS: int = 14
+    # Bootstrap first admin when users table is empty
+    ADMIN_EMAIL: Optional[str] = None
+    ADMIN_PASSWORD: Optional[str] = None
+    ADMIN_NAME: str = "Admin"    
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod
     def parse_cors_origins(cls, v):

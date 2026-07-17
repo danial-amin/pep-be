@@ -1,12 +1,13 @@
 """
-Persona chat endpoints — controlled 1:1 conversations with a single persona.
+Persona chat endpoints — controlled 1:1 and set-mode conversations.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
+from app.core.deps import get_current_user
+from app.models.user import User
 from app.models.persona_chat import PersonaChatSession, PersonaChatMessage
 from app.schemas.persona_chat import (
     PersonaChatCreateRequest,
@@ -15,45 +16,78 @@ from app.schemas.persona_chat import (
     PersonaChatMessageResponse,
     PersonaChatReplyResponse,
     PersonaChatSourceUsed,
+    PersonaChatParticipant,
+    PersonaChatSingleReply,
 )
 from app.services.persona_chat_service import persona_chat_service
 
 router = APIRouter()
 
 
+def _sources(msg_or_list) -> list:
+    raw = msg_or_list if isinstance(msg_or_list, list) else (msg_or_list or [])
+    return [
+        PersonaChatSourceUsed(
+            chunk_id=s.get("chunk_id"),
+            score=s.get("score", 0.0),
+            preview=s.get("preview", ""),
+        )
+        for s in raw
+    ]
+
+
 def _build_message_response(msg: PersonaChatMessage) -> PersonaChatMessageResponse:
-    sources = None
-    if msg.sources_used:
-        sources = [
-            PersonaChatSourceUsed(
-                chunk_id=s.get("chunk_id"),
-                score=s.get("score", 0.0),
-                preview=s.get("preview", ""),
-            )
-            for s in msg.sources_used
-        ]
+    image_url = None
+    if msg.persona:
+        image_url = msg.persona.image_url
     return PersonaChatMessageResponse(
         id=msg.id,
         role=msg.role,
         content=msg.content,
+        persona_id=msg.persona_id,
+        persona_name=msg.persona_name,
+        persona_image_url=image_url,
         refused=bool(msg.refused),
         retrieval_score=msg.retrieval_score,
-        sources_used=sources,
+        sources_used=_sources(msg.sources_used) if msg.sources_used else None,
         refusal_reason=msg.refusal_reason,
         created_at=msg.created_at,
     )
 
 
 def _build_session_response(session: PersonaChatSession) -> PersonaChatSessionResponse:
+    mode = getattr(session, "mode", None) or ("set" if session.persona_set_id else "single")
     image_url = None
     if session.persona:
         image_url = session.persona.image_url
+
+    participants = []
+    set_name = None
+    if mode == "set" and session.persona_set:
+        set_name = session.persona_set.name
+        for p in session.persona_set.personas or []:
+            participants.append(PersonaChatParticipant(
+                id=p.id,
+                name=(p.persona_data or {}).get("name") or p.name,
+                image_url=p.image_url,
+            ))
+    elif session.persona:
+        participants.append(PersonaChatParticipant(
+            id=session.persona.id,
+            name=session.persona.name,
+            image_url=session.persona.image_url,
+        ))
+
     return PersonaChatSessionResponse(
         id=session.id,
+        mode=mode,
         persona_id=session.persona_id,
         persona_name=session.persona_name,
         persona_image_url=image_url,
+        persona_set_id=session.persona_set_id,
+        persona_set_name=set_name,
         project_id=session.project_id,
+        participants=participants,
         messages=[_build_message_response(m) for m in (session.messages or [])],
         created_at=session.created_at,
     )
@@ -63,11 +97,16 @@ def _build_session_response(session: PersonaChatSession) -> PersonaChatSessionRe
 async def create_persona_chat_session(
     request: PersonaChatCreateRequest,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    """Start a new controlled chat session with a persona."""
+    """Start a new chat session with one persona or an entire persona set."""
     try:
         chat_session = await persona_chat_service.create_session(
-            db, request.persona_id, request.project_id
+            db,
+            persona_id=request.persona_id,
+            persona_set_id=request.persona_set_id,
+            project_id=request.project_id,
+            user_id=user.id,
         )
         await db.commit()
         loaded = await persona_chat_service.get_session(db, chat_session.id)
@@ -97,7 +136,13 @@ async def send_persona_chat_message(
     request: PersonaChatMessageRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Send a message and receive a knowledge-bounded persona reply."""
+    """
+    Send a message and receive persona reply/replies.
+
+    Set mode:
+      - no @mention → all personas in the set reply
+      - @PersonaName → only that persona replies
+    """
     try:
         result = await persona_chat_service.send_message(
             db,
@@ -106,21 +151,31 @@ async def send_persona_chat_message(
             strict_mode=request.strict_mode,
         )
         await db.commit()
+
+        replies = [
+            PersonaChatSingleReply(
+                reply=r["reply"],
+                refused=r.get("refused", False),
+                persona_id=r.get("persona_id"),
+                persona_name=r.get("persona_name"),
+                persona_image_url=r.get("persona_image_url"),
+                retrieval_score=r.get("retrieval_score"),
+                sources_used=_sources(r.get("sources_used")),
+                refusal_reason=r.get("refusal_reason"),
+                message_id=r["message_id"],
+            )
+            for r in (result.get("replies") or [])
+        ]
+
         return PersonaChatReplyResponse(
-            reply=result["reply"],
-            refused=result["refused"],
+            reply=result.get("reply"),
+            refused=result.get("refused", False),
             retrieval_score=result.get("retrieval_score"),
-            sources_used=[
-                PersonaChatSourceUsed(
-                    chunk_id=s.get("chunk_id"),
-                    score=s.get("score", 0.0),
-                    preview=s.get("preview", ""),
-                )
-                for s in (result.get("sources_used") or [])
-            ],
+            sources_used=_sources(result.get("sources_used")),
             refusal_reason=result.get("refusal_reason"),
-            message_id=result["message_id"],
+            message_id=result.get("message_id"),
             session_id=result["session_id"],
+            replies=replies,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

@@ -17,9 +17,11 @@ class Project(Base):
     core_objective = Column(Text, nullable=True)  # Main objective for persona generation
     includes_context = Column(Boolean, default=True)  # Whether project uses context documents
     includes_interviews = Column(Boolean, default=True)  # Whether project uses interview documents
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships - using string reference to avoid circular import
+    owner = relationship("User", back_populates="projects")
     persona_sets = relationship("PersonaSet", back_populates="project", cascade="all, delete-orphan")
     simulations = relationship("Simulation", back_populates="project", cascade="all, delete-orphan")

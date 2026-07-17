@@ -126,6 +126,7 @@ export interface Project {
   core_objective?: string;
   includes_context: boolean;
   includes_interviews: boolean;
+  user_id?: number | null;
   created_at: string;
   updated_at?: string;
 }
@@ -392,17 +393,26 @@ export interface SimulationSummary {
   duration_seconds?: number;
 }
 
-// Persona Chat — controlled 1:1 persona conversations
+// Persona Chat — single or set-mode conversations
 export interface PersonaChatSourceUsed {
   chunk_id?: string | null;
   score: number;
   preview: string;
 }
 
+export interface PersonaChatParticipant {
+  id: number;
+  name: string;
+  image_url?: string | null;
+}
+
 export interface PersonaChatMessage {
   id: number;
   role: 'user' | 'assistant';
   content: string;
+  persona_id?: number | null;
+  persona_name?: string | null;
+  persona_image_url?: string | null;
   refused?: boolean;
   retrieval_score?: number | null;
   sources_used?: PersonaChatSourceUsed[];
@@ -412,20 +422,37 @@ export interface PersonaChatMessage {
 
 export interface PersonaChatSession {
   id: number;
-  persona_id: number;
+  mode: 'single' | 'set';
+  persona_id?: number | null;
   persona_name: string;
   persona_image_url?: string | null;
+  persona_set_id?: number | null;
+  persona_set_name?: string | null;
   project_id?: number | null;
+  participants: PersonaChatParticipant[];
   messages: PersonaChatMessage[];
   created_at: string;
 }
 
-export interface PersonaChatReply {
+export interface PersonaChatSingleReply {
   reply: string;
   refused: boolean;
+  persona_id?: number | null;
+  persona_name?: string | null;
+  persona_image_url?: string | null;
   retrieval_score?: number | null;
   sources_used: PersonaChatSourceUsed[];
   refusal_reason?: string | null;
   message_id: number;
+}
+
+export interface PersonaChatReply {
+  reply?: string | null;
+  refused: boolean;
+  retrieval_score?: number | null;
+  sources_used: PersonaChatSourceUsed[];
+  refusal_reason?: string | null;
+  message_id?: number | null;
   session_id: number;
+  replies: PersonaChatSingleReply[];
 }
