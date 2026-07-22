@@ -40,8 +40,12 @@ async def api_root():
     }
 
 
-# Public auth routes (login, accept-invite, invite preview)
+# Public auth routes (login / accept-invite / invite preview)
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+# Persona image bytes are loaded via <img src>, which cannot send Authorization.
+# Keep this GET public; all other persona routes stay protected.
+api_router.include_router(personas.public_router, prefix="/personas", tags=["personas"])
 
 # Everything else requires authentication
 protected = APIRouter(dependencies=[Depends(get_current_user)])

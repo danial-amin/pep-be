@@ -37,6 +37,8 @@ from app.services.persona_verification_service import persona_verification_servi
 from app.services.persona_evaluation_service import persona_evaluation_service
 
 router = APIRouter()
+# Loaded via <img src> — cannot send Bearer tokens; mounted without auth in router.py
+public_router = APIRouter()
 
 
 def _persona_data_to_basic(name: str, persona_data: dict) -> PersonaBasic:
@@ -375,7 +377,7 @@ async def get_persona(
     return PersonaResponse.model_validate(persona)
 
 
-@router.get("/persona/{persona_id}/image")
+@public_router.get("/persona/{persona_id}/image")
 async def get_persona_image(
     persona_id: int,
     db: AsyncSession = Depends(get_db)
@@ -383,6 +385,8 @@ async def get_persona_image(
     """
     Return persona image as PNG. Uses file from static dir if present, otherwise
     returns image from DB image_data (base64) so images are retained without filesystem.
+
+    Public on purpose: browsers load this URL in <img> tags without Authorization headers.
     """
     from app.models.persona import Persona
     from app.utils.image_utils import get_image_path
