@@ -36,8 +36,11 @@ class Settings(BaseSettings):
     COHERE_RERANK_MODEL: str = "rerank-english-v3.0"
     USE_COHERE_RERANKING: bool = True  # Enable/disable Cohere reranking
     
-    # Image Generation
+    # Image Generation (DALL·E retired May 2026 — use GPT Image models)
     IMAGE_GENERATION_SERVICE: str = "openai"
+    OPENAI_IMAGE_MODEL: str = "gpt-image-1"  # gpt-image-1 | gpt-image-1-mini | gpt-image-1.5 | gpt-image-2
+    OPENAI_IMAGE_QUALITY: str = "medium"  # low | medium | high | auto
+    OPENAI_IMAGE_SIZE: str = "1024x1024"
     
     # Application (e.g. "development" | "deployment" | "production"; only "development" enables DB query logging)
     ENVIRONMENT: str = "development"

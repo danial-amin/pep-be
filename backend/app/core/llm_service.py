@@ -622,17 +622,39 @@ Return only the image prompt text, no JSON."""
         
         return response.choices[0].message.content
     
-    async def generate_image(self, prompt: str, size: str = "1024x1024") -> str:
-        """Generate an image using DALL-E."""
+    async def generate_image(
+        self,
+        prompt: str,
+        size: Optional[str] = None,
+        quality: Optional[str] = None,
+    ) -> str:
+        """
+        Generate an image with the configured GPT Image model.
+
+        Returns base64-encoded image data (GPT Image models no longer return URLs;
+        DALL·E was retired May 2026).
+        """
         response = await self.client.images.generate(
-            model="dall-e-3",
+            model=settings.OPENAI_IMAGE_MODEL,
             prompt=prompt,
-            size=size,
-            quality="standard",
+            size=size or settings.OPENAI_IMAGE_SIZE,
+            quality=quality or settings.OPENAI_IMAGE_QUALITY,
             n=1,
         )
-        
-        return response.data[0].url
+
+        if not response.data:
+            raise ValueError("Image generation returned no data")
+
+        b64 = getattr(response.data[0], "b64_json", None)
+        if b64:
+            return b64
+
+        # Fallback if a URL is ever returned (older SDKs / models)
+        url = getattr(response.data[0], "url", None)
+        if url:
+            return url
+
+        raise ValueError("Image generation returned neither b64_json nor url")
     
     async def _summarize_text(self, text: str) -> str:
         """Summarize a large text to reduce token usage."""

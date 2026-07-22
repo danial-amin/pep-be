@@ -462,7 +462,7 @@ class PersonaService:
         persona_id: int
     ) -> Persona:
         """Generate an image for a persona."""
-        from app.utils.image_utils import download_and_save_image
+        from app.utils.image_utils import download_and_save_image, save_base64_image
         
         result = await session.execute(
             select(Persona).where(Persona.id == persona_id)
@@ -475,16 +475,16 @@ class PersonaService:
         # Generate image prompt
         image_prompt = await llm_service.generate_persona_image_prompt(persona.persona_data)
         
-        # Generate image (returns temporary DALL-E URL)
-        dall_e_url = await llm_service.generate_image(image_prompt)
-        
-        # Download and save the image locally; store base64 in DB so image survives volume/restart
-        local_image_path, image_base64 = await download_and_save_image(dall_e_url, persona_id)
-        
+        # GPT Image returns base64; legacy models may still return a URL
+        image_result = await llm_service.generate_image(image_prompt)
+
+        if image_result.startswith(("http://", "https://")):
+            local_image_path, image_base64 = await download_and_save_image(image_result, persona_id)
+        else:
+            local_image_path, image_base64 = await save_base64_image(image_result, persona_id)
+
         if not local_image_path:
-            logger.warning(f"Failed to download image for persona {persona_id}, using DALL-E URL")
-            local_image_path = dall_e_url
-            image_base64 = None
+            raise ValueError(f"Failed to save generated image for persona {persona_id}")
         
         persona.image_url = local_image_path
         persona.image_prompt = image_prompt

@@ -19,6 +19,35 @@ def get_images_dir() -> Path:
     return Path(settings.PERSONA_IMAGES_DIR)
 
 
+async def save_base64_image(image_b64: str, persona_id: int) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Decode base64 image data and save under PERSONA_IMAGES_DIR.
+
+    Returns:
+        (relative_url_path, base64_data) for serving and DB backup; (None, None) if failed
+    """
+    images_dir = get_images_dir()
+    try:
+        # Strip data-URI prefix if present
+        raw = image_b64
+        if "," in raw and raw.strip().lower().startswith("data:"):
+            raw = raw.split(",", 1)[1]
+        data = base64.b64decode(raw)
+
+        images_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"persona_{persona_id}.png"
+        filepath = images_dir / filename
+
+        async with aiofiles.open(filepath, "wb") as f:
+            await f.write(data)
+
+        url_path = f"/static/images/personas/{filename}"
+        return url_path, base64.b64encode(data).decode("utf-8")
+    except Exception as e:
+        logger.error(f"Error saving base64 image for persona {persona_id}: {e}", exc_info=True)
+        return None, None
+
+
 async def download_and_save_image(image_url: str, persona_id: int) -> Tuple[Optional[str], Optional[str]]:
     """
     Download an image from a URL and save it locally under PERSONA_IMAGES_DIR.
@@ -30,6 +59,10 @@ async def download_and_save_image(image_url: str, persona_id: int) -> Tuple[Opti
     Returns:
         (relative_url_path, base64_data) for serving and DB backup; (None, None) if failed
     """
+    # GPT Image returns base64; if a caller passes b64 by mistake, save directly
+    if image_url and not image_url.startswith(("http://", "https://")):
+        return await save_base64_image(image_url, persona_id)
+
     images_dir = get_images_dir()
     try:
         images_dir.mkdir(parents=True, exist_ok=True)
