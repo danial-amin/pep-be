@@ -6,6 +6,7 @@ from app.models.simulation import Simulation, SimulationParticipant, SimulationM
 from app.models.judge_score import JudgeRun, JudgeScore
 from app.models.persona_chat import PersonaChatSession, PersonaChatMessage
 from app.models.user import User, Invite
+from app.models.persona_view import PersonaProfileView
 
 __all__ = [
     "Document", "DocumentType", "PersonaSet", "Persona", "Project",
@@ -13,4 +14,5 @@ __all__ = [
     "JudgeRun", "JudgeScore",
     "PersonaChatSession", "PersonaChatMessage",
     "User", "Invite",
+    "PersonaProfileView",
 ]

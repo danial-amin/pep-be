@@ -3,6 +3,7 @@ import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Bot, LogOu
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
+import PersonaSetProfilesPage from './pages/PersonaSetProfilesPage';
 import PromptsPage from './pages/PromptsPage';
 import ReportsPage from './pages/ReportsPage';
 import ProjectsPage from './pages/ProjectsPage';
@@ -111,6 +112,7 @@ function AppShell() {
           <Route path="/projects/:projectId/workflow" element={<ProtectedRoute><ProjectWorkflowPage /></ProtectedRoute>} />
           <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
           <Route path="/personas" element={<ProtectedRoute><PersonasPage /></ProtectedRoute>} />
+          <Route path="/personas/:setId/profiles" element={<ProtectedRoute><PersonaSetProfilesPage /></ProtectedRoute>} />
           <Route path="/personas/:setId" element={<ProtectedRoute><PersonaDetailPage /></ProtectedRoute>} />
           <Route path="/personas/:setId/:personaId" element={<ProtectedRoute><PersonaDetailPage /></ProtectedRoute>} />
           <Route path="/simulations" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />

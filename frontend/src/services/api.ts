@@ -490,5 +490,24 @@ export const personaChatApi = {
   },
 };
 
+export const analyticsApi = {
+  recordProfileView: async (payload: {
+    persona_set_id: number;
+    view_type: 'persona' | 'set_profiles';
+    duration_seconds: number;
+    persona_id?: number | null;
+    started_at?: string | null;
+    ended_at?: string | null;
+  }) => {
+    const response = await api.post('/analytics/profile-views', payload);
+    return response.data;
+  },
+
+  getProfileViews: async (personaSetId: number) => {
+    const response = await api.get(`/analytics/persona-sets/${personaSetId}/profile-views`);
+    return response.data;
+  },
+};
+
 export default api;
 

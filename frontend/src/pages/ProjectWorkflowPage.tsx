@@ -492,6 +492,13 @@ export default function ProjectWorkflowPage() {
                         <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
+                            onClick={() => navigate(`/personas/${set.id}/profiles`)}
+                            className="px-3 py-2 text-sm rounded-lg text-stone-700 hover:bg-stone-100"
+                          >
+                            All profiles
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => navigate(`/personas/${set.id}`)}
                             className="px-3 py-2 text-sm rounded-lg text-stone-700 hover:bg-stone-100"
                           >

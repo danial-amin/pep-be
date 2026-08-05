@@ -116,20 +116,40 @@ export default function PersonaProfileCard({
   persona,
   compact = false,
   className = '',
+  onClick,
 }: {
   persona: Persona;
   compact?: boolean;
   className?: string;
+  onClick?: () => void;
 }) {
   const [imageError, setImageError] = useState(false);
   const personaData = persona.persona_data || {};
   const name = personaData.name || persona.name;
   const imageSize = compact ? 'w-24 h-24' : 'w-32 h-32';
+  const interactive = typeof onClick === 'function';
 
   return (
     <div
       data-persona-profile-card="true"
-      className={`glass-card rounded-2xl border border-stone-200 ${compact ? 'p-4' : 'p-6'} ${className}`}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick?.();
+              }
+            }
+          : undefined
+      }
+      className={`glass-card rounded-2xl border border-stone-200 ${compact ? 'p-4' : 'p-6'} ${
+        interactive
+          ? 'cursor-pointer transition-shadow hover:border-stone-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-stone-400 focus:ring-offset-2'
+          : ''
+      } ${className}`}
     >
       {/* Header: image, demographics, quote */}
       <div className={`mb-4 flex flex-col gap-4 border-b border-stone-200 pb-4 ${compact ? '' : 'xl:flex-row xl:items-start'}`}>

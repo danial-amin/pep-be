@@ -358,6 +358,25 @@ async def lifespan(app: FastAPI):
                                 ON persona_chat_sessions(user_id);
                         END IF;
                     END IF;
+
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='persona_profile_views') THEN
+                        CREATE TABLE persona_profile_views (
+                            id SERIAL PRIMARY KEY,
+                            user_id INTEGER REFERENCES users(id),
+                            persona_set_id INTEGER NOT NULL REFERENCES persona_sets(id),
+                            persona_id INTEGER REFERENCES personas(id),
+                            view_type VARCHAR(32) NOT NULL,
+                            duration_seconds DOUBLE PRECISION NOT NULL,
+                            started_at TIMESTAMP WITH TIME ZONE,
+                            ended_at TIMESTAMP WITH TIME ZONE,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+                        );
+                        CREATE INDEX ix_persona_profile_views_id ON persona_profile_views(id);
+                        CREATE INDEX ix_persona_profile_views_user_id ON persona_profile_views(user_id);
+                        CREATE INDEX ix_persona_profile_views_persona_set_id ON persona_profile_views(persona_set_id);
+                        CREATE INDEX ix_persona_profile_views_persona_id ON persona_profile_views(persona_id);
+                        CREATE INDEX ix_persona_profile_views_view_type ON persona_profile_views(view_type);
+                    END IF;
                 END $$;
             """))
         except Exception as e:

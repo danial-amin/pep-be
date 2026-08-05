@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3, Play, FileJson } from 'lucide-react';
+import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3, Play, FileJson, LayoutGrid } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet, PersonaSetGenerateResponse, Persona } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -569,6 +569,13 @@ export default function PersonasPage() {
                         title="View in sidebar"
                       >
                         <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => navigate(`/personas/${set.id}/profiles`)}
+                        className="text-stone-600 hover:text-stone-900 transition-colors"
+                        title="View all profiles"
+                      >
+                        <LayoutGrid className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleViewExpanded(set.id)}

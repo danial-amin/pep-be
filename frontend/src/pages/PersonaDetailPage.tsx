@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, FileJson, Bot } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, FileJson, Bot, LayoutGrid } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
+import { usePersonaViewTimer } from '../hooks/usePersonaViewTimer';
 import html2canvas from 'html2canvas';
 
 export default function PersonaDetailPage() {
@@ -16,6 +17,18 @@ export default function PersonaDetailPage() {
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
   const [downloadingProfile, setDownloadingProfile] = useState(false);
   const profileCardRef = useRef<HTMLDivElement>(null);
+
+  const currentPersonaId =
+    !loading && personaSet?.personas?.[currentIndex]
+      ? personaSet.personas[currentIndex].id
+      : null;
+
+  usePersonaViewTimer({
+    personaSetId: personaSet?.id ?? (setId ? parseInt(setId, 10) : null),
+    personaId: currentPersonaId,
+    viewType: 'persona',
+    enabled: !!currentPersonaId,
+  });
 
   useEffect(() => {
     loadPersonaSet();
@@ -385,6 +398,14 @@ export default function PersonaDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-stretch justify-start gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => navigate(`/personas/${setId}/profiles`)}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-sm text-stone-900 transition-colors hover:bg-stone-200 sm:flex-initial sm:px-4"
+            >
+              <LayoutGrid className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">All profiles</span>
+            </button>
             <button
               type="button"
               onClick={() => {
