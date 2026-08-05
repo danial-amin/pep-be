@@ -21,7 +21,9 @@ export default function ProjectWorkflowPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('upload');
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [personaSets, setPersonaSets] = useState<PersonaSet[]>([]);
   const [selectedSet, setSelectedSet] = useState<PersonaSet | null>(null);
+  const [loadingSets, setLoadingSets] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null);
   const [retryingDocumentId, setRetryingDocumentId] = useState<number | null>(null);
@@ -39,6 +41,8 @@ export default function ProjectWorkflowPage() {
 
   useEffect(() => {
     if (projectId) {
+      setSelectedSet(null);
+      setPersonaSets([]);
       loadProject();
       loadDocuments();
       loadPersonaSets();
@@ -87,18 +91,29 @@ export default function ProjectWorkflowPage() {
     };
   }, [hasProcessing, loadDocuments]);
 
-  const loadPersonaSets = async () => {
+  const loadPersonaSets = useCallback(async () => {
     if (!projectId) return;
+    setLoadingSets(true);
     try {
-      const allSets = await personasApi.getAllSets();
-      // Filter persona sets for this project (if they have project_id in future)
-      // For now, we'll show all sets
-      if (allSets.length > 0 && !selectedSet) {
-        setSelectedSet(allSets[0]);
-      }
+      const sets: PersonaSet[] = await personasApi.getAllSets(parseInt(projectId));
+      setPersonaSets(sets);
+      setSelectedSet((prev) => {
+        if (prev && sets.some((s) => s.id === prev.id)) {
+          return sets.find((s) => s.id === prev.id) ?? prev;
+        }
+        return sets.length > 0 ? sets[0] : null;
+      });
     } catch (error) {
       console.error('Failed to load persona sets:', error);
+      setPersonaSets([]);
+    } finally {
+      setLoadingSets(false);
     }
+  }, [projectId]);
+
+  const handleSelectExistingSet = (set: PersonaSet) => {
+    setSelectedSet(set);
+    setCurrentStep('optimize');
   };
 
   const handleFileUpload = async (file: File, documentType: 'context' | 'interview') => {
@@ -433,63 +448,185 @@ export default function ProjectWorkflowPage() {
         {currentStep === 'create' && (
           <div>
             <h3 className="text-2xl font-semibold text-stone-900 mb-6">Create Persona Set</h3>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <div className="mb-8">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h4 className="text-lg font-semibold text-stone-900">Existing persona sets</h4>
+                <button
+                  type="button"
+                  onClick={() => loadPersonaSets()}
+                  disabled={loadingSets}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-sm font-medium text-stone-900 disabled:opacity-50"
+                  title="Refresh"
+                >
+                  {loadingSets ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Refresh
+                </button>
+              </div>
+              {loadingSets && personaSets.length === 0 ? (
+                <p className="text-sm text-stone-500">Loading persona sets…</p>
+              ) : personaSets.length === 0 ? (
+                <p className="text-sm text-stone-500">
+                  No persona sets for this project yet. Generate one below.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {personaSets.map((set) => {
+                    const isSelected = selectedSet?.id === set.id;
+                    return (
+                      <div
+                        key={set.id}
+                        className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${
+                          isSelected
+                            ? 'border-stone-900 bg-stone-50'
+                            : 'border-stone-200 bg-white'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-stone-900 truncate">{set.name}</p>
+                          <p className="text-sm text-stone-500">
+                            {set.personas?.length ?? 0} persona{(set.personas?.length ?? 0) !== 1 ? 's' : ''}
+                            {set.status ? ` · ${set.status}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/personas/${set.id}`)}
+                            className="px-3 py-2 text-sm rounded-lg text-stone-700 hover:bg-stone-100"
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectExistingSet(set)}
+                            className="px-4 py-2 text-sm font-medium rounded-lg bg-stone-900 text-white hover:bg-stone-800"
+                          >
+                            Use this set
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-stone-200 pt-6">
+              <h4 className="text-lg font-semibold text-stone-900 mb-4">Generate a new set</h4>
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Number of Personas</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={numPersonas}
+                      onChange={(e) => setNumPersonas(parseInt(e.target.value) || 3)}
+                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Output Format</label>
+                    <select
+                      value={outputFormat}
+                      onChange={(e) => setOutputFormat(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
+                    >
+                      <option value="json">JSON</option>
+                      <option value="profile">Profile</option>
+                      <option value="chat">Chat</option>
+                    </select>
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-1">Number of Personas</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={numPersonas}
-                    onChange={(e) => setNumPersonas(parseInt(e.target.value) || 3)}
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Context Details (Optional)</label>
+                  <textarea
+                    value={contextDetails}
+                    onChange={(e) => setContextDetails(e.target.value)}
+                    rows={3}
                     className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-1">Output Format</label>
-                  <select
-                    value={outputFormat}
-                    onChange={(e) => setOutputFormat(e.target.value)}
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Interview Topic (Optional)</label>
+                  <input
+                    type="text"
+                    value={interviewTopic}
+                    onChange={(e) => setInterviewTopic(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
-                  >
-                    <option value="json">JSON</option>
-                    <option value="profile">Profile</option>
-                    <option value="chat">Chat</option>
-                  </select>
+                  />
                 </div>
+                <button
+                  onClick={handleGenerateSet}
+                  disabled={generating || documents.length === 0}
+                  className="w-full px-6 py-3 bg-stone-900 text-white rounded-xl  disabled:opacity-50 transition-all"
+                >
+                  {generating ? 'Generating...' : 'Generate Personas'}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">Context Details (Optional)</label>
-                <textarea
-                  value={contextDetails}
-                  onChange={(e) => setContextDetails(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">Interview Topic (Optional)</label>
-                <input
-                  type="text"
-                  value={interviewTopic}
-                  onChange={(e) => setInterviewTopic(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
-                />
-              </div>
-              <button
-                onClick={handleGenerateSet}
-                disabled={generating || documents.length === 0}
-                className="w-full px-6 py-3 bg-stone-900 text-white rounded-xl  disabled:opacity-50 transition-all"
-              >
-                {generating ? 'Generating...' : 'Generate Personas'}
-              </button>
             </div>
+          </div>
+        )}
+
+        {currentStep === 'optimize' && !selectedSet && (
+          <div>
+            <h3 className="text-2xl font-semibold text-stone-900 mb-4">View & Optimize</h3>
+            <p className="text-stone-600 mb-4">
+              {personaSets.length === 0
+                ? 'No persona sets for this project yet. Generate one in Create Personas.'
+                : 'Select a persona set to continue.'}
+            </p>
+            {personaSets.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {personaSets.map((set) => (
+                  <button
+                    key={set.id}
+                    type="button"
+                    onClick={() => handleSelectExistingSet(set)}
+                    className="w-full text-left flex items-center justify-between gap-3 p-3 rounded-xl border border-stone-200 bg-white hover:border-stone-900"
+                  >
+                    <span className="font-medium text-stone-900">{set.name}</span>
+                    <span className="text-sm text-stone-500">
+                      {set.personas?.length ?? 0} persona{(set.personas?.length ?? 0) !== 1 ? 's' : ''}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCurrentStep('create')}
+                className="px-6 py-3 bg-stone-900 text-white rounded-xl"
+              >
+                Go to Create Personas
+              </button>
+            )}
           </div>
         )}
 
         {currentStep === 'optimize' && selectedSet && (
           <div>
+            {personaSets.length > 1 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-stone-700 mb-1">Persona set</label>
+                <select
+                  value={selectedSet.id}
+                  onChange={(e) => {
+                    const next = personaSets.find((s) => s.id === parseInt(e.target.value));
+                    if (next) setSelectedSet(next);
+                  }}
+                  className="w-full max-w-md px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900"
+                >
+                  {personaSets.map((set) => (
+                    <option key={set.id} value={set.id}>
+                      {set.name} ({set.personas?.length ?? 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <h3 className="text-2xl font-semibold text-stone-900 mb-6">Persona Set: {selectedSet.name}</h3>
             <div className="space-y-4">
               <div className="flex items-center space-x-4">
@@ -539,6 +676,46 @@ export default function ProjectWorkflowPage() {
                 Continue to Expand & Images
               </button>
             </div>
+          </div>
+        )}
+
+        {(currentStep === 'expand' || currentStep === 'reports') && !selectedSet && (
+          <div>
+            <h3 className="text-2xl font-semibold text-stone-900 mb-4">
+              {currentStep === 'expand' ? 'Expand & Images' : 'Reports'}
+            </h3>
+            <p className="text-stone-600 mb-4">
+              {personaSets.length === 0
+                ? 'No persona sets for this project yet. Generate one in Create Personas.'
+                : 'Select a persona set to continue.'}
+            </p>
+            {personaSets.length > 0 ? (
+              <div className="space-y-2">
+                {personaSets.map((set) => (
+                  <button
+                    key={set.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSet(set);
+                    }}
+                    className="w-full text-left flex items-center justify-between gap-3 p-3 rounded-xl border border-stone-200 bg-white hover:border-stone-900"
+                  >
+                    <span className="font-medium text-stone-900">{set.name}</span>
+                    <span className="text-sm text-stone-500">
+                      {set.personas?.length ?? 0} persona{(set.personas?.length ?? 0) !== 1 ? 's' : ''}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCurrentStep('create')}
+                className="px-6 py-3 bg-stone-900 text-white rounded-xl"
+              >
+                Go to Create Personas
+              </button>
+            )}
           </div>
         )}
 
