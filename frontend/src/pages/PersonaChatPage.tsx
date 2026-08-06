@@ -209,7 +209,7 @@ export default function PersonaChatPage() {
         .then((data) => {
           setProjects(data);
           const preferred =
-            studyScope?.projectId && data.some((p) => p.id === studyScope.projectId)
+            studyScope?.projectId && data.some((p: Project) => p.id === studyScope.projectId)
               ? studyScope.projectId
               : data[0]?.id ?? null;
           setSelectedProjectId(preferred);
