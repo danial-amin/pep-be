@@ -20,8 +20,13 @@ class Study(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
     persona_set_id = Column(Integer, ForeignKey("persona_sets.id"), nullable=False, index=True)
 
-    # Ordered list of persona IDs for the all-profiles screen
+    # Ordered list of persona IDs for the all-profiles screen (fallback)
     persona_order = Column(JSON, nullable=True)
+
+    # Counterbalanced display orders by participant code (P01, P02, …).
+    # List of rotations; each rotation is a list of stakeholder_group keys.
+    # Participant Pn uses rotations[(n - 1) % len(rotations)].
+    order_rotations = Column(JSON, nullable=True)
 
     # When true, any unused code like P01 is accepted and auto-created
     allow_open_codes = Column(Boolean, default=True, nullable=False)

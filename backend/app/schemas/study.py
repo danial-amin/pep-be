@@ -68,6 +68,7 @@ class StudyConfigResponse(BaseModel):
     project_id: Optional[int] = None
     persona_set_id: int
     persona_order: Optional[List[int]] = None
+    order_rotations: Optional[List[List[str]]] = None
     allow_open_codes: bool
     max_participants: int
     welcome_text: Optional[str] = None

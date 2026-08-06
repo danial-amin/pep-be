@@ -22,9 +22,11 @@ export default function StudyProfilesPage() {
   const [savingOrder, setSavingOrder] = useState(false);
   const [expanded, setExpanded] = useState<StudyPersona | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [orderCondition, setOrderCondition] = useState<string | null>(null);
+  const [hasRotations, setHasRotations] = useState(false);
   const [orderDirty, setOrderDirty] = useState(false);
 
-  const canReorder = !!user?.is_admin;
+  const canReorder = !!user?.is_admin && !hasRotations;
 
   useEffect(() => {
     if (slug) setActiveStudySlug(slug);
@@ -50,8 +52,15 @@ export default function StudyProfilesPage() {
             persona_data: p.persona_data || {},
           })) as StudyPersona[]
         );
+        setOrderCondition(data.order_condition || null);
+        setHasRotations(!!data.has_order_rotations);
         setOrderDirty(false);
-        track('profiles_loaded', { count: data.personas.length });
+        track('profiles_loaded', {
+          count: data.personas.length,
+          order_condition: data.order_condition,
+          order_rotation_index: data.order_rotation_index,
+          persona_order: data.persona_order,
+        });
       } catch (e: any) {
         if (!cancelled) setError(e?.response?.data?.detail || e.message);
       } finally {
@@ -173,6 +182,7 @@ export default function StudyProfilesPage() {
             </h1>
             <p className="text-sm text-stone-500">
               {user?.participant_code || user?.name || 'Participant'}
+              {orderCondition ? ` · ${orderCondition}` : ''}
               {' · '}
               {personas.length} persona{personas.length !== 1 ? 's' : ''}
               {canReorder ? ' · drag order with arrows, then Save' : ''}

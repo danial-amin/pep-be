@@ -21,6 +21,13 @@ from app.schemas.study import StudyEnterResponse, StudyParticipantInfo, StudyPub
 
 _CODE_RE = re.compile(r"^P\d{1,3}$", re.IGNORECASE)
 
+# Short labels for logging / UI (stakeholder_group → study condition code)
+GROUP_LABELS = {
+    "affected_households": "AH",
+    "local_humanitarian_workers": "HW",
+    "bisp_programme_representatives": "BISP",
+}
+
 
 def normalize_participant_code(code: str) -> str:
     raw = (code or "").strip().upper()
@@ -34,6 +41,21 @@ def normalize_participant_code(code: str) -> str:
     if not _CODE_RE.match(raw):
         raise ValueError("Use a participant code like P01, P02, …")
     return raw
+
+
+def participant_number(code: str) -> int:
+    norm = normalize_participant_code(code)
+    return int(norm[1:])
+
+
+def rotation_index_for_code(code: str, rotation_count: int) -> int:
+    if rotation_count <= 0:
+        return 0
+    return (participant_number(code) - 1) % rotation_count
+
+
+def condition_label(groups: List[str]) -> str:
+    return " – ".join(GROUP_LABELS.get(g, g) for g in groups)
 
 
 class StudyService:
@@ -161,10 +183,60 @@ class StudyService:
         )
 
     @staticmethod
+    def resolve_order_meta(
+        study: Study,
+        personas: List[Persona],
+        participant_code: Optional[str] = None,
+    ) -> dict:
+        """
+        Resolve display order for a participant.
+
+        When study.order_rotations is set, Pn uses rotations[(n-1) % len].
+        Otherwise falls back to study.persona_order (persona IDs).
+        """
+        by_group = {
+            (p.persona_data or {}).get("stakeholder_group"): p
+            for p in personas
+            if (p.persona_data or {}).get("stakeholder_group")
+        }
+        by_id = {p.id: p for p in personas}
+        rotations = study.order_rotations or []
+
+        if rotations and participant_code:
+            idx = rotation_index_for_code(participant_code, len(rotations))
+            groups = list(rotations[idx] or [])
+            ordered = [by_group[g] for g in groups if g in by_group]
+            seen = {p.id for p in ordered}
+            ordered.extend([p for p in personas if p.id not in seen])
+            return {
+                "personas": ordered,
+                "persona_order": [p.id for p in ordered],
+                "order_condition": condition_label(groups),
+                "order_rotation_index": idx,
+                "order_groups": groups,
+            }
+
+        order_ids = study.persona_order or []
+        if order_ids:
+            ordered = [by_id[i] for i in order_ids if i in by_id]
+            seen = set(order_ids)
+            ordered.extend([p for p in personas if p.id not in seen])
+        else:
+            ordered = list(personas)
+        return {
+            "personas": ordered,
+            "persona_order": [p.id for p in ordered],
+            "order_condition": None,
+            "order_rotation_index": None,
+            "order_groups": None,
+        }
+
+    @staticmethod
     async def ordered_personas(
         session: AsyncSession,
         study: Study,
-    ) -> List[Persona]:
+        participant_code: Optional[str] = None,
+    ) -> dict:
         result = await session.execute(
             select(PersonaSet)
             .where(PersonaSet.id == study.persona_set_id)
@@ -172,18 +244,16 @@ class StudyService:
         )
         persona_set = result.scalar_one_or_none()
         if not persona_set:
-            return []
-        personas = list(persona_set.personas)
-        order = study.persona_order or []
-        if not order:
-            return personas
-        by_id = {p.id: p for p in personas}
-        ordered = [by_id[i] for i in order if i in by_id]
-        # Append any personas not listed in order
-        seen = set(order)
-        ordered.extend([p for p in personas if p.id not in seen])
-        return ordered
-
+            return {
+                "personas": [],
+                "persona_order": [],
+                "order_condition": None,
+                "order_rotation_index": None,
+                "order_groups": None,
+            }
+        return StudyService.resolve_order_meta(
+            study, list(persona_set.personas), participant_code
+        )
     @staticmethod
     async def update_persona_order(
         session: AsyncSession,

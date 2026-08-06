@@ -90,16 +90,24 @@ async def get_study_personas_ordered(
     slug: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ):
     study = await StudyService.get_by_slug(db, slug)
     if not study or not study.enabled:
         raise HTTPException(status_code=404, detail="Study not found or disabled")
-    personas = await StudyService.ordered_personas(db, study)
+    claims = _study_claims_from_request(credentials)
+    participant_code = claims.get("participant_code")
+    meta = await StudyService.ordered_personas(db, study, participant_code)
+    personas = meta["personas"]
     return {
         "study_slug": study.slug,
         "persona_set_id": study.persona_set_id,
-        "persona_order": study.persona_order
-        or [p.id for p in personas],
+        "persona_order": meta["persona_order"],
+        "order_condition": meta.get("order_condition"),
+        "order_rotation_index": meta.get("order_rotation_index"),
+        "order_groups": meta.get("order_groups"),
+        "has_order_rotations": bool(study.order_rotations),
+        "participant_code": participant_code,
         "personas": [
             {
                 "id": p.id,

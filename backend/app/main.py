@@ -387,6 +387,7 @@ async def lifespan(app: FastAPI):
                             project_id INTEGER REFERENCES projects(id),
                             persona_set_id INTEGER NOT NULL REFERENCES persona_sets(id),
                             persona_order JSONB,
+                            order_rotations JSONB,
                             allow_open_codes BOOLEAN NOT NULL DEFAULT true,
                             max_participants INTEGER NOT NULL DEFAULT 40,
                             welcome_text TEXT,
@@ -397,6 +398,14 @@ async def lifespan(app: FastAPI):
                         CREATE INDEX ix_studies_id ON studies(id);
                         CREATE INDEX ix_studies_project_id ON studies(project_id);
                         CREATE INDEX ix_studies_persona_set_id ON studies(persona_set_id);
+                    END IF;
+
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='studies')
+                       AND NOT EXISTS (
+                           SELECT 1 FROM information_schema.columns
+                           WHERE table_name='studies' AND column_name='order_rotations'
+                       ) THEN
+                        ALTER TABLE studies ADD COLUMN order_rotations JSONB;
                     END IF;
 
                     IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='study_participants') THEN

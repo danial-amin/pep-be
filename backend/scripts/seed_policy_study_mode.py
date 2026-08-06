@@ -11,11 +11,11 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
-from app.models.persona import Persona, PersonaSet
+from app.models.persona import PersonaSet
 from app.models.project import Project
 from app.models.study import Study
 
@@ -23,22 +23,54 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger("seed_policy_study")
 
 SLUG = "policy-study"
-STAKEHOLDER_ORDER = [
-    "affected_households",
-    "bisp_programme_representatives",
-    "local_humanitarian_workers",
+
+AH = "affected_households"
+HW = "local_humanitarian_workers"
+BISP = "bisp_programme_representatives"
+
+# Counterbalanced orders for P01, P02, … (cycles every 6)
+# P01 AH–HW–BISP, P02 AH–BISP–HW, P03 HW–AH–BISP,
+# P04 HW–BISP–AH, P05 BISP–AH–HW, P06 BISP–HW–AH, P07→P01…
+ORDER_ROTATIONS = [
+    [AH, HW, BISP],
+    [AH, BISP, HW],
+    [HW, AH, BISP],
+    [HW, BISP, AH],
+    [BISP, AH, HW],
+    [BISP, HW, AH],
 ]
+
+
+async def ensure_order_rotations_column(session) -> None:
+    await session.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='studies')
+                   AND NOT EXISTS (
+                       SELECT 1 FROM information_schema.columns
+                       WHERE table_name='studies' AND column_name='order_rotations'
+                   ) THEN
+                    ALTER TABLE studies ADD COLUMN order_rotations JSONB;
+                END IF;
+            END $$;
+            """
+        )
+    )
+    await session.commit()
 
 
 async def main() -> None:
     async with AsyncSessionLocal() as session:
+        await ensure_order_rotations_column(session)
+
         project = (
             await session.execute(select(Project).where(Project.name == "Policy Study"))
         ).scalar_one_or_none()
         if not project:
             raise SystemExit("Policy Study project not found")
 
-        # Prefer persona set that has stakeholder_groups in generation_config
         sets = (
             await session.execute(
                 select(PersonaSet)
@@ -59,20 +91,25 @@ async def main() -> None:
         if chosen is None:
             chosen = sets[0]
 
-        # Order personas by stakeholder_group when possible
         by_group = {
             (p.persona_data or {}).get("stakeholder_group"): p.id
             for p in chosen.personas
             if (p.persona_data or {}).get("stakeholder_group")
         }
-        order = [by_group[g] for g in STAKEHOLDER_ORDER if g in by_group]
+        # Default/fallback order = first rotation (AH–HW–BISP)
+        order = [by_group[g] for g in ORDER_ROTATIONS[0] if g in by_group]
         for p in chosen.personas:
             if p.id not in order:
                 order.append(p.id)
 
-        existing = (
-            await session.execute(select(Study).where(Study.slug == SLUG))
-        ).scalar_one_or_none()
+        missing = [
+            g
+            for rotation in ORDER_ROTATIONS
+            for g in rotation
+            if g not in by_group
+        ]
+        if missing:
+            raise SystemExit(f"Missing stakeholder personas for groups: {sorted(set(missing))}")
 
         welcome = (
             "Welcome to the PEP Policy Study session.\n\n"
@@ -80,12 +117,17 @@ async def main() -> None:
             "You will see three stakeholder personas on one screen; click a card to enlarge."
         )
 
+        existing = (
+            await session.execute(select(Study).where(Study.slug == SLUG))
+        ).scalar_one_or_none()
+
         if existing:
             existing.name = "Policy Study"
             existing.enabled = True
             existing.project_id = project.id
             existing.persona_set_id = chosen.id
             existing.persona_order = order
+            existing.order_rotations = ORDER_ROTATIONS
             existing.allow_open_codes = True
             existing.max_participants = 40
             existing.welcome_text = welcome
@@ -99,6 +141,7 @@ async def main() -> None:
                 project_id=project.id,
                 persona_set_id=chosen.id,
                 persona_order=order,
+                order_rotations=ORDER_ROTATIONS,
                 allow_open_codes=True,
                 max_participants=40,
                 welcome_text=welcome,
@@ -108,11 +151,17 @@ async def main() -> None:
 
         await session.commit()
         logger.info(
-            "Ready: /study/%s  persona_set_id=%s order=%s",
+            "Ready: /study/%s  persona_set_id=%s rotations=%s",
             SLUG,
             chosen.id,
-            order,
+            len(ORDER_ROTATIONS),
         )
+        for i, rotation in enumerate(ORDER_ROTATIONS):
+            labels = " – ".join(
+                {"affected_households": "AH", "local_humanitarian_workers": "HW", "bisp_programme_representatives": "BISP"}[g]
+                for g in rotation
+            )
+            logger.info("  P%02d,P%02d,… → %s", i + 1, i + 7, labels)
 
 
 if __name__ == "__main__":

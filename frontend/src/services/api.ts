@@ -548,6 +548,11 @@ export const studyApi = {
       study_slug: string;
       persona_set_id: number;
       persona_order: number[];
+      order_condition?: string | null;
+      order_rotation_index?: number | null;
+      order_groups?: string[] | null;
+      has_order_rotations?: boolean;
+      participant_code?: string | null;
       personas: Array<{
         id: number;
         persona_set_id: number;
