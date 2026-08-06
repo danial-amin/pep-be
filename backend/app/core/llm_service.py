@@ -297,7 +297,8 @@ Provide a comprehensive and accurate response based on the context provided."""
         output_format: str = "json",
         has_interviews: bool = True,
         has_context: bool = True,
-        project_id: Optional[int] = None
+        project_id: Optional[int] = None,
+        stakeholder_groups: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Generate initial persona set with advanced configuration options.
@@ -313,6 +314,7 @@ Provide a comprehensive and accurate response based on the context provided."""
             output_format: Format for persona output (json, profile, chat, etc.)
             has_interviews: Whether interview documents are available
             has_context: Whether context documents are available
+            stakeholder_groups: Optional ordered stakeholder IDs; one persona per group
         """
         # Ensure no None in document lists (vector DB or fallback can return None and break join())
         def _safe_doc_list(lst: Optional[List[str]]) -> List[str]:
@@ -322,6 +324,10 @@ Provide a comprehensive and accurate response based on the context provided."""
 
         context_documents = _safe_doc_list(context_documents)
         interview_documents = _safe_doc_list(interview_documents)
+
+        groups = [g.strip() for g in (stakeholder_groups or []) if g and str(g).strip()]
+        if groups:
+            num_personas = len(groups)
 
         # Determine which prompt template to use based on available data
         if has_interviews and has_context:
@@ -386,9 +392,37 @@ Provide a comprehensive and accurate response based on the context provided."""
         user_study_design_section = ""
         if user_study_design:
             user_study_design_section = f"\n\nUSER STUDY DESIGN:\n{user_study_design}"
+
+        stakeholder_groups_section = ""
+        if groups:
+            def _label(g: str) -> str:
+                return g.replace("_", " ").strip().title()
+
+            lines = "\n".join(
+                f"{i}. ID `{g}` — {_label(g)}" for i, g in enumerate(groups, start=1)
+            )
+            stakeholder_groups_section = f"""
+
+REQUIRED STAKEHOLDER GROUPS (STRICT):
+Generate EXACTLY {len(groups)} personas — one for EACH group below, in this order.
+Do NOT invent extra personas. Do NOT merge groups. Do NOT skip a group.
+Each persona MUST include:
+- "stakeholder_group": the exact ID string from the list
+- "tagline": a short role description matching that stakeholder
+
+Groups:
+{lines}
+
+Ground each persona primarily in evidence tagged for that stakeholder group.
+"""
         
         # Get format instructions
         format_instructions = self._get_format_instructions(output_format, num_personas)
+        if groups and output_format == "json":
+            format_instructions += (
+                "\nEach persona object MUST include \"stakeholder_group\" set to the "
+                "exact group ID it represents."
+            )
         
         # Build ethical guardrails section
         ethical_guardrails_section = ""
@@ -410,6 +444,7 @@ Please ensure personas are:
             additional_context_section=additional_context_section,
             interview_topic_section=interview_topic_section,
             user_study_design_section=user_study_design_section,
+            stakeholder_groups_section=stakeholder_groups_section,
             format_instructions=format_instructions,
             ethical_guardrails_section=ethical_guardrails_section
         )

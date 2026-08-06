@@ -54,41 +54,24 @@ class IterativeGenerationService:
         include_ethical_guardrails: bool = True,
         output_format: str = "json",
         document_ids: Optional[List[int]] = None,
-        project_id: Optional[int] = None
+        project_id: Optional[int] = None,
+        stakeholder_groups: Optional[List[str]] = None,
     ) -> Tuple[PersonaSet, Dict[str, Any]]:
         """
         Generate persona set with iterative refinement until RQE threshold is met.
 
-        Implements the PEP paper's iterative generation algorithm:
-        1. Generate initial persona set
-        2. Calculate RQE diversity score
-        3. If RQE < threshold and iterations < max:
-           - Generate diversity hints based on similarity analysis
-           - Regenerate with hints emphasizing needed differentiation
-        4. Track all iterations and metrics
-        5. Return final set with comprehensive metrics
-
-        Args:
-            session: Database session
-            num_personas: Number of personas to generate (paper recommends 4-6)
-            rqe_threshold: Target RQE score (>= 0.75 recommended)
-            max_iterations: Maximum generation attempts
-            auto_iterate: If True, automatically iterate until threshold met
-            cs_threshold: Cosine similarity threshold for validation
-            context_details: Additional context about research/market
-            interview_topic: Focus topic for interviews
-            user_study_design: Study design methodology
-            include_ethical_guardrails: Include ethical considerations
-            output_format: Output format (json, profile, etc.)
-            document_ids: Specific document IDs to use
-            project_id: Project ID for scoping
-
-        Returns:
-            Tuple of (PersonaSet, metrics_dict) with iteration history
+        When stakeholder_groups is provided, generates exactly one persona per group
+        and retrieves RAG evidence filtered/prioritized for those stakeholders.
         """
+        groups = [g.strip() for g in (stakeholder_groups or []) if g and str(g).strip()]
+        if groups:
+            num_personas = len(groups)
+            # Stakeholder-mapped sets should not reshuffle into free-form diversity loops
+            auto_iterate = False
+
         # Retrieve documents for generation
         interview_texts, context_texts = await IterativeGenerationService._get_documents(
-            session, document_ids, project_id
+            session, document_ids, project_id, stakeholder_groups=groups or None
         )
 
         if not interview_texts and not context_texts:
@@ -107,7 +90,8 @@ class IterativeGenerationService:
             "user_study_design": user_study_design,
             "include_ethical_guardrails": include_ethical_guardrails,
             "document_ids": document_ids,
-            "project_id": project_id
+            "project_id": project_id,
+            "stakeholder_groups": groups or None,
         }
 
         # Iteration tracking
@@ -146,7 +130,8 @@ class IterativeGenerationService:
                 user_study_design=user_study_design,
                 include_ethical_guardrails=include_ethical_guardrails,
                 output_format=output_format,
-                diversity_hints=diversity_hints
+                diversity_hints=diversity_hints,
+                stakeholder_groups=groups or None,
             )
 
             # Clear existing personas for this set (if iterating)
@@ -161,8 +146,15 @@ class IterativeGenerationService:
                 await session.flush()
 
             # Create persona records
-            for persona_data in persona_data_list:
+            for idx, persona_data in enumerate(persona_data_list):
                 normalized_data = normalize_persona_to_nested(persona_data)
+                if groups:
+                    # Enforce stakeholder mapping by position if model omitted the field
+                    assigned = normalized_data.get("stakeholder_group") or (
+                        groups[idx] if idx < len(groups) else None
+                    )
+                    if assigned:
+                        normalized_data["stakeholder_group"] = assigned
                 persona = Persona(
                     persona_set_id=persona_set.id,
                     name=normalized_data.get("name", "Unknown"),
@@ -253,7 +245,8 @@ class IterativeGenerationService:
     async def _get_documents(
         session: AsyncSession,
         document_ids: Optional[List[int]] = None,
-        project_id: Optional[int] = None
+        project_id: Optional[int] = None,
+        stakeholder_groups: Optional[List[str]] = None,
     ) -> Tuple[List[str], List[str]]:
         """Retrieve documents for persona generation using RAG."""
         # Build query filter for documents
@@ -281,29 +274,73 @@ class IterativeGenerationService:
 
         interview_texts = []
         context_texts = []
+        groups = [g.strip() for g in (stakeholder_groups or []) if g and str(g).strip()]
 
-        # Use RAG to retrieve relevant chunks. Prefer document_id over project_id - document_id
-        # is always in vector metadata; project_id may be missing for older documents.
+        async def _query_chunks(
+            document_type: str,
+            doc_ids: List[str],
+            default_query: str,
+            per_group_n: int = 8,
+            default_n: int = 15,
+        ) -> List[str]:
+            texts: List[str] = []
+            base_filter: Dict[str, Any] = {"document_type": document_type}
+            if len(doc_ids) == 1:
+                base_filter["document_id"] = doc_ids[0]
+            elif len(doc_ids) > 1:
+                base_filter["document_id"] = {"$in": doc_ids}
+
+            if groups:
+                for group in groups:
+                    # Prefer metadata.persona match (policy corpus), fall back to query text
+                    group_filter = {**base_filter, "persona": group}
+                    label = group.replace("_", " ")
+                    results = await vector_db.query_documents(
+                        query_texts=[
+                            f"{label} stakeholder needs behaviors constraints lived experience policy"
+                        ],
+                        n_results=per_group_n,
+                        filter_metadata=group_filter,
+                    )
+                    got = 0
+                    if results.get("documents"):
+                        for doc_list in results["documents"]:
+                            for t in doc_list:
+                                if t is not None:
+                                    texts.append(t if isinstance(t, str) else str(t))
+                                    got += 1
+                    if got == 0:
+                        # No persona-tagged vectors — broader retrieval mentioning the group
+                        results = await vector_db.query_documents(
+                            query_texts=[f"{label}: {default_query}"],
+                            n_results=per_group_n,
+                            filter_metadata=base_filter,
+                        )
+                        if results.get("documents"):
+                            for doc_list in results["documents"]:
+                                for t in doc_list:
+                                    if t is not None:
+                                        texts.append(t if isinstance(t, str) else str(t))
+            else:
+                results = await vector_db.query_documents(
+                    query_texts=[default_query],
+                    n_results=default_n,
+                    filter_metadata=base_filter,
+                )
+                if results.get("documents"):
+                    for doc_list in results["documents"]:
+                        for t in doc_list:
+                            if t is not None:
+                                texts.append(t if isinstance(t, str) else str(t))
+            return texts
+
         if interviews:
             interview_doc_ids = [str(doc.id) for doc in interviews]
-            interview_filter = {"document_type": "interview"}
-            if len(interview_doc_ids) == 1:
-                interview_filter["document_id"] = interview_doc_ids[0]
-            elif len(interview_doc_ids) > 1:
-                interview_filter["document_id"] = {"$in": interview_doc_ids}
-
-            interview_results = await vector_db.query_documents(
-                query_texts=["user interviews, user research, interview transcripts, user feedback, user needs, behaviors, patterns"],
-                n_results=15,  # Get more chunks for iterative generation
-                filter_metadata=interview_filter
+            interview_texts = await _query_chunks(
+                "interview",
+                interview_doc_ids,
+                "user interviews, user research, interview transcripts, user feedback, user needs, behaviors, patterns",
             )
-
-            if interview_results.get("documents") and len(interview_results["documents"]) > 0:
-                for doc_list in interview_results["documents"]:
-                    for t in doc_list:
-                        if t is not None:
-                            interview_texts.append(t if isinstance(t, str) else str(t))
-
             if not interview_texts:
                 interview_texts = [
                     (c if isinstance(c, str) else str(c))
@@ -314,24 +351,11 @@ class IterativeGenerationService:
 
         if contexts:
             context_doc_ids = [str(doc.id) for doc in contexts]
-            context_filter = {"document_type": "context"}
-            if len(context_doc_ids) == 1:
-                context_filter["document_id"] = context_doc_ids[0]
-            elif len(context_doc_ids) > 1:
-                context_filter["document_id"] = {"$in": context_doc_ids}
-
-            context_results = await vector_db.query_documents(
-                query_texts=["research context, background information, market research, user behavior, demographics, domain knowledge"],
-                n_results=15,
-                filter_metadata=context_filter
+            context_texts = await _query_chunks(
+                "context",
+                context_doc_ids,
+                "research context, background information, market research, user behavior, demographics, domain knowledge",
             )
-
-            if context_results.get("documents") and len(context_results["documents"]) > 0:
-                for doc_list in context_results["documents"]:
-                    for t in doc_list:
-                        if t is not None:
-                            context_texts.append(t if isinstance(t, str) else str(t))
-
             if not context_texts:
                 context_texts = [
                     (c if isinstance(c, str) else str(c))
@@ -353,7 +377,8 @@ class IterativeGenerationService:
         user_study_design: Optional[str],
         include_ethical_guardrails: bool,
         output_format: str,
-        diversity_hints: Optional[str] = None
+        diversity_hints: Optional[str] = None,
+        stakeholder_groups: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Generate personas using LLM with optional diversity hints."""
         # Add diversity hints to context if provided
@@ -374,7 +399,8 @@ class IterativeGenerationService:
             include_ethical_guardrails=include_ethical_guardrails,
             output_format=output_format,
             has_interviews=has_interviews,
-            has_context=has_context
+            has_context=has_context,
+            stakeholder_groups=stakeholder_groups,
         )
 
         # Extract personas from response

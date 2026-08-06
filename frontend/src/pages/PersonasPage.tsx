@@ -118,6 +118,7 @@ export default function PersonasPage() {
   const [includeEthicalGuardrails, setIncludeEthicalGuardrails] = useState(true);
   const [outputFormat, setOutputFormat] = useState('json');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [stakeholderGroupsText, setStakeholderGroupsText] = useState('');
 
   useEffect(() => {
     loadPersonaSets();
@@ -138,13 +139,19 @@ export default function PersonasPage() {
   const handleGenerateSet = async () => {
     setGenerating(true);
     try {
+      const stakeholderGroups = stakeholderGroupsText
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       const response: PersonaSetGenerateResponse = await personasApi.generateSet(
-        numPersonas,
+        stakeholderGroups.length > 0 ? stakeholderGroups.length : numPersonas,
         contextDetails || undefined,
         interviewTopic || undefined,
         userStudyDesign || undefined,
         includeEthicalGuardrails,
-        outputFormat
+        outputFormat,
+        undefined,
+        stakeholderGroups.length > 0 ? stakeholderGroups : undefined
       );
       await loadPersonaSets();
       const newSet = await personasApi.getSet(response.persona_set_id);
@@ -341,6 +348,22 @@ export default function PersonasPage() {
         {/* Advanced Options */}
         {showAdvanced && (
           <div className="space-y-4 border-t border-stone-200 pt-4">
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">
+                Stakeholder groups (optional)
+              </label>
+              <textarea
+                value={stakeholderGroupsText}
+                onChange={(e) => setStakeholderGroupsText(e.target.value)}
+                placeholder={"One group per line, e.g.\naffected_households\nbisp_programme_representatives\nlocal_humanitarian_workers"}
+                rows={3}
+                className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
+              />
+              <p className="mt-1 text-xs text-stone-500">
+                When set, generates exactly one persona per group (overrides number of personas).
+              </p>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">
                 Context Details (Optional)

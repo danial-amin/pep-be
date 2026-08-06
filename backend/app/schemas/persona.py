@@ -74,6 +74,14 @@ class PersonaSetCreateRequest(BaseModel):
         default=None,
         description="Optional project ID to filter documents by project (for session isolation). Alternative to document_ids."
     )
+    stakeholder_groups: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Optional ordered list of stakeholder / persona groups to generate. "
+            "When set, exactly one persona is generated per group (num_personas is set to the list length). "
+            "Examples: ['affected_households', 'bisp_programme_representatives', 'local_humanitarian_workers']."
+        ),
+    )
 
     # PEP Paper Parameters - Iterative Generation
     rqe_threshold: float = Field(

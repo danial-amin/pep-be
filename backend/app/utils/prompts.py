@@ -33,6 +33,7 @@ PERSONA_SET_GENERATION_SYSTEM_PROMPT = """You are an expert at creating realisti
 #   - {user_study_design_section}: User study design information (if provided)
 #   - {format_instructions}: Format-specific instructions based on output_format
 #   - {ethical_guardrails_section}: Ethical considerations (if enabled)
+#   - {stakeholder_groups_section}: Required stakeholder groups (if provided)
 #
 # Note: Sections with "_section" suffix will be empty strings if not provided,
 # so they won't add extra blank lines in the final prompt.
@@ -45,7 +46,7 @@ CONTEXT INFORMATION:
 
 INTERVIEW DATA:
 {interviews}
-{additional_context_section}{interview_topic_section}{user_study_design_section}
+{additional_context_section}{interview_topic_section}{user_study_design_section}{stakeholder_groups_section}
 
 IMPORTANT: All personas MUST use the nested structure with a 'demographics' object. Goals and frustrations must be arrays.
 
@@ -58,7 +59,7 @@ PERSONA_SET_GENERATION_INTERVIEWS_ONLY_TEMPLATE = """Based on the following inte
 
 INTERVIEW DATA:
 {interviews}
-{additional_context_section}{interview_topic_section}{user_study_design_section}
+{additional_context_section}{interview_topic_section}{user_study_design_section}{stakeholder_groups_section}
 
 INSTRUCTIONS:
 - Analyze the interview transcripts to identify distinct user types, needs, and behaviors
@@ -76,7 +77,7 @@ PERSONA_SET_GENERATION_CONTEXT_ONLY_TEMPLATE = """Based on the following context
 
 CONTEXT INFORMATION:
 {context}
-{additional_context_section}{interview_topic_section}{user_study_design_section}
+{additional_context_section}{interview_topic_section}{user_study_design_section}{stakeholder_groups_section}
 
 INSTRUCTIONS:
 - Use the context information to understand the target market, user base, and domain

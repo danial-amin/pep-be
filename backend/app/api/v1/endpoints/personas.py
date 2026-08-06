@@ -110,7 +110,8 @@ async def generate_persona_set(
             include_ethical_guardrails=request.include_ethical_guardrails,
             output_format=request.output_format.value,
             document_ids=request.document_ids,
-            project_id=request.project_id
+            project_id=request.project_id,
+            stakeholder_groups=request.stakeholder_groups,
         )
 
         # Convert to response format: flatten nested persona_data for PersonaBasic

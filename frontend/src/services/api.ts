@@ -175,7 +175,8 @@ export const personasApi = {
     userStudyDesign?: string,
     includeEthicalGuardrails: boolean = true,
     outputFormat: string = 'json',
-    projectId?: number
+    projectId?: number,
+    stakeholderGroups?: string[]
   ) => {
     const response = await api.post('/personas/generate-set', {
       num_personas: numPersonas,
@@ -185,6 +186,9 @@ export const personasApi = {
       include_ethical_guardrails: includeEthicalGuardrails,
       output_format: outputFormat,
       project_id: projectId,
+      ...(stakeholderGroups && stakeholderGroups.length > 0
+        ? { stakeholder_groups: stakeholderGroups }
+        : {}),
     });
     return response.data;
   },

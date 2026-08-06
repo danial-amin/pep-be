@@ -34,6 +34,7 @@ export default function ProjectWorkflowPage() {
   const [contextDetails, setContextDetails] = useState('');
   const [interviewTopic, setInterviewTopic] = useState('');
   const [outputFormat, setOutputFormat] = useState('json');
+  const [stakeholderGroupsText, setStakeholderGroupsText] = useState('');
   const [generating, setGenerating] = useState(false);
   const [expanding, setExpanding] = useState(false);
   const [generatingImages, setGeneratingImages] = useState(false);
@@ -168,14 +169,19 @@ export default function ProjectWorkflowPage() {
     if (!projectId) return;
     setGenerating(true);
     try {
+      const stakeholderGroups = stakeholderGroupsText
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       const response = await personasApi.generateSet(
-        numPersonas,
+        stakeholderGroups.length > 0 ? stakeholderGroups.length : numPersonas,
         contextDetails || undefined,
         interviewTopic || undefined,
         undefined, // userStudyDesign - not used in simplified workflow
         true, // includeEthicalGuardrails - default to true
         outputFormat,
-        parseInt(projectId)
+        parseInt(projectId),
+        stakeholderGroups.length > 0 ? stakeholderGroups : undefined
       );
       await loadPersonaSets();
       const newSet = await personasApi.getSet(response.persona_set_id);
@@ -546,6 +552,22 @@ export default function ProjectWorkflowPage() {
                       <option value="chat">Chat</option>
                     </select>
                   </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">
+                    Stakeholder groups (optional)
+                  </label>
+                  <textarea
+                    value={stakeholderGroupsText}
+                    onChange={(e) => setStakeholderGroupsText(e.target.value)}
+                    rows={3}
+                    placeholder={"One group per line, e.g.\naffected_households\nbisp_programme_representatives\nlocal_humanitarian_workers"}
+                    className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 font-mono text-sm"
+                  />
+                  <p className="mt-1 text-xs text-stone-500">
+                    When set, generates exactly one persona per group (overrides count above).
+                    Use the corpus persona IDs when available.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">Context Details (Optional)</label>
