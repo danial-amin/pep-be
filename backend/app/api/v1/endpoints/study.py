@@ -102,6 +102,7 @@ async def get_study_personas_ordered(
     return {
         "study_slug": study.slug,
         "persona_set_id": study.persona_set_id,
+        "project_id": study.project_id,
         "persona_order": meta["persona_order"],
         "order_condition": meta.get("order_condition"),
         "order_rotation_index": meta.get("order_rotation_index"),

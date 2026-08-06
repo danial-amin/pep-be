@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Bot, LogOut, UserPlus } from 'lucide-react';
+import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Bot, LogOut, UserPlus, LayoutGrid } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
@@ -20,7 +20,7 @@ import StudyEnterPage from './pages/StudyEnterPage';
 import StudyProfilesPage from './pages/StudyProfilesPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { getActiveStudySlug } from './hooks/useStudyTracker';
+import { getActiveStudySlug, studyPath } from './hooks/useStudyTracker';
 
 function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
   const location = useLocation();
@@ -45,7 +45,7 @@ function StudyParticipantGate({ children }: { children: React.ReactNode }) {
   const studySlug = user?.study_slug || getActiveStudySlug();
   if (loading) return null;
   if (user?.is_study_participant && studySlug) {
-    return <Navigate to={`/study/${studySlug}/profiles`} replace />;
+    return <Navigate to={studyPath(studySlug, '/profiles')} replace />;
   }
   return <>{children}</>;
 }
@@ -60,6 +60,7 @@ function AppShell() {
   const isStudyParticipant = !!user?.is_study_participant;
   const studySlug = user?.study_slug || getActiveStudySlug();
   const hideMainNav = isStudyParticipant || location.pathname.startsWith('/study/');
+  const showStudyNav = isAuthenticated && !!studySlug && (isStudyParticipant || location.pathname.startsWith('/study/'));
 
   return (
     <div className="min-h-screen bg-[#f8f7f4]">
@@ -71,7 +72,7 @@ function AppShell() {
                 <Link
                   to={
                     isStudyParticipant && studySlug
-                      ? `/study/${studySlug}/profiles`
+                      ? studyPath(studySlug, '/profiles')
                       : isAuthenticated
                         ? '/projects'
                         : '/'
@@ -87,6 +88,13 @@ function AppShell() {
                     {isStudyParticipant ? 'User study' : 'Persona Generator'}
                   </span>
                 </Link>
+                {showStudyNav && studySlug && (
+                  <div className="flex items-center gap-1 overflow-x-auto">
+                    <NavLink to={studyPath(studySlug, '/profiles')} icon={LayoutGrid} label="Profiles" />
+                    <NavLink to={studyPath(studySlug, '/persona-chat')} icon={Bot} label="Chat" />
+                    <NavLink to={studyPath(studySlug, '/simulations')} icon={Play} label="Simulation" />
+                  </div>
+                )}
                 {isAuthenticated && !hideMainNav && (
                   <div className="hidden sm:flex sm:items-center sm:gap-1">
                     <NavLink to="/projects" icon={FolderOpen} label="Projects" />
@@ -139,7 +147,7 @@ function AppShell() {
             path="/"
             element={
               isStudyParticipant && studySlug ? (
-                <Navigate to={`/study/${studySlug}/profiles`} replace />
+                <Navigate to={studyPath(studySlug, '/profiles')} replace />
               ) : isAuthenticated ? (
                 <Navigate to="/projects" replace />
               ) : (
@@ -148,7 +156,14 @@ function AppShell() {
             }
           />
 
+          {/* Study participant workspace — same JWT identity (P01 / PX / …) */}
           <Route path="/study/:slug/profiles" element={<ProtectedRoute><StudyProfilesPage /></ProtectedRoute>} />
+          <Route path="/study/:slug/persona-chat" element={<ProtectedRoute><PersonaChatPage /></ProtectedRoute>} />
+          <Route path="/study/:slug/persona-chat/:personaId" element={<ProtectedRoute><PersonaChatPage /></ProtectedRoute>} />
+          <Route path="/study/:slug/simulations" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />
+          <Route path="/study/:slug/simulations/:simulationId" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />
+          <Route path="/study/:slug/simulations/:simulationId/persona-chats" element={<ProtectedRoute><SimulationPersonaChatsPage /></ProtectedRoute>} />
+          <Route path="/study/:slug/simulations/:simulationId/persona-chats/:personaId/:personaSlug" element={<ProtectedRoute><SimulationPersonaChatsPage /></ProtectedRoute>} />
 
           <Route path="/projects" element={<ProtectedRoute><StudyParticipantGate><ProjectsPage /></StudyParticipantGate></ProtectedRoute>} />
           <Route path="/projects/new" element={<ProtectedRoute><StudyParticipantGate><NewProjectPage /></StudyParticipantGate></ProtectedRoute>} />

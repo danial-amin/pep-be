@@ -83,8 +83,24 @@ api.interceptors.response.use(
         (url.includes('/auth/invites/') && url.includes('/preview'));
       if (!isAuthPublic) {
         clearAuthToken();
-        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/invite')) {
-          window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        if (typeof window !== 'undefined') {
+          const path = window.location.pathname;
+          let studySlug: string | null = null;
+          try {
+            studySlug = localStorage.getItem('pep_study_slug');
+          } catch {
+            studySlug = null;
+          }
+          if (studySlug || path.startsWith('/study/')) {
+            const slug = studySlug || path.split('/')[2];
+            if (slug) {
+              window.location.href = `/study/${slug}`;
+              return Promise.reject(error);
+            }
+          }
+          if (!path.startsWith('/login') && !path.startsWith('/invite')) {
+            window.location.href = `/login?next=${encodeURIComponent(path)}`;
+          }
         }
       }
     }
@@ -547,6 +563,7 @@ export const studyApi = {
     return response.data as {
       study_slug: string;
       persona_set_id: number;
+      project_id?: number | null;
       persona_order: number[];
       order_condition?: string | null;
       order_rotation_index?: number | null;

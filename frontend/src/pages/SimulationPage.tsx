@@ -21,7 +21,7 @@ import {
   ChevronRight,
   BarChart3
 } from 'lucide-react';
-import { simulationsApi, personasApi, API_BASE_URL } from '../services/api';
+import { simulationsApi, personasApi, API_BASE_URL, getAuthToken } from '../services/api';
 import {
   Simulation,
   SimulationMessage,
@@ -33,6 +33,8 @@ import {
   SimulationEvaluationScores,
 } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
+import { getStudyScope, setStudyScope, studyPath, useStudyTracker } from '../hooks/useStudyTracker';
+import { useAuth } from '../context/AuthContext';
 
 // Persona Avatar Component (use personaId when available so API serves from file or base64)
 function PersonaAvatar({
@@ -194,7 +196,15 @@ function SelectablePersonaCard({
 // Main Simulation Page
 export default function SimulationPage() {
   const navigate = useNavigate();
-  const { simulationId } = useParams<{ simulationId: string }>();
+  const { slug: studySlugParam, simulationId } = useParams<{
+    slug?: string;
+    simulationId?: string;
+  }>();
+  const { user } = useAuth();
+  const studySlug = studySlugParam || (user?.is_study_participant ? user.study_slug : null) || null;
+  const isStudyMode = !!studySlugParam || !!user?.is_study_participant;
+  const studyScope = getStudyScope();
+  const { track } = useStudyTracker(studySlug);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<AbortController | null>(null);
   const autoContinueRef = useRef(true);
@@ -267,8 +277,28 @@ export default function SimulationPage() {
 
   const loadPersonaSets = async () => {
     try {
-      const data = await personasApi.getAllSets();
-      setPersonaSets(data);
+      const projectId = isStudyMode ? studyScope?.projectId ?? undefined : undefined;
+      const data = await personasApi.getAllSets(projectId);
+      const scoped =
+        isStudyMode && studyScope?.personaSetId
+          ? data.filter((s: PersonaSet) => s.id === studyScope.personaSetId)
+          : data;
+      const effective = scoped.length > 0 ? scoped : data;
+      setPersonaSets(effective);
+      if (isStudyMode && effective.length > 0) {
+        const set = effective[0];
+        setExpandedSetIds(new Set([set.id]));
+        const next = new Map<number, string>();
+        set.personas.forEach((p: Persona) => next.set(p.id, ''));
+        setSelectedPersonas(next);
+        if (studySlug) {
+          setStudyScope({
+            slug: studySlug,
+            projectId: studyScope?.projectId ?? set.project_id ?? null,
+            personaSetId: set.id,
+          });
+        }
+      }
     } catch (error) {
       console.error('Failed to load persona sets:', error);
     }
@@ -276,7 +306,9 @@ export default function SimulationPage() {
 
   const loadSimulations = async () => {
     try {
-      const data = await simulationsApi.getAll();
+      const data = await simulationsApi.getAll(
+        isStudyMode ? studyScope?.projectId ?? undefined : undefined
+      );
       setSimulations(data);
     } catch (error) {
       console.error('Failed to load simulations:', error);
@@ -353,11 +385,13 @@ export default function SimulationPage() {
     
     // Use fetch with ReadableStream for better error handling and CORS support
     const abortController = new AbortController();
+    const token = getAuthToken();
     
     fetch(streamUrl, {
       signal: abortController.signal,
       headers: {
         'Accept': 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     })
       .then(async (response) => {
@@ -516,12 +550,22 @@ export default function SimulationPage() {
         participants,
         max_turns: maxTurns,
         run_until_agreement: runUntilAgreement || undefined,
-        agreement_threshold: runUntilAgreement ? agreementThreshold : undefined
+        agreement_threshold: runUntilAgreement ? agreementThreshold : undefined,
+        project_id: isStudyMode ? studyScope?.projectId ?? undefined : undefined,
       });
 
       setCurrentSimulation(simulation);
       setShowSetup(false);
-      navigate(`/simulations/${simulation.id}`);
+      track('simulation_create', {
+        simulation_id: simulation.id,
+        participant_count: participants.length,
+        project_id: studyScope?.projectId,
+      });
+      if (studySlug) {
+        navigate(studyPath(studySlug, `/simulations/${simulation.id}`));
+      } else {
+        navigate(`/simulations/${simulation.id}`);
+      }
       await loadSimulations();
     } catch (error: any) {
       alert(`Failed to create simulation: ${error.response?.data?.detail || error.message}`);
@@ -688,7 +732,7 @@ export default function SimulationPage() {
     setShowAgreementHistory(false);
     setEvaluationScores(null);
     setShowEvaluationScores(false);
-    navigate('/simulations');
+    navigate(studySlug ? studyPath(studySlug, '/simulations') : '/simulations');
   };
 
   const displayMessages =
@@ -702,17 +746,21 @@ export default function SimulationPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/personas')}
+            onClick={() =>
+              navigate(studySlug ? studyPath(studySlug, '/profiles') : '/personas')
+            }
             className="p-2 rounded-lg bg-stone-50 hover:bg-stone-100 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-stone-900" />
           </button>
           <div>
             <h2 className="text-3xl font-bold text-stone-900 mb-1 ">
-              Persona Simulation Playground
+              {isStudyMode ? 'Study simulation' : 'Persona Simulation Playground'}
             </h2>
             <p className="text-stone-600 text-lg">
-              Watch your personas collaborate and discuss towards a common goal
+              {isStudyMode
+                ? `Signed in as ${user?.participant_code || user?.name || 'participant'} — run a multi-persona discussion`
+                : 'Watch your personas collaborate and discuss towards a common goal'}
             </p>
           </div>
         </div>
@@ -743,7 +791,13 @@ export default function SimulationPage() {
                 simulations.map(sim => (
                   <div
                     key={sim.id}
-                    onClick={() => loadSimulation(sim.id)}
+                    onClick={() => {
+                      if (studySlug) {
+                        navigate(studyPath(studySlug, `/simulations/${sim.id}`));
+                      } else {
+                        void loadSimulation(sim.id);
+                      }
+                    }}
                     className={`px-4 py-3 cursor-pointer hover:bg-stone-50 transition-colors border-b border-stone-100 ${
                       currentSimulation?.id === sim.id ? 'bg-stone-100' : ''
                     }`}
@@ -1174,7 +1228,13 @@ export default function SimulationPage() {
 
                 <button
                   type="button"
-                  onClick={() => navigate(`/simulations/${currentSimulation.id}/persona-chats`)}
+                  onClick={() =>
+                    navigate(
+                      studySlug
+                        ? studyPath(studySlug, `/simulations/${currentSimulation.id}/persona-chats`)
+                        : `/simulations/${currentSimulation.id}/persona-chats`
+                    )
+                  }
                   className="px-4 py-2 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 bg-stone-100 text-stone-900 hover:bg-stone-100"
                   title="Open personas + chats view"
                 >

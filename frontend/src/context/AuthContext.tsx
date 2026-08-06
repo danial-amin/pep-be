@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { authApi, clearAuthToken, getAuthToken, setAuthToken, type AuthUser } from '../services/api';
-import { setActiveStudySlug } from '../hooks/useStudyTracker';
+import { clearStudyScope } from '../studyScope';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearAuthToken();
-    setActiveStudySlug(null);
+    clearStudyScope();
     setUser(null);
   }, []);
 

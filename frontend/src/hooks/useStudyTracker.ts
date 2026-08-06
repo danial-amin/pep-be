@@ -1,25 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { studyApi } from '../services/api';
-
-const STUDY_SLUG_KEY = 'pep_study_slug';
-
-export function getActiveStudySlug(): string | null {
-  try {
-    return localStorage.getItem(STUDY_SLUG_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setActiveStudySlug(slug: string | null) {
-  try {
-    if (slug) localStorage.setItem(STUDY_SLUG_KEY, slug);
-    else localStorage.removeItem(STUDY_SLUG_KEY);
-  } catch {
-    /* ignore */
-  }
-}
+import { getActiveStudySlug, getStudyScope } from '../studyScope';
 
 /**
  * Records study actions when a study slug is active.
@@ -47,8 +29,18 @@ export function useStudyTracker(slug?: string | null) {
     if (!activeSlug) return;
     void studyApi.recordEvent(activeSlug, 'page_view', location.pathname, {
       search: location.search,
+      study_scope: getStudyScope(),
     });
   }, [activeSlug, location.pathname, location.search]);
 
-  return { track, activeSlug };
+  return { track, activeSlug, scope: getStudyScope() };
 }
+
+export {
+  getActiveStudySlug,
+  setActiveStudySlug,
+  getStudyScope,
+  setStudyScope,
+  clearStudyScope,
+  studyPath,
+} from '../studyScope';

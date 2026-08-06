@@ -1,9 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { setAuthToken } from '../services/api';
-import { studyApi, type StudyPublicInfo } from '../services/api';
+import { setAuthToken, studyApi, type StudyPublicInfo } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { setActiveStudySlug } from '../hooks/useStudyTracker';
+import { setStudyScope } from '../hooks/useStudyTracker';
 
 export default function StudyEnterPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -52,7 +51,11 @@ export default function StudyEnterPage() {
     try {
       const result = await studyApi.enter(slug, code.trim());
       setAuthToken(result.access_token);
-      setActiveStudySlug(slug);
+      setStudyScope({
+        slug,
+        projectId: result.study.project_id ?? null,
+        personaSetId: result.study.persona_set_id,
+      });
       await refresh();
       await studyApi.recordEvent(slug, 'study_enter', `/study/${slug}`, {
         participant_code: result.participant.code,

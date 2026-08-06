@@ -22,6 +22,8 @@ import {
 } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 import PersonaProfileCard from '../components/PersonaProfileCard';
+import { getStudyScope, setStudyScope, useStudyTracker } from '../hooks/useStudyTracker';
+import { useAuth } from '../context/AuthContext';
 
 const PROJECT_STORAGE_KEY = 'persona-chat-project-id';
 const MODE_STORAGE_KEY = 'persona-chat-mode';
@@ -152,24 +154,37 @@ function ChatBubble({
 }
 
 export default function PersonaChatPage() {
-  const { personaId: personaIdParam } = useParams<{ personaId?: string }>();
+  const { slug: studySlugParam, personaId: personaIdParam } = useParams<{
+    slug?: string;
+    personaId?: string;
+  }>();
   const [searchParams] = useSearchParams();
   const projectFromUrl = searchParams.get('project');
+  const { user } = useAuth();
+  const studySlug = studySlugParam || (user?.is_study_participant ? user.study_slug : null) || null;
+  const isStudyMode = !!studySlugParam || !!user?.is_study_participant;
+  const studyScope = getStudyScope();
+  const { track } = useStudyTracker(studySlug);
 
   const [chatMode, setChatMode] = useState<ChatMode>(() => {
+    if (isStudyMode) return 'set';
     const stored = localStorage.getItem(MODE_STORAGE_KEY);
     return stored === 'set' ? 'set' : 'single';
   });
 
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(
+    isStudyMode ? studyScope?.projectId ?? null : null
+  );
   const [personaSets, setPersonaSets] = useState<PersonaSet[]>([]);
   const [loadingPersonas, setLoadingPersonas] = useState(false);
 
   const [selectedPersonaId, setSelectedPersonaId] = useState<number | null>(
     personaIdParam ? parseInt(personaIdParam, 10) : null
   );
-  const [selectedSetId, setSelectedSetId] = useState<number | null>(null);
+  const [selectedSetId, setSelectedSetId] = useState<number | null>(
+    isStudyMode ? studyScope?.personaSetId ?? null : null
+  );
 
   const [session, setSession] = useState<PersonaChatSession | null>(null);
   const [messages, setMessages] = useState<PersonaChatMessage[]>([]);
@@ -187,6 +202,29 @@ export default function PersonaChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (isStudyMode && studySlug) {
+      // Prefer study-scoped project; refresh from API so access works via study JWT
+      projectsApi
+        .getAll()
+        .then((data) => {
+          setProjects(data);
+          const preferred =
+            studyScope?.projectId && data.some((p) => p.id === studyScope.projectId)
+              ? studyScope.projectId
+              : data[0]?.id ?? null;
+          setSelectedProjectId(preferred);
+          if (preferred && studySlug) {
+            setStudyScope({
+              slug: studySlug,
+              projectId: preferred,
+              personaSetId: studyScope?.personaSetId ?? null,
+            });
+          }
+        })
+        .catch(() => setError('Failed to load study project'));
+      track('persona_chat_open', { mode: 'study' });
+      return;
+    }
     projectsApi
       .getAll()
       .then((data) => {
@@ -201,7 +239,7 @@ export default function PersonaChatPage() {
         setSelectedProjectId(initial);
       })
       .catch(() => setError('Failed to load projects'));
-  }, [projectFromUrl]);
+  }, [projectFromUrl, isStudyMode, studySlug]);
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -213,17 +251,30 @@ export default function PersonaChatPage() {
     personasApi
       .getAllSets(selectedProjectId)
       .then((sets) => {
-        setPersonaSets(sets);
-        const allIds = sets.flatMap((s: PersonaSet) => s.personas.map((p) => p.id));
-        const setIds = sets.map((s: PersonaSet) => s.id);
+        const scoped =
+          isStudyMode && studyScope?.personaSetId
+            ? sets.filter((s: PersonaSet) => s.id === studyScope.personaSetId)
+            : sets;
+        const effective = scoped.length > 0 ? scoped : sets;
+        setPersonaSets(effective);
+        const allIds = effective.flatMap((s: PersonaSet) => s.personas.map((p) => p.id));
+        const setIds = effective.map((s: PersonaSet) => s.id);
         if (selectedPersonaId && !allIds.includes(selectedPersonaId)) {
           setSelectedPersonaId(null);
         }
         if (selectedSetId && !setIds.includes(selectedSetId)) {
           setSelectedSetId(null);
         }
-        if (!selectedSetId && sets.length > 0 && chatMode === 'set') {
-          setSelectedSetId(sets[0].id);
+        const preferredSet =
+          (isStudyMode && studyScope?.personaSetId && setIds.includes(studyScope.personaSetId)
+            ? studyScope.personaSetId
+            : null) ||
+          (effective.length > 0 ? effective[0].id : null);
+        if ((!selectedSetId || isStudyMode) && preferredSet) {
+          setSelectedSetId(preferredSet);
+        }
+        if (isStudyMode) {
+          setChatMode(personaIdParam ? 'single' : 'set');
         }
       })
       .catch(() => setError('Failed to load personas for this project'))
@@ -272,6 +323,7 @@ export default function PersonaChatPage() {
       const newSession = await personaChatApi.createSession(personaId, projectId);
       setSession(newSession);
       setMessages(newSession.messages || []);
+      track('persona_chat_session_start', { mode: 'single', persona_id: personaId, project_id: projectId });
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to start chat');
     } finally {
@@ -288,6 +340,7 @@ export default function PersonaChatPage() {
       const newSession = await personaChatApi.createSetSession(setId, projectId);
       setSession(newSession);
       setMessages(newSession.messages || []);
+      track('persona_chat_session_start', { mode: 'set', persona_set_id: setId, project_id: projectId });
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to start set chat');
     } finally {
@@ -395,6 +448,11 @@ export default function PersonaChatPage() {
         created_at: new Date().toISOString(),
       }));
       setMessages((prev) => [...prev, ...assistantMsgs]);
+      track('persona_chat_message', {
+        session_id: session.id,
+        chars: userText.length,
+        replies: assistantMsgs.length,
+      });
     } catch (err: any) {
       const detail = err.response?.data?.detail || err.message || 'Failed to send message';
       const timedOut = err.code === 'ECONNABORTED';
@@ -495,9 +553,13 @@ export default function PersonaChatPage() {
             <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-3xl font-bold text-stone-900">Persona Chat</h2>
+            <h2 className="text-3xl font-bold text-stone-900">
+              {isStudyMode ? 'Study chat' : 'Persona Chat'}
+            </h2>
             <p className="text-stone-500 text-sm">
-              Chat with one persona or an entire set — answers from profile and study evidence
+              {isStudyMode
+                ? `Signed in as ${user?.participant_code || user?.name || 'participant'} — chat with the study personas`
+                : 'Chat with one persona or an entire set — answers from profile and study evidence'}
             </p>
           </div>
         </div>
@@ -549,24 +611,26 @@ export default function PersonaChatPage() {
         {/* Left picker */}
         <div className="xl:col-span-2 glass-card rounded-2xl overflow-hidden flex flex-col max-h-[70vh] xl:max-h-none">
           <div className="px-4 py-3 border-b border-stone-200 space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-stone-500 mb-1.5">Project</label>
-              <div className="relative">
-                <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 pointer-events-none" />
-                <select
-                  value={selectedProjectId ?? ''}
-                  onChange={(e) => handleProjectChange(parseInt(e.target.value, 10))}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900/20"
-                >
-                  {projects.length === 0 && <option value="">No projects</option>}
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
+            {!isStudyMode && (
+              <div>
+                <label className="block text-xs font-medium text-stone-500 mb-1.5">Project</label>
+                <div className="relative">
+                  <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 pointer-events-none" />
+                  <select
+                    value={selectedProjectId ?? ''}
+                    onChange={(e) => handleProjectChange(parseInt(e.target.value, 10))}
+                    className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900/20"
+                  >
+                    {projects.length === 0 && <option value="">No projects</option>}
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
             <h3 className="text-sm font-semibold text-stone-900">
               {chatMode === 'single' ? 'Personas' : 'Persona sets'}
               {chatMode === 'single' && projectPersonas.length > 0 && (

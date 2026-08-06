@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, LayoutGrid, LogOut, Maximize2, Save, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bot, LayoutGrid, LogOut, Maximize2, Play, Save, X } from 'lucide-react';
 import PersonaProfileCard from '../components/PersonaProfileCard';
-import { studyApi } from '../services/api';
+import { studyApi, clearAuthToken } from '../services/api';
 import { Persona } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { setActiveStudySlug, useStudyTracker } from '../hooks/useStudyTracker';
+import { setStudyScope, studyPath, useStudyTracker, clearStudyScope } from '../hooks/useStudyTracker';
 import { usePersonaViewTimer } from '../hooks/usePersonaViewTimer';
-import { clearAuthToken } from '../services/api';
 
 type StudyPersona = Persona & { stakeholder_group?: string | null };
 
@@ -29,7 +28,9 @@ export default function StudyProfilesPage() {
   const canReorder = !!user?.is_admin && !hasRotations;
 
   useEffect(() => {
-    if (slug) setActiveStudySlug(slug);
+    if (slug) {
+      setStudyScope({ slug });
+    }
   }, [slug]);
 
   useEffect(() => {
@@ -55,6 +56,13 @@ export default function StudyProfilesPage() {
         setOrderCondition(data.order_condition || null);
         setHasRotations(!!data.has_order_rotations);
         setOrderDirty(false);
+        if (slug) {
+          setStudyScope({
+            slug,
+            projectId: data.project_id ?? null,
+            personaSetId: data.persona_set_id,
+          });
+        }
         track('profiles_loaded', {
           count: data.personas.length,
           order_condition: data.order_condition,
@@ -135,7 +143,7 @@ export default function StudyProfilesPage() {
 
   const handleLogout = () => {
     track('study_logout');
-    setActiveStudySlug(null);
+    clearStudyScope();
     clearAuthToken();
     logout();
     navigate(slug ? `/study/${slug}` : '/login');
@@ -189,6 +197,32 @@ export default function StudyProfilesPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {slug && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    track('nav_chat');
+                    navigate(studyPath(slug, '/persona-chat'));
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg bg-stone-900 px-3 py-2 text-sm text-white"
+                >
+                  <Bot className="h-4 w-4" />
+                  Chat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    track('nav_simulation');
+                    navigate(studyPath(slug, '/simulations'));
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg bg-stone-900 px-3 py-2 text-sm text-white"
+                >
+                  <Play className="h-4 w-4" />
+                  Simulation
+                </button>
+              </>
+            )}
             {canReorder && (
               <button
                 type="button"

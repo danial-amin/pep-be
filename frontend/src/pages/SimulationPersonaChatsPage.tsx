@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, MessageSquare, Users } from 'lucide-react';
 import { personasApi, simulationsApi } from '../services/api';
 import { Persona, Simulation, SimulationMessage } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
+import { studyPath } from '../hooks/useStudyTracker';
 
 function PersonaAvatar({
   name,
@@ -51,7 +52,16 @@ const isHumanMessage = (m: SimulationMessage) =>
 
 export default function SimulationPersonaChatsPage() {
   const navigate = useNavigate();
-  const { simulationId, personaId } = useParams<{ simulationId: string; personaId?: string; personaSlug?: string }>();
+  const { slug: studySlug, simulationId, personaId } = useParams<{
+    slug?: string;
+    simulationId: string;
+    personaId?: string;
+    personaSlug?: string;
+  }>();
+
+  const simBase = studySlug
+    ? studyPath(studySlug, `/simulations/${simulationId}`)
+    : `/simulations/${simulationId}`;
 
   const [simulation, setSimulation] = useState<Simulation | null>(null);
   const [loadingSimulation, setLoadingSimulation] = useState(false);
@@ -104,7 +114,7 @@ export default function SimulationPersonaChatsPage() {
         if (simulationId) {
           const slug = slugify(p.persona_data?.name || p.name || 'persona');
           navigate(
-            `/simulations/${simulationId}/persona-chats/${selectedPersonaId}/${encodeURIComponent(slug)}`,
+            `${simBase}/persona-chats/${selectedPersonaId}/${encodeURIComponent(slug)}`,
             { replace: true }
           );
         }
@@ -176,7 +186,7 @@ export default function SimulationPersonaChatsPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4 min-w-0">
           <button
-            onClick={() => navigate(`/simulations/${simulation.id}`)}
+            onClick={() => navigate(studySlug ? studyPath(studySlug, `/simulations/${simulation.id}`) : `/simulations/${simulation.id}`)}
             className="p-2 rounded-lg bg-stone-50 hover:bg-stone-100 transition-colors"
             title="Back to simulation"
           >

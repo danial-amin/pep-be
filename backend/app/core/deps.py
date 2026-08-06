@@ -1,6 +1,8 @@
 """
 Auth dependencies: current user / admin checks.
 """
+from typing import Any, Dict, Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,14 @@ from app.core.security import decode_access_token
 from app.models.user import User
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def decode_token_claims(
+    credentials: Optional[HTTPAuthorizationCredentials],
+) -> Dict[str, Any]:
+    if not credentials or not credentials.credentials:
+        return {}
+    return decode_access_token(credentials.credentials) or {}
 
 
 async def get_current_user(
@@ -59,3 +69,23 @@ async def get_current_admin(user: User = Depends(get_current_user)) -> User:
             detail="Admin access required",
         )
     return user
+
+
+async def get_study_project_id(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[int]:
+    """If the JWT is a study participant session, return that study's project_id."""
+    payload = decode_token_claims(credentials)
+    if not payload.get("is_study_participant"):
+        return None
+    study_id = payload.get("study_id")
+    if not study_id:
+        return None
+    from app.models.study import Study
+
+    result = await db.execute(select(Study).where(Study.id == int(study_id)))
+    study = result.scalar_one_or_none()
+    if not study or not study.enabled:
+        return None
+    return study.project_id
