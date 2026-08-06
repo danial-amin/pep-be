@@ -22,6 +22,10 @@ export type AuthUser = {
   is_admin: boolean;
   is_active: boolean;
   created_at: string;
+  is_study_participant?: boolean;
+  study_id?: number | null;
+  study_slug?: string | null;
+  participant_code?: string | null;
 };
 
 export type InviteRecord = {
@@ -510,6 +514,73 @@ export const analyticsApi = {
   getProfileViews: async (personaSetId: number) => {
     const response = await api.get(`/analytics/persona-sets/${personaSetId}/profile-views`);
     return response.data;
+  },
+};
+
+export type StudyPublicInfo = {
+  slug: string;
+  name: string;
+  enabled: boolean;
+  welcome_text?: string | null;
+  persona_set_id: number;
+  project_id?: number | null;
+};
+
+export const studyApi = {
+  getPublic: async (slug: string): Promise<StudyPublicInfo> => {
+    const response = await api.get(`/study/${slug}`);
+    return response.data;
+  },
+
+  enter: async (slug: string, code: string) => {
+    const response = await api.post(`/study/${slug}/enter`, { code });
+    return response.data as {
+      access_token: string;
+      study: StudyPublicInfo;
+      participant: { id: number; code: string; display_name?: string | null };
+      user: AuthUser;
+    };
+  },
+
+  getPersonas: async (slug: string) => {
+    const response = await api.get(`/study/${slug}/personas`);
+    return response.data as {
+      study_slug: string;
+      persona_set_id: number;
+      persona_order: number[];
+      personas: Array<{
+        id: number;
+        persona_set_id: number;
+        name: string;
+        persona_data: Record<string, any>;
+        image_url?: string | null;
+        stakeholder_group?: string | null;
+      }>;
+    };
+  },
+
+  updatePersonaOrder: async (slug: string, personaOrder: number[]) => {
+    const response = await api.put(`/study/${slug}/persona-order`, {
+      persona_order: personaOrder,
+    });
+    return response.data;
+  },
+
+  recordEvent: async (
+    slug: string,
+    eventType: string,
+    path?: string,
+    payload?: Record<string, unknown>
+  ) => {
+    try {
+      await api.post(`/study/${slug}/events`, {
+        event_type: eventType,
+        path,
+        payload,
+      });
+    } catch {
+      /* best-effort instrumentation */
+    }
   },
 };
 

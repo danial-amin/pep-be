@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     judge,
     persona_chats,
     auth,
+    study,
 )
 from app.core.deps import get_current_user
 
@@ -36,6 +37,7 @@ async def api_root():
             "simulations": "/api/v1/simulations",
             "judge": "/api/v1/judge",
             "persona_chats": "/api/v1/persona-chats",
+            "study": "/api/v1/study",
         },
     }
 
@@ -47,6 +49,9 @@ api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 # Keep this GET public; all other persona routes stay protected.
 api_router.include_router(personas.public_router, prefix="/personas", tags=["personas"])
 
+# Study public entry (participant code, no password)
+api_router.include_router(study.public_router, prefix="/study", tags=["study"])
+
 # Everything else requires authentication
 protected = APIRouter(dependencies=[Depends(get_current_user)])
 protected.include_router(projects.router, prefix="/projects", tags=["projects"])
@@ -57,4 +62,5 @@ protected.include_router(analytics.router, prefix="/analytics", tags=["analytics
 protected.include_router(simulations.router, prefix="/simulations", tags=["simulations"])
 protected.include_router(judge.router, prefix="/judge", tags=["judge"])
 protected.include_router(persona_chats.router, prefix="/persona-chats", tags=["persona-chats"])
+protected.include_router(study.router, prefix="/study", tags=["study"])
 api_router.include_router(protected)

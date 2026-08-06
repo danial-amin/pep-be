@@ -6,11 +6,13 @@ Protected: me
 Admin: create/list invites
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, get_current_admin
+from app.core.deps import get_current_user, get_current_admin, bearer_scheme
+from app.core.security import decode_access_token
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -48,8 +50,19 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(user: User = Depends(get_current_user)):
-    return UserResponse.model_validate(user)
+async def me(
+    user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    data = UserResponse.model_validate(user)
+    if credentials and credentials.credentials:
+        payload = decode_access_token(credentials.credentials) or {}
+        if payload.get("is_study_participant"):
+            data.is_study_participant = True
+            data.study_id = payload.get("study_id")
+            data.study_slug = payload.get("study_slug")
+            data.participant_code = payload.get("participant_code")
+    return data
 
 
 @router.get("/invites/{token}/preview", response_model=InvitePreviewResponse)

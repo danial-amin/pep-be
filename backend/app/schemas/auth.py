@@ -24,6 +24,11 @@ class UserResponse(BaseModel):
     is_admin: bool
     is_active: bool
     created_at: datetime
+    # Present when the session was opened via study enter (P01, …)
+    is_study_participant: bool = False
+    study_id: Optional[int] = None
+    study_slug: Optional[str] = None
+    participant_code: Optional[str] = None
 
     class Config:
         from_attributes = True

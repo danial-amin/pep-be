@@ -16,8 +16,11 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import InvitesPage from './pages/InvitesPage';
+import StudyEnterPage from './pages/StudyEnterPage';
+import StudyProfilesPage from './pages/StudyProfilesPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { getActiveStudySlug } from './hooks/useStudyTracker';
 
 function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
   const location = useLocation();
@@ -37,11 +40,26 @@ function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementTyp
   );
 }
 
+function StudyParticipantGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  const studySlug = user?.study_slug || getActiveStudySlug();
+  if (loading) return null;
+  if (user?.is_study_participant && studySlug) {
+    return <Navigate to={`/study/${studySlug}/profiles`} replace />;
+  }
+  return <>{children}</>;
+}
+
 function AppShell() {
   const location = useLocation();
   const { user, logout, isAuthenticated, loading } = useAuth();
   const isAuthScreen =
-    location.pathname.startsWith('/login') || location.pathname.startsWith('/invite');
+    location.pathname.startsWith('/login') ||
+    location.pathname.startsWith('/invite') ||
+    /^\/study\/[^/]+$/.test(location.pathname);
+  const isStudyParticipant = !!user?.is_study_participant;
+  const studySlug = user?.study_slug || getActiveStudySlug();
+  const hideMainNav = isStudyParticipant || location.pathname.startsWith('/study/');
 
   return (
     <div className="min-h-screen bg-[#f8f7f4]">
@@ -50,15 +68,26 @@ function AppShell() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-14">
               <div className="flex items-center gap-6">
-                <Link to={isAuthenticated ? '/projects' : '/'} className="flex-shrink-0 flex items-center gap-2.5 group">
+                <Link
+                  to={
+                    isStudyParticipant && studySlug
+                      ? `/study/${studySlug}/profiles`
+                      : isAuthenticated
+                        ? '/projects'
+                        : '/'
+                  }
+                  className="flex-shrink-0 flex items-center gap-2.5 group"
+                >
                   <div className="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center group-hover:bg-stone-800 transition-colors">
                     <span className="text-white text-xs font-bold tracking-tight">P</span>
                   </div>
                   <span className="text-sm font-semibold text-stone-900 group-hover:text-stone-800 transition-colors">PEP</span>
                   <span className="text-stone-300 text-sm">|</span>
-                  <span className="text-sm text-stone-400 font-normal group-hover:text-stone-500 transition-colors">Persona Generator</span>
+                  <span className="text-sm text-stone-400 font-normal group-hover:text-stone-500 transition-colors">
+                    {isStudyParticipant ? 'User study' : 'Persona Generator'}
+                  </span>
                 </Link>
-                {isAuthenticated && (
+                {isAuthenticated && !hideMainNav && (
                   <div className="hidden sm:flex sm:items-center sm:gap-1">
                     <NavLink to="/projects" icon={FolderOpen} label="Projects" />
                     <NavLink to="/documents" icon={FileText} label="Documents" />
@@ -75,7 +104,7 @@ function AppShell() {
                 {!loading && isAuthenticated && user && (
                   <>
                     <span className="hidden sm:inline text-xs text-stone-500 truncate max-w-[160px]" title={user.email}>
-                      {user.name}
+                      {user.participant_code || user.name}
                     </span>
                     <button
                       type="button"
@@ -83,7 +112,7 @@ function AppShell() {
                       className="inline-flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-900 px-2 py-1.5 rounded-lg hover:bg-stone-50"
                     >
                       <LogOut className="h-3.5 w-3.5" />
-                      Sign out
+                      {isStudyParticipant ? 'End' : 'Sign out'}
                     </button>
                   </>
                 )}
@@ -105,25 +134,39 @@ function AppShell() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/invite/:token" element={<AcceptInvitePage />} />
-          <Route path="/" element={isAuthenticated ? <Navigate to="/projects" replace /> : <LandingPage />} />
+          <Route path="/study/:slug" element={<StudyEnterPage />} />
+          <Route
+            path="/"
+            element={
+              isStudyParticipant && studySlug ? (
+                <Navigate to={`/study/${studySlug}/profiles`} replace />
+              ) : isAuthenticated ? (
+                <Navigate to="/projects" replace />
+              ) : (
+                <LandingPage />
+              )
+            }
+          />
 
-          <Route path="/projects" element={<ProtectedRoute><ProjectsPage /></ProtectedRoute>} />
-          <Route path="/projects/new" element={<ProtectedRoute><NewProjectPage /></ProtectedRoute>} />
-          <Route path="/projects/:projectId/workflow" element={<ProtectedRoute><ProjectWorkflowPage /></ProtectedRoute>} />
-          <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
-          <Route path="/personas" element={<ProtectedRoute><PersonasPage /></ProtectedRoute>} />
-          <Route path="/personas/:setId/profiles" element={<ProtectedRoute><PersonaSetProfilesPage /></ProtectedRoute>} />
-          <Route path="/personas/:setId" element={<ProtectedRoute><PersonaDetailPage /></ProtectedRoute>} />
-          <Route path="/personas/:setId/:personaId" element={<ProtectedRoute><PersonaDetailPage /></ProtectedRoute>} />
-          <Route path="/simulations" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />
-          <Route path="/simulations/:simulationId" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />
-          <Route path="/simulations/:simulationId/persona-chats" element={<ProtectedRoute><SimulationPersonaChatsPage /></ProtectedRoute>} />
-          <Route path="/simulations/:simulationId/persona-chats/:personaId/:personaSlug" element={<ProtectedRoute><SimulationPersonaChatsPage /></ProtectedRoute>} />
-          <Route path="/persona-chat" element={<ProtectedRoute><PersonaChatPage /></ProtectedRoute>} />
-          <Route path="/persona-chat/:personaId" element={<ProtectedRoute><PersonaChatPage /></ProtectedRoute>} />
-          <Route path="/prompts" element={<ProtectedRoute><PromptsPage /></ProtectedRoute>} />
-          <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-          <Route path="/invites" element={<ProtectedRoute><InvitesPage /></ProtectedRoute>} />
+          <Route path="/study/:slug/profiles" element={<ProtectedRoute><StudyProfilesPage /></ProtectedRoute>} />
+
+          <Route path="/projects" element={<ProtectedRoute><StudyParticipantGate><ProjectsPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/projects/new" element={<ProtectedRoute><StudyParticipantGate><NewProjectPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/projects/:projectId/workflow" element={<ProtectedRoute><StudyParticipantGate><ProjectWorkflowPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/documents" element={<ProtectedRoute><StudyParticipantGate><DocumentsPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/personas" element={<ProtectedRoute><StudyParticipantGate><PersonasPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/personas/:setId/profiles" element={<ProtectedRoute><StudyParticipantGate><PersonaSetProfilesPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/personas/:setId" element={<ProtectedRoute><StudyParticipantGate><PersonaDetailPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/personas/:setId/:personaId" element={<ProtectedRoute><StudyParticipantGate><PersonaDetailPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/simulations" element={<ProtectedRoute><StudyParticipantGate><SimulationPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/simulations/:simulationId" element={<ProtectedRoute><StudyParticipantGate><SimulationPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/simulations/:simulationId/persona-chats" element={<ProtectedRoute><StudyParticipantGate><SimulationPersonaChatsPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/simulations/:simulationId/persona-chats/:personaId/:personaSlug" element={<ProtectedRoute><StudyParticipantGate><SimulationPersonaChatsPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/persona-chat" element={<ProtectedRoute><StudyParticipantGate><PersonaChatPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/persona-chat/:personaId" element={<ProtectedRoute><StudyParticipantGate><PersonaChatPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/prompts" element={<ProtectedRoute><StudyParticipantGate><PromptsPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><StudyParticipantGate><ReportsPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/invites" element={<ProtectedRoute><StudyParticipantGate><InvitesPage /></StudyParticipantGate></ProtectedRoute>} />
         </Routes>
       </main>
     </div>

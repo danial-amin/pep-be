@@ -377,6 +377,62 @@ async def lifespan(app: FastAPI):
                         CREATE INDEX ix_persona_profile_views_persona_id ON persona_profile_views(persona_id);
                         CREATE INDEX ix_persona_profile_views_view_type ON persona_profile_views(view_type);
                     END IF;
+
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='studies') THEN
+                        CREATE TABLE studies (
+                            id SERIAL PRIMARY KEY,
+                            slug VARCHAR(64) NOT NULL,
+                            name VARCHAR(255) NOT NULL,
+                            enabled BOOLEAN NOT NULL DEFAULT true,
+                            project_id INTEGER REFERENCES projects(id),
+                            persona_set_id INTEGER NOT NULL REFERENCES persona_sets(id),
+                            persona_order JSONB,
+                            allow_open_codes BOOLEAN NOT NULL DEFAULT true,
+                            max_participants INTEGER NOT NULL DEFAULT 40,
+                            welcome_text TEXT,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                            updated_at TIMESTAMP WITH TIME ZONE
+                        );
+                        CREATE UNIQUE INDEX ix_studies_slug ON studies(slug);
+                        CREATE INDEX ix_studies_id ON studies(id);
+                        CREATE INDEX ix_studies_project_id ON studies(project_id);
+                        CREATE INDEX ix_studies_persona_set_id ON studies(persona_set_id);
+                    END IF;
+
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='study_participants') THEN
+                        CREATE TABLE study_participants (
+                            id SERIAL PRIMARY KEY,
+                            study_id INTEGER NOT NULL REFERENCES studies(id),
+                            code VARCHAR(32) NOT NULL,
+                            display_name VARCHAR(255),
+                            user_id INTEGER REFERENCES users(id),
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                            last_seen_at TIMESTAMP WITH TIME ZONE,
+                            CONSTRAINT uq_study_participant_code UNIQUE (study_id, code)
+                        );
+                        CREATE INDEX ix_study_participants_id ON study_participants(id);
+                        CREATE INDEX ix_study_participants_study_id ON study_participants(study_id);
+                        CREATE INDEX ix_study_participants_code ON study_participants(code);
+                        CREATE INDEX ix_study_participants_user_id ON study_participants(user_id);
+                    END IF;
+
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='study_events') THEN
+                        CREATE TABLE study_events (
+                            id SERIAL PRIMARY KEY,
+                            study_id INTEGER NOT NULL REFERENCES studies(id),
+                            participant_id INTEGER REFERENCES study_participants(id),
+                            user_id INTEGER REFERENCES users(id),
+                            event_type VARCHAR(64) NOT NULL,
+                            path VARCHAR(512),
+                            payload JSONB,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+                        );
+                        CREATE INDEX ix_study_events_id ON study_events(id);
+                        CREATE INDEX ix_study_events_study_id ON study_events(study_id);
+                        CREATE INDEX ix_study_events_participant_id ON study_events(participant_id);
+                        CREATE INDEX ix_study_events_event_type ON study_events(event_type);
+                        CREATE INDEX ix_study_events_created_at ON study_events(created_at);
+                    END IF;
                 END $$;
             """))
         except Exception as e:
