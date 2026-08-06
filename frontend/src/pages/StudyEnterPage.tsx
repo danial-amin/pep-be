@@ -99,7 +99,9 @@ export default function StudyEnterPage() {
               autoComplete="off"
               className="w-full px-4 py-3 rounded-xl border border-stone-200 text-stone-900 text-lg tracking-wider font-mono"
             />
-            <p className="mt-1.5 text-xs text-stone-500">Example: P01, P02, P03…</p>
+            <p className="mt-1.5 text-xs text-stone-500">
+              Participants: P01, P02, P03… · Test: PX (or PX1–PX6 for each order)
+            </p>
           </div>
           {error && (
             <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">

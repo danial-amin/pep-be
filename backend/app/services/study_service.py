@@ -20,6 +20,8 @@ from app.schemas.study import StudyEnterResponse, StudyParticipantInfo, StudyPub
 
 
 _CODE_RE = re.compile(r"^P\d{1,3}$", re.IGNORECASE)
+# Researcher / pilot test codes: PX (default order) or PX1…PX6 (specific rotation)
+_TEST_CODE_RE = re.compile(r"^PX([1-6])?$", re.IGNORECASE)
 
 # Short labels for logging / UI (stakeholder_group → study condition code)
 GROUP_LABELS = {
@@ -33,18 +35,33 @@ def normalize_participant_code(code: str) -> str:
     raw = (code or "").strip().upper()
     if not raw:
         raise ValueError("Participant code is required")
+    # Test codes: PX, PX1…PX6
+    test_m = _TEST_CODE_RE.match(raw)
+    if test_m:
+        return raw if raw.startswith("PX") else f"PX{test_m.group(1) or ''}"
     # Accept p01 / P01 / 01 → P01
     if raw.isdigit():
         raw = f"P{int(raw):02d}"
     elif raw.startswith("P") and raw[1:].isdigit():
         raw = f"P{int(raw[1:]):02d}"
     if not _CODE_RE.match(raw):
-        raise ValueError("Use a participant code like P01, P02, …")
+        raise ValueError("Use a participant code like P01, P02, … (or PX to test)")
     return raw
+
+
+def is_test_participant_code(code: str) -> bool:
+    try:
+        return bool(_TEST_CODE_RE.match(normalize_participant_code(code)))
+    except ValueError:
+        return False
 
 
 def participant_number(code: str) -> int:
     norm = normalize_participant_code(code)
+    if is_test_participant_code(norm):
+        # PX → 1 (first rotation); PX3 → 3
+        suffix = norm[2:]
+        return int(suffix) if suffix.isdigit() else 1
     return int(norm[1:])
 
 
@@ -89,6 +106,7 @@ class StudyService:
             raise ValueError("Study not found or disabled")
 
         norm = normalize_participant_code(code)
+        is_test = is_test_participant_code(norm)
 
         result = await session.execute(
             select(StudyParticipant).where(
@@ -101,17 +119,22 @@ class StudyService:
         if not participant:
             if not study.allow_open_codes:
                 raise ValueError("Unknown participant code")
-            count = (
-                await session.execute(
-                    select(StudyParticipant).where(StudyParticipant.study_id == study.id)
+            # Test codes (PX / PX1…) do not consume the participant limit
+            if not is_test:
+                real_codes = (
+                    await session.execute(
+                        select(StudyParticipant).where(StudyParticipant.study_id == study.id)
+                    )
+                ).scalars().all()
+                real_count = sum(
+                    1 for p in real_codes if not is_test_participant_code(p.code)
                 )
-            ).scalars().all()
-            if len(count) >= (study.max_participants or 40):
-                raise ValueError("This study has reached its participant limit")
+                if real_count >= (study.max_participants or 40):
+                    raise ValueError("This study has reached its participant limit")
             participant = StudyParticipant(
                 study_id=study.id,
                 code=norm,
-                display_name=norm,
+                display_name=f"{norm} (test)" if is_test else norm,
             )
             session.add(participant)
             await session.flush()
@@ -132,7 +155,7 @@ class StudyService:
             else:
                 user = User(
                     email=email,
-                    name=f"Study {norm}",
+                    name=f"Study {norm}" + (" (test)" if is_test else ""),
                     hashed_password=hash_password(secrets.token_urlsafe(24)),
                     is_admin=False,
                     is_active=True,
@@ -150,6 +173,7 @@ class StudyService:
                 "email": user.email,
                 "is_admin": False,
                 "is_study_participant": True,
+                "is_test_participant": is_test,
                 "study_id": study.id,
                 "study_slug": study.slug,
                 "participant_id": participant.id,
@@ -175,6 +199,7 @@ class StudyService:
                 "is_admin": False,
                 "is_active": True,
                 "is_study_participant": True,
+                "is_test_participant": is_test,
                 "study_id": study.id,
                 "study_slug": study.slug,
                 "participant_code": participant.code,
