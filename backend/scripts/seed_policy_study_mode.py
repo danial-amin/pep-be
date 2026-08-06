@@ -91,6 +91,42 @@ async def main() -> None:
         if chosen is None:
             chosen = sets[0]
 
+        # Backfill stakeholder_group when the LLM omitted it.
+        # Prefer persona_00N ↔ generation_config.stakeholder_groups[N-1],
+        # then fall back to content heuristics.
+        cfg_groups = list((chosen.generation_config or {}).get("stakeholder_groups") or [])
+        heuristics = [
+            (AH, ("flood-affected", "community member navigating", "mother of", "household")),
+            (BISP, ("bisp", "programme official", "nser", "social protection")),
+            (HW, ("ngo", "humanitarian", "on the ground", "local worker", "community needs")),
+        ]
+        for p in chosen.personas:
+            data = dict(p.persona_data or {})
+            if data.get("stakeholder_group") in {AH, HW, BISP}:
+                continue
+            assigned = None
+            pid = str(data.get("persona_id") or "")
+            if cfg_groups and pid.startswith("persona_"):
+                try:
+                    idx = int(pid.split("_")[1]) - 1
+                    if 0 <= idx < len(cfg_groups):
+                        assigned = cfg_groups[idx]
+                except (ValueError, IndexError):
+                    assigned = None
+            if not assigned:
+                blob = " ".join(
+                    str(data.get(k) or "")
+                    for k in ("tagline", "background", "name")
+                ).lower()
+                for group, needles in heuristics:
+                    if any(n in blob for n in needles):
+                        assigned = group
+                        break
+            if assigned:
+                data["stakeholder_group"] = assigned
+                p.persona_data = data
+                logger.info("Backfilled persona %s → %s", p.id, assigned)
+
         by_group = {
             (p.persona_data or {}).get("stakeholder_group"): p.id
             for p in chosen.personas
