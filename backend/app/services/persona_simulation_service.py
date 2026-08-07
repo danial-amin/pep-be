@@ -213,8 +213,10 @@ YOUR FRUSTRATIONS AND PAIN POINTS:
 CONVERSATION GUIDELINES:
 - Respond authentically as this persona, drawing from your background, goals, and frustrations
 - Share one focused perspective per turn — one concrete detail beats a long essay
-- Address at least one other participant by name in every turn
-- Agree, disagree, or qualify — but always take a clear position
+- Do NOT spend the turn summarizing or paraphrasing what others just said
+- Advance the discussion: add a new stake, constraint, example, risk, or concrete option
+- Challenge a real tension when you disagree; do not politely restate common ground
+- Naming another participant is optional — only do it when you challenge or build on a specific claim of theirs
 - If you have expertise relevant to the topic, mention it briefly
 - Express frustrations when relevant, in one tight sentence if possible
 - NEVER adopt another participant's communication style — remain distinctly yourself
@@ -244,6 +246,18 @@ facilitator's intervention.
     # Turn prompt selection
     # ──────────────────────────────────────────────────────────────────────────
 
+    def _discussion_phase(self, completed_before: int, max_turns: int) -> str:
+        """Map progress through the run to a phase that reduces circular mid-talk."""
+        # Opening turns use the blind prompt; final round uses the closing prompt.
+        # Phases apply only to middle continues.
+        usable = max(1, max_turns - 1)  # rounds before the designated final round
+        progress = completed_before / usable
+        if progress < 0.34:
+            return "challenge"
+        if progress < 0.67:
+            return "propose"
+        return "decide"
+
     def _build_turn_prompt(
         self,
         simulation: Simulation,
@@ -252,6 +266,7 @@ facilitator's intervention.
         last_facilitator_content: Optional[str],
         other_participant_names: List[str],
         is_final_round: bool,
+        completed_before: int = 0,
     ) -> str:
         """
         Return the user-turn prompt appropriate for the current moment.
@@ -261,14 +276,9 @@ facilitator's intervention.
           Final round: closing declaration — agent states final position and
             accounts for any change.
           Facilitator intervention: acknowledgement required.
-          All other turns: continue prompt with addressee and stance
-            accountability instructions.
+          Mid turns: phase prompts (challenge → propose → decide) that require
+            new content instead of circling each other's points.
         """
-        addressee_str = (
-            f"Address at least one of these participants by name: {', '.join(other_participant_names)}."
-            if other_participant_names else ""
-        )
-
         goal_context_block = ""
         if simulation.goal_context and str(simulation.goal_context).strip():
             goal_context_block = str(simulation.goal_context).strip() + "\n\n"
@@ -289,7 +299,7 @@ Name one stance you support and one you oppose, each with one short reason. {_SI
 If your view has changed from what you said at the start, name specifically
 which argument changed your mind. If your view has not changed, say so and
 explain why the discussion did not shift your position.
-{addressee_str}
+End with one concrete priority or next step you would insist on.
 {_SIMULATION_REPLY_LENGTH}"""
 
         # ── Facilitator intervention ──────────────────────────────────────────
@@ -297,18 +307,48 @@ explain why the discussion did not shift your position.
             return f"""The facilitator has just said: "{last_facilitator_content}"
 
 Respond directly to this. Let it change the direction of your reply.
-{addressee_str}
+Bring in your own stake — do not only acknowledge the facilitator.
 {_SIMULATION_REPLY_LENGTH}"""
 
-        # ── Standard continue turn ────────────────────────────────────────────
+        # ── Standard continue turn (phased) ───────────────────────────────────
         facilitator_note = ""
         if last_facilitator_content:
             facilitator_note = f'The facilitator recently said: "{last_facilitator_content}" — keep this in mind.\n\n'
 
-        return f"""{facilitator_note}Continue the discussion. {addressee_str}
-Respond to what has been said. Agree, disagree, or qualify — but take a clear
-position. If you are changing your view from earlier, say so explicitly and
-state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
+        phase = self._discussion_phase(completed_before, simulation.max_turns or 10)
+        names_hint = (
+            f"Other participants: {', '.join(other_participant_names)}."
+            if other_participant_names
+            else ""
+        )
+
+        anti_circle = (
+            "Do not summarize or politely rephrase what was just said. "
+            "Add something new from your perspective."
+        )
+
+        if phase == "challenge":
+            phase_instruction = (
+                "Push on a real tension. Name a conflict, risk, or non-negotiable "
+                "that others have not fully faced yet."
+            )
+        elif phase == "propose":
+            phase_instruction = (
+                "Propose one concrete option, tradeoff, or design/policy choice. "
+                "Say what you would accept and what you would refuse."
+            )
+        else:
+            phase_instruction = (
+                "Move toward a decision. State your top priority and one thing "
+                "you will not concede. If helpful, name who you need to convince."
+            )
+
+        return f"""{facilitator_note}Continue the discussion on: {simulation.goal}
+{names_hint}
+{anti_circle}
+{phase_instruction}
+If you change your earlier view, say so explicitly and name what persuaded you.
+{_SIMULATION_REPLY_LENGTH}"""
 
     # ──────────────────────────────────────────────────────────────────────────
     # RAG grounding
@@ -525,10 +565,14 @@ state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
             last_facilitator_content=last_facilitator_content,
             other_participant_names=other_names,
             is_final_round=is_final_round,
+            completed_before=completed_before,
         )
         conversation_context.append({"role": "user", "content": turn_prompt})
 
-        temperature = 0.65 if is_last_facilitator else 0.85
+        temperature = 0.65 if is_last_facilitator else 0.9
+        # Stronger anti-repetition on mid turns; slightly softer on opening/final
+        frequency_penalty = 0.25 if (is_first_turn_for_agent or is_final_round) else 0.55
+        presence_penalty = 0.25 if (is_first_turn_for_agent or is_final_round) else 0.45
 
         try:
             response = await self.client.chat.completions.create(
@@ -539,8 +583,8 @@ state the argument that persuaded you. {_SIMULATION_REPLY_LENGTH}"""
                 ],
                 temperature=temperature,
                 max_tokens=self._max_output_tokens(),
-                presence_penalty=0.3,
-                frequency_penalty=0.3,
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty,
             )
 
             content = response.choices[0].message.content
@@ -939,10 +983,13 @@ Respond in JSON format:
             last_facilitator_content=last_facilitator_content,
             other_participant_names=other_names,
             is_final_round=is_final_round,
+            completed_before=completed_before,
         )
         conversation_context.append({"role": "user", "content": turn_prompt})
 
-        temperature = 0.65 if is_last_facilitator else 0.85
+        temperature = 0.65 if is_last_facilitator else 0.9
+        frequency_penalty = 0.25 if (is_first_turn_for_agent or is_final_round) else 0.55
+        presence_penalty = 0.25 if (is_first_turn_for_agent or is_final_round) else 0.45
         full_content = ""
 
         try:
@@ -954,6 +1001,8 @@ Respond in JSON format:
                 ],
                 temperature=temperature,
                 max_tokens=self._max_output_tokens(),
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty,
                 stream=True,
             )
 
