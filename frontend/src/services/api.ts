@@ -80,27 +80,26 @@ api.interceptors.response.use(
       const isAuthPublic =
         url.includes('/auth/login') ||
         url.includes('/auth/accept-invite') ||
-        (url.includes('/auth/invites/') && url.includes('/preview'));
+        (url.includes('/auth/invites/') && url.includes('/preview')) ||
+        url.includes('/study/');
       if (!isAuthPublic) {
         clearAuthToken();
         if (typeof window !== 'undefined') {
           const path = window.location.pathname;
+          if (path.startsWith('/login') || path.startsWith('/invite')) {
+            return Promise.reject(error);
+          }
           let studySlug: string | null = null;
           try {
             studySlug = localStorage.getItem('pep_study_slug');
           } catch {
             studySlug = null;
           }
-          if (studySlug || path.startsWith('/study/')) {
-            const slug = studySlug || path.split('/')[2];
-            if (slug) {
-              window.location.href = `/study/${slug}`;
-              return Promise.reject(error);
-            }
+          if (!studySlug && path.startsWith('/study/')) {
+            studySlug = path.split('/')[2] || null;
           }
-          if (!path.startsWith('/login') && !path.startsWith('/invite')) {
-            window.location.href = `/login?next=${encodeURIComponent(path)}`;
-          }
+          // Default entry for this deployment is the user study, not /login
+          window.location.href = `/study/${studySlug || 'policy-study'}`;
         }
       }
     }

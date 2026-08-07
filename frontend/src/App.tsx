@@ -12,7 +12,6 @@ import ProjectWorkflowPage from './pages/ProjectWorkflowPage';
 import SimulationPage from './pages/SimulationPage';
 import SimulationPersonaChatsPage from './pages/SimulationPersonaChatsPage';
 import PersonaChatPage from './pages/PersonaChatPage';
-import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import InvitesPage from './pages/InvitesPage';
@@ -20,7 +19,7 @@ import StudyEnterPage from './pages/StudyEnterPage';
 import StudyProfilesPage from './pages/StudyProfilesPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { getActiveStudySlug, studyPath } from './hooks/useStudyTracker';
+import { getActiveStudySlug, studyPath, studyEnterPath, DEFAULT_STUDY_SLUG } from './hooks/useStudyTracker';
 
 function NavLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
   const location = useLocation();
@@ -75,7 +74,7 @@ function AppShell() {
                       ? studyPath(studySlug, '/profiles')
                       : isAuthenticated
                         ? '/projects'
-                        : '/'
+                        : studyEnterPath()
                   }
                   className="flex-shrink-0 flex items-center gap-2.5 group"
                 >
@@ -126,10 +125,10 @@ function AppShell() {
                 )}
                 {!loading && !isAuthenticated && !isAuthScreen && (
                   <Link
-                    to="/login"
+                    to={studyEnterPath()}
                     className="text-xs font-medium text-stone-600 hover:text-stone-900 px-3 py-1.5 rounded-lg hover:bg-stone-50"
                   >
-                    Sign in
+                    Enter study
                   </Link>
                 )}
               </div>
@@ -148,10 +147,10 @@ function AppShell() {
             element={
               isStudyParticipant && studySlug ? (
                 <Navigate to={studyPath(studySlug, '/profiles')} replace />
-              ) : isAuthenticated ? (
+              ) : isAuthenticated && !isStudyParticipant ? (
                 <Navigate to="/projects" replace />
               ) : (
-                <LandingPage />
+                <Navigate to={studyEnterPath(studySlug || DEFAULT_STUDY_SLUG)} replace />
               )
             }
           />

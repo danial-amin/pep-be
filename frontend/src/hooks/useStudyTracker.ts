@@ -43,4 +43,7 @@ export {
   setStudyScope,
   clearStudyScope,
   studyPath,
+  studyEnterPath,
+  getStudyEntrySlug,
+  DEFAULT_STUDY_SLUG,
 } from '../studyScope';
