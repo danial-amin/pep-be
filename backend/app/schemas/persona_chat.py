@@ -11,6 +11,9 @@ class PersonaChatCreateRequest(BaseModel):
     persona_id: Optional[int] = None
     persona_set_id: Optional[int] = None
     project_id: Optional[int] = None
+    # When true (default), return the latest matching session for this user
+    # instead of starting a blank conversation.
+    resume: bool = True
 
     @model_validator(mode="after")
     def require_target(self):

@@ -200,6 +200,7 @@ export default function PersonaChatPage() {
   const [mentionIndex, setMentionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sessionLoadGen = useRef(0);
 
   useEffect(() => {
     if (isStudyMode && studySlug) {
@@ -314,49 +315,73 @@ export default function PersonaChatPage() {
     });
   }, [mentionOpen, mentionQuery, setParticipants, chatMode]);
 
-  const startSingleSession = async (personaId: number, projectId: number) => {
+  const startSingleSession = async (personaId: number, projectId: number, resume = true) => {
+    const gen = ++sessionLoadGen.current;
     setInitializing(true);
     setError(null);
-    setMessages([]);
-    setSession(null);
+    if (!resume) {
+      setMessages([]);
+      setSession(null);
+    }
     try {
-      const newSession = await personaChatApi.createSession(personaId, projectId);
-      setSession(newSession);
-      setMessages(newSession.messages || []);
-      track('persona_chat_session_start', { mode: 'single', persona_id: personaId, project_id: projectId });
+      const chatSession = await personaChatApi.createSession(personaId, projectId, resume);
+      if (gen !== sessionLoadGen.current) return;
+      setSession(chatSession);
+      setMessages(chatSession.messages || []);
+      track(resume ? 'persona_chat_session_resume' : 'persona_chat_session_start', {
+        mode: 'single',
+        persona_id: personaId,
+        project_id: projectId,
+        session_id: chatSession.id,
+        message_count: (chatSession.messages || []).length,
+        resumed: resume,
+      });
     } catch (err: any) {
+      if (gen !== sessionLoadGen.current) return;
       setError(err.response?.data?.detail || err.message || 'Failed to start chat');
     } finally {
-      setInitializing(false);
+      if (gen === sessionLoadGen.current) setInitializing(false);
     }
   };
 
-  const startSetSession = async (setId: number, projectId: number) => {
+  const startSetSession = async (setId: number, projectId: number, resume = true) => {
+    const gen = ++sessionLoadGen.current;
     setInitializing(true);
     setError(null);
-    setMessages([]);
-    setSession(null);
+    if (!resume) {
+      setMessages([]);
+      setSession(null);
+    }
     try {
-      const newSession = await personaChatApi.createSetSession(setId, projectId);
-      setSession(newSession);
-      setMessages(newSession.messages || []);
-      track('persona_chat_session_start', { mode: 'set', persona_set_id: setId, project_id: projectId });
+      const chatSession = await personaChatApi.createSetSession(setId, projectId, resume);
+      if (gen !== sessionLoadGen.current) return;
+      setSession(chatSession);
+      setMessages(chatSession.messages || []);
+      track(resume ? 'persona_chat_session_resume' : 'persona_chat_session_start', {
+        mode: 'set',
+        persona_set_id: setId,
+        project_id: projectId,
+        session_id: chatSession.id,
+        message_count: (chatSession.messages || []).length,
+        resumed: resume,
+      });
     } catch (err: any) {
+      if (gen !== sessionLoadGen.current) return;
       setError(err.response?.data?.detail || err.message || 'Failed to start set chat');
     } finally {
-      setInitializing(false);
+      if (gen === sessionLoadGen.current) setInitializing(false);
     }
   };
 
   useEffect(() => {
     if (chatMode === 'single' && selectedPersonaId && selectedProjectId) {
-      startSingleSession(selectedPersonaId, selectedProjectId);
+      void startSingleSession(selectedPersonaId, selectedProjectId, true);
     }
   }, [selectedPersonaId, selectedProjectId, chatMode]);
 
   useEffect(() => {
     if (chatMode === 'set' && selectedSetId && selectedProjectId) {
-      startSetSession(selectedSetId, selectedProjectId);
+      void startSetSession(selectedSetId, selectedProjectId, true);
     }
   }, [selectedSetId, selectedProjectId, chatMode]);
 
@@ -466,9 +491,9 @@ export default function PersonaChatPage() {
 
   const handleNewChat = () => {
     if (chatMode === 'single' && selectedPersonaId && selectedProjectId) {
-      startSingleSession(selectedPersonaId, selectedProjectId);
+      void startSingleSession(selectedPersonaId, selectedProjectId, false);
     } else if (chatMode === 'set' && selectedSetId && selectedProjectId) {
-      startSetSession(selectedSetId, selectedProjectId);
+      void startSetSession(selectedSetId, selectedProjectId, false);
     }
   };
 

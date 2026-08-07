@@ -479,18 +479,20 @@ export const projectsApi = {
 
 // Persona Chat API — single persona or full persona-set conversations
 export const personaChatApi = {
-  createSession: async (personaId: number, projectId?: number) => {
+  createSession: async (personaId: number, projectId?: number, resume = true) => {
     const response = await api.post('/persona-chats/', {
       persona_id: personaId,
       project_id: projectId,
+      resume,
     });
     return response.data;
   },
 
-  createSetSession: async (personaSetId: number, projectId?: number) => {
+  createSetSession: async (personaSetId: number, projectId?: number, resume = true) => {
     const response = await api.post('/persona-chats/', {
       persona_set_id: personaSetId,
       project_id: projectId,
+      resume,
     });
     return response.data;
   },

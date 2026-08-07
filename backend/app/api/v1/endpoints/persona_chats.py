@@ -99,7 +99,11 @@ async def create_persona_chat_session(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Start a new chat session with one persona or an entire persona set."""
+    """Start a chat session with one persona or an entire persona set.
+
+    By default resumes the latest session for this user + target so switching
+    personas does not wipe conversation history. Pass resume=false for a blank chat.
+    """
     try:
         chat_session = await persona_chat_service.create_session(
             db,
@@ -107,6 +111,7 @@ async def create_persona_chat_session(
             persona_set_id=request.persona_set_id,
             project_id=request.project_id,
             user_id=user.id,
+            resume=request.resume,
         )
         await db.commit()
         loaded = await persona_chat_service.get_session(db, chat_session.id)

@@ -566,6 +566,40 @@ When answering:
         # Prefer original message if stripping emptied it
         return matched, (cleaned or message.strip())
 
+    async def find_latest_session(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        persona_id: Optional[int] = None,
+        persona_set_id: Optional[int] = None,
+        project_id: Optional[int] = None,
+    ) -> Optional[PersonaChatSession]:
+        """Return the most recent chat for this user + target (persona or set)."""
+        if user_id is None:
+            return None
+        query = select(PersonaChatSession).where(PersonaChatSession.user_id == user_id)
+        if persona_id is not None:
+            query = query.where(
+                PersonaChatSession.persona_id == persona_id,
+                PersonaChatSession.mode == "single",
+            )
+        elif persona_set_id is not None:
+            query = query.where(
+                PersonaChatSession.persona_set_id == persona_set_id,
+                PersonaChatSession.mode == "set",
+            )
+        else:
+            return None
+        if project_id is not None:
+            query = query.where(PersonaChatSession.project_id == project_id)
+        query = query.order_by(PersonaChatSession.id.desc()).limit(1)
+        result = await db.execute(query)
+        found = result.scalar_one_or_none()
+        if not found:
+            return None
+        return await self.get_session(db, found.id)
+
     async def create_session(
         self,
         db: AsyncSession,
@@ -573,7 +607,19 @@ When answering:
         persona_set_id: Optional[int] = None,
         project_id: Optional[int] = None,
         user_id: Optional[int] = None,
+        resume: bool = True,
     ) -> PersonaChatSession:
+        if resume and user_id is not None:
+            existing = await self.find_latest_session(
+                db,
+                user_id=user_id,
+                persona_id=persona_id,
+                persona_set_id=persona_set_id,
+                project_id=project_id,
+            )
+            if existing:
+                return existing
+
         if persona_id is not None:
             result = await db.execute(
                 select(Persona)
