@@ -18,9 +18,9 @@ Key design principles (all production defaults):
      position changes; agreement without stated reason is disallowed.
   5. FINAL POSITION DECLARATION: the last round forces each agent to state
      their final position and account for any change from their opening.
-  6. ADDRESSEE INSTRUCTION: agents name at least one other participant in
-     each turn, making cross-group vs within-group exchange recoverable
-     from the transcript without modifying speaker-selection logic.
+  6. PHASED MID-TURNS: after openings, prompts move challenge → propose → decide
+     and ban pure restatement, so agents advance stakes instead of circling
+     each other's points. Naming others is optional and only for a specific claim.
   7. TOKEN BUDGET: SIMULATION_MAX_OUTPUT_TOKENS per turn (default 128), clamped 100–150 in code.
   8. NO PERIODIC REMINDER: CORE IDENTITY ANCHOR in the system prompt does
      the stability work; a mid-conversation reminder is a confound.
