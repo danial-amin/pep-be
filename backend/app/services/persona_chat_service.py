@@ -13,7 +13,7 @@ Knowledge boundaries:
 """
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional, Tuple
 import logging
@@ -575,7 +575,11 @@ When answering:
         persona_set_id: Optional[int] = None,
         project_id: Optional[int] = None,
     ) -> Optional[PersonaChatSession]:
-        """Return the most recent chat for this user + target (persona or set)."""
+        """Return the best chat for this user + target (persona or set).
+
+        Prefers the latest session that still has messages so empty sessions
+        created by persona switching do not hide prior conversations.
+        """
         if user_id is None:
             return None
         query = select(PersonaChatSession).where(PersonaChatSession.user_id == user_id)
@@ -592,8 +596,19 @@ When answering:
         else:
             return None
         if project_id is not None:
-            query = query.where(PersonaChatSession.project_id == project_id)
-        query = query.order_by(PersonaChatSession.id.desc()).limit(1)
+            query = query.where(
+                (PersonaChatSession.project_id == project_id)
+                | (PersonaChatSession.project_id.is_(None))
+            )
+
+        # Prefer sessions with messages, then newest
+        msg_count = (
+            select(func.count(PersonaChatMessage.id))
+            .where(PersonaChatMessage.session_id == PersonaChatSession.id)
+            .correlate(PersonaChatSession)
+            .scalar_subquery()
+        )
+        query = query.order_by(msg_count.desc(), PersonaChatSession.id.desc()).limit(1)
         result = await db.execute(query)
         found = result.scalar_one_or_none()
         if not found:
