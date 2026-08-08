@@ -12,7 +12,8 @@ from app.utils.prompts import (
     PERSONA_SET_GENERATION_INTERVIEWS_ONLY_TEMPLATE,
     PERSONA_SET_GENERATION_CONTEXT_ONLY_TEMPLATE,
     PERSONA_EXPANSION_SYSTEM_PROMPT,
-    PERSONA_EXPANSION_PROMPT_TEMPLATE
+    PERSONA_EXPANSION_PROMPT_TEMPLATE,
+    PERSONA_EVIDENCE_GROUNDEDNESS_RULES,
 )
 from typing import List, Dict, Any, Optional
 import json
@@ -417,6 +418,9 @@ Groups:
 {lines}
 
 Ground each persona primarily in evidence tagged for that stakeholder group.
+Respect place and role-scope grounding: local roles stay locally concerned;
+only roles with a wider mandate may own multi-region corpus facts as their
+own priorities.
 """
         
         # Get format instructions
@@ -438,6 +442,8 @@ Please ensure personas are:
 - Realistic and based on actual data patterns
 - Respectful and ethical in representation
 - Balanced in representation across different user segments"""
+
+        groundedness_section = PERSONA_EVIDENCE_GROUNDEDNESS_RULES
         
         # Use appropriate prompt template based on available data
         prompt = prompt_template.format(
@@ -448,6 +454,7 @@ Please ensure personas are:
             interview_topic_section=interview_topic_section,
             user_study_design_section=user_study_design_section,
             stakeholder_groups_section=stakeholder_groups_section,
+            groundedness_section=groundedness_section,
             format_instructions=format_instructions,
             ethical_guardrails_section=ethical_guardrails_section
         )
@@ -616,7 +623,8 @@ Format as personas that can be used in interactive scenarios or simulations."""
             # Use customizable prompt template
             prompt = PERSONA_EXPANSION_PROMPT_TEMPLATE.format(
                 context=context,
-                persona_basic=persona_str
+                persona_basic=persona_str,
+                groundedness_section=PERSONA_EVIDENCE_GROUNDEDNESS_RULES,
             )
 
             response = await self.client.chat.completions.create(

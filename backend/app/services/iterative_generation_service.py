@@ -589,6 +589,11 @@ class IterativeGenerationService:
             hints.append("3. Using different language, priorities, and risk tolerance per stakeholder")
             hints.append("4. Anchoring each persona in evidence unique to their group")
             hints.append("5. Avoiding shared boilerplate biography across roles")
+            hints.append(
+                "6. Keeping goals/frustrations consistent with each persona's stated "
+                "location and role scope (do not transplant distant regional facts "
+                "into local lived concerns)"
+            )
         else:
             hints.append("\nTo increase diversity, please:")
             hints.append("1. Vary demographics more (age ranges, locations, occupations)")
@@ -596,6 +601,10 @@ class IterativeGenerationService:
             hints.append("3. Differentiate technology comfort levels and behaviors")
             hints.append("4. Include personas with opposing frustrations or pain points")
             hints.append("5. Vary educational backgrounds and experience levels")
+            hints.append(
+                "6. Keep each persona's concerns consistent with their own location "
+                "and role scope when differentiating them"
+            )
 
         return "\n".join(hints)
 
