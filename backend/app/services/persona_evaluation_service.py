@@ -25,6 +25,7 @@ from app.models.simulation import Simulation, SimulationMessage, SimulationParti
 from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
 from app.core.config import settings
+from app.core.openai_compat import chat_completion_kwargs
 from app.utils.rag_filter import get_project_document_filter
 
 logger = logging.getLogger(__name__)
@@ -66,14 +67,13 @@ class PersonaEvaluationService:
         temperature: float = 0.2
     ) -> str:
         """Call LLM for judgment/scoring."""
-        kwargs = {
-            "model": settings.OPENAI_MODEL,
-            "messages": [
+        kwargs = chat_completion_kwargs(
+            messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            "temperature": temperature,
-        }
+            temperature=temperature,
+        )
         if response_format:
             kwargs["response_format"] = response_format
         response = await self.client.chat.completions.create(**kwargs)

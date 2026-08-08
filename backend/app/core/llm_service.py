@@ -4,6 +4,7 @@ LLM service for processing documents and generating personas.
 from openai import AsyncOpenAI
 from langchain_openai import OpenAIEmbeddings
 from app.core.config import settings
+from app.core.openai_compat import chat_completion_kwargs
 from app.utils.token_utils import chunk_text_by_tokens, estimate_tokens
 from app.utils.prompts import (
     PERSONA_SET_GENERATION_SYSTEM_PROMPT,
@@ -143,13 +144,14 @@ Return as JSON format."""
         for attempt in range(max_retries):
             try:
                 response = await self.client.chat.completions.create(
-                    model=settings.OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You are an expert at analyzing documents and extracting relevant information for persona generation."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.3
+                    **chat_completion_kwargs(
+                        messages=[
+                            {"role": "system", "content": "You are an expert at analyzing documents and extracting relevant information for persona generation."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.3,
+                    )
                 )
                 
                 result = json.loads(response.choices[0].message.content)
@@ -267,13 +269,14 @@ Provide a comprehensive and accurate response based on the context provided."""
 
         try:
             response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that provides accurate information based on the provided context."},
-                    {"role": "user", "content": full_prompt}
-                ],
-                max_tokens=max_tokens,
-                temperature=0.7
+                **chat_completion_kwargs(
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that provides accurate information based on the provided context."},
+                        {"role": "user", "content": full_prompt}
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0.7,
+                )
             )
             
             result = response.choices[0].message.content
@@ -453,15 +456,17 @@ Please ensure personas are:
             # Determine response format based on output_format
             response_format = {"type": "json_object"} if output_format == "json" else None
 
-            response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
+            create_kwargs = chat_completion_kwargs(
                 messages=[
                     {"role": "system", "content": PERSONA_SET_GENERATION_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt}
                 ],
-                response_format=response_format,
-                temperature=0.8
+                temperature=0.8,
             )
+            if response_format:
+                create_kwargs["response_format"] = response_format
+
+            response = await self.client.chat.completions.create(**create_kwargs)
             
             # Parse response based on format
             if output_format == "json":
@@ -615,13 +620,14 @@ Format as personas that can be used in interactive scenarios or simulations."""
             )
 
             response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": PERSONA_EXPANSION_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.7
+                **chat_completion_kwargs(
+                    messages=[
+                        {"role": "system", "content": PERSONA_EXPANSION_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.7,
+                )
             )
             
             result = json.loads(response.choices[0].message.content)
@@ -647,12 +653,13 @@ Generate a descriptive prompt that captures:
 Return only the image prompt text, no JSON."""
         
         response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You create detailed image generation prompts."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.8
+            **chat_completion_kwargs(
+                messages=[
+                    {"role": "system", "content": "You create detailed image generation prompts."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.8,
+            )
         )
         
         return response.choices[0].message.content
@@ -717,13 +724,14 @@ Provide a concise summary."""
 Provide a concise summary."""
                 
                 response = await self.client.chat.completions.create(
-                    model=settings.OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You are an expert at summarizing documents."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.3,
-                    max_tokens=1000
+                    **chat_completion_kwargs(
+                        messages=[
+                            {"role": "system", "content": "You are an expert at summarizing documents."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.3,
+                        max_tokens=1000,
+                    )
                 )
                 summaries.append(response.choices[0].message.content)
                 
@@ -736,13 +744,14 @@ Provide a concise summary."""
             return combined
         
         response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert at summarizing documents."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=2000
+            **chat_completion_kwargs(
+                messages=[
+                    {"role": "system", "content": "You are an expert at summarizing documents."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2000,
+            )
         )
         
         return response.choices[0].message.content

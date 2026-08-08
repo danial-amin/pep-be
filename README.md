@@ -219,7 +219,7 @@ Key configuration options in `.env`:
 - `DATABASE_URL`: PostgreSQL connection string
 - `CHROMA_HOST` / `CHROMA_PORT`: ChromaDB connection
 - `OPENAI_API_KEY`: OpenAI API key (required)
-- `OPENAI_MODEL`: LLM model (default: gpt-4-turbo-preview)
+- `OPENAI_MODEL`: LLM model (default: gpt-5.6-luna)
 - `OPENAI_EMBEDDING_MODEL`: Embedding model (default: text-embedding-3-large)
 - `MAX_UPLOAD_SIZE`: Maximum file upload size (default: 100MB)
 - `ALLOWED_EXTENSIONS`: Allowed file extensions

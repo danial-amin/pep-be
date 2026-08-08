@@ -21,6 +21,7 @@ import re
 import asyncio
 
 from app.core.config import settings
+from app.core.openai_compat import chat_completion_kwargs
 from app.core.vector_db import vector_db
 from app.models.persona import Persona, PersonaSet
 from app.models.persona_chat import PersonaChatSession, PersonaChatMessage
@@ -835,10 +836,11 @@ When answering:
 
         try:
             response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[{"role": "system", "content": system_prompt}, *history],
-                temperature=self._temperature(),
-                max_tokens=self._max_output_tokens(),
+                **chat_completion_kwargs(
+                    messages=[{"role": "system", "content": system_prompt}, *history],
+                    temperature=self._temperature(),
+                    max_tokens=self._max_output_tokens(),
+                )
             )
             raw_reply = (response.choices[0].message.content or "").strip()
         except Exception as e:

@@ -35,6 +35,7 @@ import logging
 import asyncio
 
 from app.core.config import settings
+from app.core.openai_compat import chat_completion_kwargs
 from app.core.vector_db import vector_db
 from app.models.simulation import Simulation, SimulationParticipant, SimulationMessage
 from app.utils.rag_filter import get_project_document_filter
@@ -576,15 +577,16 @@ If you change your earlier view, say so explicitly and name what persuaded you.
 
         try:
             response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *conversation_context,
-                ],
-                temperature=temperature,
-                max_tokens=self._max_output_tokens(),
-                presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty,
+                **chat_completion_kwargs(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        *conversation_context,
+                    ],
+                    temperature=temperature,
+                    max_tokens=self._max_output_tokens(),
+                    presence_penalty=presence_penalty,
+                    frequency_penalty=frequency_penalty,
+                )
             )
 
             content = response.choices[0].message.content
@@ -834,21 +836,22 @@ Respond in JSON format:
 
         try:
             response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an expert analyst of group discussions. "
-                            "Your job is to identify where participants genuinely agree, "
-                            "where they genuinely disagree, and where apparent agreement "
-                            "may mask unresolved differences."
-                        ),
-                    },
-                    {"role": "user", "content": summary_prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.5,
+                **chat_completion_kwargs(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an expert analyst of group discussions. "
+                                "Your job is to identify where participants genuinely agree, "
+                                "where they genuinely disagree, and where apparent agreement "
+                                "may mask unresolved differences."
+                            ),
+                        },
+                        {"role": "user", "content": summary_prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.5,
+                )
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -994,16 +997,17 @@ Respond in JSON format:
 
         try:
             stream = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *conversation_context,
-                ],
-                temperature=temperature,
-                max_tokens=self._max_output_tokens(),
-                presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty,
-                stream=True,
+                **chat_completion_kwargs(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        *conversation_context,
+                    ],
+                    temperature=temperature,
+                    max_tokens=self._max_output_tokens(),
+                    presence_penalty=presence_penalty,
+                    frequency_penalty=frequency_penalty,
+                    stream=True,
+                )
             )
 
             async for chunk in stream:

@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.openai_compat import chat_completion_kwargs
 from app.models.persona import Persona
 from app.models.simulation import (
     Simulation,
@@ -181,20 +182,21 @@ likely initial stance on the topic. Return ONLY valid JSON with this exact struc
 }}"""
 
         response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert social scientist skilled at predicting how "
-                        "individuals with specific backgrounds will approach a topic."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=300,
+            **chat_completion_kwargs(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an expert social scientist skilled at predicting how "
+                            "individuals with specific backgrounds will approach a topic."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=300,
+            )
         )
         return json.loads(response.choices[0].message.content)
 
@@ -261,17 +263,18 @@ Return ONLY valid JSON:
 }}"""
 
         response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You extract structured stance summaries from conversation fragments.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.2,
-            max_tokens=250,
+            **chat_completion_kwargs(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You extract structured stance summaries from conversation fragments.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.2,
+                max_tokens=250,
+            )
         )
         return json.loads(response.choices[0].message.content)
 
@@ -382,17 +385,18 @@ Return ONLY valid JSON:
 Where 0.0 = identical stance, 1.0 = completely opposite/different stance."""
 
         response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You measure semantic similarity between two position statements.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.1,
-            max_tokens=100,
+            **chat_completion_kwargs(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You measure semantic similarity between two position statements.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+                max_tokens=100,
+            )
         )
         data = json.loads(response.choices[0].message.content)
         return float(data.get("drift_score", 0.0))
@@ -423,17 +427,18 @@ Return ONLY valid JSON:
 Where 0.0 = diametrically opposed, 0.5 = partially aligned, 1.0 = fully in agreement."""
 
         response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You measure ideological alignment between two position statements.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.1,
-            max_tokens=100,
+            **chat_completion_kwargs(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You measure ideological alignment between two position statements.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+                max_tokens=100,
+            )
         )
         data = json.loads(response.choices[0].message.content)
         return float(data.get("alignment_score", 0.5))
