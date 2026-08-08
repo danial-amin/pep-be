@@ -163,8 +163,8 @@ class IterativeGenerationService:
                 session.add(persona)
 
             await session.flush()
-            # Refresh to get latest state
-            await session.refresh(persona_set)
+            # Avoid refresh() without attribute_names — it can expire relationships and
+            # invite async lazy-load (greenlet_spawn) errors later in the loop.
 
             # Calculate RQE diversity score
             rqe_metrics = await IterativeGenerationService._calculate_rqe(session, persona_set)
@@ -223,7 +223,10 @@ class IterativeGenerationService:
             }
             for rec in iteration_history
         ]
-        # Include rqe_score so UI / analytics read the same shape as measure-diversity
+        # Do not touch persona_set.personas here — lazy load breaks in async sessions.
+        last_count = (
+            iteration_history[-1]["num_personas"] if iteration_history else num_personas
+        )
         persona_set.diversity_score = {
             "rqe_score": current_rqe,
             "final_rqe": current_rqe,
@@ -231,7 +234,7 @@ class IterativeGenerationService:
             "threshold": rqe_threshold,
             "threshold_met": threshold_met,
             "iterations_used": current_iteration,
-            "num_personas": len(persona_set.personas) if persona_set.personas is not None else None,
+            "num_personas": last_count,
         }
 
         await session.flush()
@@ -244,11 +247,6 @@ class IterativeGenerationService:
             .options(selectinload(PersonaSet.personas))
         )
         persona_set = result.scalar_one()
-        if isinstance(persona_set.diversity_score, dict):
-            persona_set.diversity_score = {
-                **persona_set.diversity_score,
-                "num_personas": len(persona_set.personas),
-            }
 
         # Build metrics response
         metrics = {
@@ -258,7 +256,7 @@ class IterativeGenerationService:
             "iterations_used": current_iteration,
             "max_iterations": max_iterations,
             "iteration_history": iteration_history,
-            "num_personas": len(persona_set.personas)
+            "num_personas": len(persona_set.personas),
         }
 
         return persona_set, metrics
