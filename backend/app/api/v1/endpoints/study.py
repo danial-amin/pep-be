@@ -13,11 +13,15 @@ from app.core.deps import bearer_scheme, get_current_user, get_current_admin
 from app.core.security import decode_access_token
 from app.models.user import User
 from app.schemas.study import (
+    StudyAdminSummary,
     StudyConfigResponse,
+    StudyConfigUpdate,
     StudyEnterRequest,
     StudyEnterResponse,
+    StudyEventAdminResponse,
     StudyEventCreate,
     StudyEventResponse,
+    StudyParticipantAdminInfo,
     StudyPersonaOrderUpdate,
     StudyPublicInfo,
 )
@@ -42,6 +46,99 @@ def _study_claims_from_request(
         "participant_code": payload.get("participant_code"),
         "is_study_participant": True,
     }
+
+
+# ── Admin console (must be declared before /{slug} routes) ───────────────────
+
+
+@router.get("/admin/studies", response_model=List[StudyAdminSummary])
+async def admin_list_studies(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_admin),
+):
+    rows = await StudyService.list_studies(db)
+    return [StudyAdminSummary(**r) for r in rows]
+
+
+@router.get("/admin/studies/{slug}", response_model=StudyConfigResponse)
+async def admin_get_study(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_admin),
+):
+    study = await StudyService.get_by_slug(db, slug)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    return StudyConfigResponse.model_validate(study)
+
+
+@router.put("/admin/studies/{slug}", response_model=StudyConfigResponse)
+async def admin_update_study(
+    slug: str,
+    body: StudyConfigUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_admin),
+):
+    try:
+        study = await StudyService.update_config(
+            db,
+            slug,
+            name=body.name,
+            enabled=body.enabled,
+            project_id=body.project_id,
+            persona_set_id=body.persona_set_id,
+            persona_order=body.persona_order,
+            order_rotations=body.order_rotations,
+            allow_open_codes=body.allow_open_codes,
+            max_participants=body.max_participants,
+            welcome_text=body.welcome_text,
+            rebuild_rotations=body.rebuild_rotations,
+        )
+        await db.commit()
+        await db.refresh(study)
+        return StudyConfigResponse.model_validate(study)
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/admin/studies/{slug}/participants",
+    response_model=List[StudyParticipantAdminInfo],
+)
+async def admin_list_participants(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_admin),
+):
+    study = await StudyService.get_by_slug(db, slug)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    rows = await StudyService.list_participants(db, study.id)
+    return [StudyParticipantAdminInfo(**r) for r in rows]
+
+
+@router.get(
+    "/admin/studies/{slug}/events",
+    response_model=List[StudyEventAdminResponse],
+)
+async def admin_list_events(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_admin),
+    participant_code: Optional[str] = None,
+    limit: int = 500,
+):
+    study = await StudyService.get_by_slug(db, slug)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    rows = await StudyService.list_events_admin(
+        db, study.id, participant_code=participant_code, limit=limit
+    )
+    return [StudyEventAdminResponse(**r) for r in rows]
 
 
 @public_router.get("/{slug}", response_model=StudyPublicInfo)

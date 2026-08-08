@@ -66,8 +66,8 @@ class IterativeGenerationService:
         groups = [g.strip() for g in (stakeholder_groups or []) if g and str(g).strip()]
         if groups:
             num_personas = len(groups)
-            # Stakeholder-mapped sets should not reshuffle into free-form diversity loops
-            auto_iterate = False
+            # Keep stakeholder mapping; still allow RQE iteration to differentiate
+            # within those fixed roles (one persona per group each cycle).
 
         # Retrieve documents for generation
         interview_texts, context_texts = await IterativeGenerationService._get_documents(
@@ -202,19 +202,36 @@ class IterativeGenerationService:
             # Generate diversity hints for next iteration
             if current_iteration < max_iterations:
                 diversity_hints = await IterativeGenerationService._generate_diversity_hints(
-                    session, persona_set, rqe_metrics
+                    session,
+                    persona_set,
+                    rqe_metrics,
+                    stakeholder_groups=groups or None,
                 )
                 logger.info(f"Generated diversity hints for iteration {current_iteration + 1}")
 
         # Update persona set with final metrics
         persona_set.generation_cycle = current_iteration
         persona_set.status = "generated"
-        persona_set.rqe_scores = iteration_history
+        persona_set.rqe_scores = [
+            {
+                "cycle": rec["iteration"],
+                "rqe_score": rec["rqe_score"],
+                "average_similarity": 1 - float(rec["rqe_score"]),
+                "timestamp": rec.get("timestamp"),
+                "threshold": rec.get("threshold"),
+                "threshold_met": rec.get("threshold_met"),
+            }
+            for rec in iteration_history
+        ]
+        # Include rqe_score so UI / analytics read the same shape as measure-diversity
         persona_set.diversity_score = {
+            "rqe_score": current_rqe,
             "final_rqe": current_rqe,
+            "average_similarity": 1 - float(current_rqe) if current_rqe is not None else None,
             "threshold": rqe_threshold,
             "threshold_met": threshold_met,
-            "iterations_used": current_iteration
+            "iterations_used": current_iteration,
+            "num_personas": len(persona_set.personas) if persona_set.personas is not None else None,
         }
 
         await session.flush()
@@ -227,6 +244,11 @@ class IterativeGenerationService:
             .options(selectinload(PersonaSet.personas))
         )
         persona_set = result.scalar_one()
+        if isinstance(persona_set.diversity_score, dict):
+            persona_set.diversity_score = {
+                **persona_set.diversity_score,
+                "num_personas": len(persona_set.personas),
+            }
 
         # Build metrics response
         metrics = {
@@ -440,19 +462,10 @@ class IterativeGenerationService:
         if not personas or len(personas) < 2:
             return {"rqe_score": 1.0, "num_personas": len(personas)}
 
-        # Create text representations of personas
-        persona_texts = []
-        for persona in personas:
-            data = persona.persona_data
-            text_parts = [
-                persona.name,
-                str(data.get("background", "")),
-                " ".join(data.get("goals", [])) if isinstance(data.get("goals"), list) else str(data.get("goals", "")),
-                " ".join(data.get("frustrations", [])) if isinstance(data.get("frustrations"), list) else str(data.get("frustrations", "")),
-                str(data.get("behaviors", "")),
-                str(data.get("demographics", {}).get("occupation", "")) if isinstance(data.get("demographics"), dict) else str(data.get("occupation", ""))
-            ]
-            persona_texts.append(" ".join(filter(None, text_parts)))
+        # Create text representations of personas (supports nested persona_data)
+        persona_texts = [
+            IterativeGenerationService._persona_to_embedding_text(p) for p in personas
+        ]
 
         # Generate embeddings
         persona_embeddings = await llm_service.create_embeddings(persona_texts)
@@ -482,10 +495,45 @@ class IterativeGenerationService:
         }
 
     @staticmethod
+    def _persona_to_embedding_text(persona: Persona) -> str:
+        """Flatten nested or flat persona_data into text for embedding / RQE."""
+        data = persona.persona_data or {}
+        dem = data.get("demographics") if isinstance(data.get("demographics"), dict) else {}
+
+        def as_text(value: Any) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, list):
+                return " ".join(str(v) for v in value if v is not None)
+            if isinstance(value, dict):
+                return " ".join(str(v) for v in value.values() if v is not None)
+            return str(value)
+
+        parts = [
+            persona.name,
+            as_text(data.get("tagline") or data.get("role")),
+            as_text(data.get("stakeholder_group")),
+            as_text(data.get("background") or data.get("basic_description") or data.get("detailed_description")),
+            as_text(data.get("goals")),
+            as_text(data.get("frustrations")),
+            as_text(data.get("motivations")),
+            as_text(data.get("behaviors")),
+            as_text(data.get("quote") or data.get("quotes")),
+            as_text(dem.get("occupation") or data.get("occupation")),
+            as_text(dem.get("location") or data.get("location")),
+            as_text(dem.get("age") or data.get("age")),
+            as_text(dem.get("education") or data.get("education")),
+            as_text(data.get("technology_profile")),
+            as_text(data.get("other_information")),
+        ]
+        return " ".join(p for p in parts if p).strip() or persona.name or "persona"
+
+    @staticmethod
     async def _generate_diversity_hints(
         session: AsyncSession,
         persona_set: PersonaSet,
-        rqe_metrics: Dict[str, Any]
+        rqe_metrics: Dict[str, Any],
+        stakeholder_groups: Optional[List[str]] = None,
     ) -> str:
         """
         Generate diversity hints based on similarity analysis.
@@ -532,12 +580,24 @@ class IterativeGenerationService:
         for pair in similar_pairs[:3]:  # Top 3 most similar pairs
             hints.append(f"- {pair['persona1']} and {pair['persona2']} are {pair['similarity']:.0%} similar")
 
-        hints.append("\nTo increase diversity, please:")
-        hints.append("1. Vary demographics more (age ranges, locations, occupations)")
-        hints.append("2. Create contrasting goals and motivations")
-        hints.append("3. Differentiate technology comfort levels and behaviors")
-        hints.append("4. Include personas with opposing frustrations or pain points")
-        hints.append("5. Vary educational backgrounds and experience levels")
+        if stakeholder_groups:
+            hints.append(
+                "\nKeep exactly one persona per stakeholder group "
+                f"({', '.join(stakeholder_groups)}). Do not merge or swap groups."
+            )
+            hints.append("Increase differentiation across groups by:")
+            hints.append("1. Contrasting lived experience, power, and incentives between groups")
+            hints.append("2. Giving each role distinct goals, constraints, and success metrics")
+            hints.append("3. Using different language, priorities, and risk tolerance per stakeholder")
+            hints.append("4. Anchoring each persona in evidence unique to their group")
+            hints.append("5. Avoiding shared boilerplate biography across roles")
+        else:
+            hints.append("\nTo increase diversity, please:")
+            hints.append("1. Vary demographics more (age ranges, locations, occupations)")
+            hints.append("2. Create contrasting goals and motivations")
+            hints.append("3. Differentiate technology comfort levels and behaviors")
+            hints.append("4. Include personas with opposing frustrations or pain points")
+            hints.append("5. Vary educational backgrounds and experience levels")
 
         return "\n".join(hints)
 

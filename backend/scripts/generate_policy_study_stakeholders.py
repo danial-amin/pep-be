@@ -48,8 +48,9 @@ async def main() -> None:
             interview_topic="Emergency registration and cash assistance after floods in Pakistan",
             include_ethical_guardrails=True,
             output_format="json",
-            auto_iterate=False,
-            max_iterations=1,
+            auto_iterate=True,
+            rqe_threshold=0.75,
+            max_iterations=3,
         )
         await session.commit()
         logger.info(

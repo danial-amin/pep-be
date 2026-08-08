@@ -119,6 +119,9 @@ export default function PersonasPage() {
   const [outputFormat, setOutputFormat] = useState('json');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [stakeholderGroupsText, setStakeholderGroupsText] = useState('');
+  const [autoIterate, setAutoIterate] = useState(true);
+  const [rqeThreshold, setRqeThreshold] = useState(0.75);
+  const [maxIterations, setMaxIterations] = useState(3);
 
   useEffect(() => {
     loadPersonaSets();
@@ -151,12 +154,23 @@ export default function PersonasPage() {
         includeEthicalGuardrails,
         outputFormat,
         undefined,
-        stakeholderGroups.length > 0 ? stakeholderGroups : undefined
+        stakeholderGroups.length > 0 ? stakeholderGroups : undefined,
+        {
+          rqeThreshold,
+          maxIterations,
+          autoIterate,
+        }
       );
       await loadPersonaSets();
       const newSet = await personasApi.getSet(response.persona_set_id);
       setSelectedSet(newSet);
-      alert('Persona set generated successfully!');
+      const rqePct =
+        response.rqe_score != null ? `${(response.rqe_score * 100).toFixed(1)}%` : 'n/a';
+      const iters = response.iterations_used ?? 1;
+      const met = response.threshold_met ? 'met' : 'not met';
+      alert(
+        `Persona set generated.\nRQE: ${rqePct} (threshold ${met})\nIterations: ${iters}/${maxIterations}`
+      );
     } catch (error: any) {
       alert(`Failed to generate personas: ${error.response?.data?.detail || error.message}`);
     } finally {
@@ -415,6 +429,57 @@ export default function PersonasPage() {
                 Include Ethical and Fairness Guardrails
               </label>
             </div>
+
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-3">
+              <div className="text-sm font-medium text-stone-900">Iterative RQE (diversity loop)</div>
+              <p className="text-xs text-stone-500">
+                After each generation, RQE is measured. If below the threshold, personas are regenerated
+                with diversity hints (up to max iterations). Works with stakeholder groups too.
+              </p>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="auto-iterate"
+                  checked={autoIterate}
+                  onChange={(e) => setAutoIterate(e.target.checked)}
+                  className="h-4 w-4 border-stone-200 rounded bg-white"
+                />
+                <label htmlFor="auto-iterate" className="ml-2 block text-sm text-stone-700">
+                  Auto-iterate until RQE threshold is met
+                </label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1">
+                    RQE threshold (0–1, paper ≈ 0.75)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={rqeThreshold}
+                    onChange={(e) => setRqeThreshold(parseFloat(e.target.value) || 0.75)}
+                    disabled={!autoIterate}
+                    className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 text-sm disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1">
+                    Max iterations
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={maxIterations}
+                    onChange={(e) => setMaxIterations(parseInt(e.target.value, 10) || 3)}
+                    disabled={!autoIterate}
+                    className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 text-sm disabled:opacity-50"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -472,10 +537,21 @@ export default function PersonasPage() {
                 <p className="text-sm text-stone-600">Calculate RQE scores to measure persona set diversity</p>
                 {selectedSet.diversity_score && (
                   <p className="text-xs text-stone-400 mt-1">
-                    ✓ RQE: {(selectedSet.diversity_score.rqe_score * 100).toFixed(1)}%
+                    ✓ RQE:{' '}
+                    {(
+                      (selectedSet.diversity_score.rqe_score ??
+                        (selectedSet.diversity_score as { final_rqe?: number }).final_rqe ??
+                        0) * 100
+                    ).toFixed(1)}
+                    %
                   </p>
                 )}
-                {selectedSet.personas.length > 0 && !selectedSet.diversity_score && (
+                {selectedSet.personas.length > 0 &&
+                  !(
+                    selectedSet.diversity_score?.rqe_score != null ||
+                    (selectedSet.diversity_score as { final_rqe?: number } | undefined)?.final_rqe !=
+                      null
+                  ) && (
                   <button
                     onClick={() => handleMeasureDiversity(selectedSet.id)}
                     disabled={measuringDiversity === selectedSet.id}

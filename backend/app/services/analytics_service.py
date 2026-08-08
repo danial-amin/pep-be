@@ -64,12 +64,43 @@ class AnalyticsService:
         if len(persona_set.personas) < 2:
             raise ValueError("Need at least 2 personas to measure diversity (pairwise comparison requires multiple personas)")
         
-        # Get embeddings for all personas
+        # Get embeddings for all personas (nested + flat persona_data)
         persona_texts = []
         for persona in persona_set.personas:
-            # Create a text representation of the persona
-            persona_text = f"{persona.name} {persona.persona_data.get('basic_description', '')} {persona.persona_data.get('occupation', '')}"
-            persona_texts.append(persona_text)
+            data = persona.persona_data or {}
+            dem = data.get("demographics") if isinstance(data.get("demographics"), dict) else {}
+
+            def _as_text(value):
+                if value is None:
+                    return ""
+                if isinstance(value, list):
+                    return " ".join(str(v) for v in value if v is not None)
+                if isinstance(value, dict):
+                    return " ".join(str(v) for v in value.values() if v is not None)
+                return str(value)
+
+            persona_text = " ".join(
+                filter(
+                    None,
+                    [
+                        persona.name,
+                        _as_text(data.get("tagline") or data.get("role")),
+                        _as_text(data.get("stakeholder_group")),
+                        _as_text(
+                            data.get("background")
+                            or data.get("basic_description")
+                            or data.get("detailed_description")
+                        ),
+                        _as_text(data.get("goals")),
+                        _as_text(data.get("frustrations")),
+                        _as_text(data.get("motivations")),
+                        _as_text(data.get("behaviors")),
+                        _as_text(dem.get("occupation") or data.get("occupation")),
+                        _as_text(dem.get("location") or data.get("location")),
+                    ],
+                )
+            )
+            persona_texts.append(persona_text or persona.name or "persona")
         
         if not HAS_SCIKIT:
             raise ValueError("scikit-learn is required for diversity calculation. Please install it.")

@@ -293,6 +293,206 @@ class StudyService:
         return study
 
     @staticmethod
+    def _policy_study_rotations(groups_present: set) -> Optional[List[List[str]]]:
+        """Build the 6 AH/HW/BISP Latin-square rotations when all three groups exist."""
+        ah = "affected_households"
+        hw = "local_humanitarian_workers"
+        bisp = "bisp_programme_representatives"
+        needed = {ah, hw, bisp}
+        if not needed.issubset(groups_present):
+            return None
+        return [
+            [ah, hw, bisp],
+            [ah, bisp, hw],
+            [hw, ah, bisp],
+            [hw, bisp, ah],
+            [bisp, ah, hw],
+            [bisp, hw, ah],
+        ]
+
+    @staticmethod
+    async def list_studies(session: AsyncSession) -> List[dict]:
+        from sqlalchemy import func
+        from app.models.study import StudyParticipant, StudyEvent
+
+        studies = (await session.execute(select(Study).order_by(Study.id.desc()))).scalars().all()
+        out = []
+        for study in studies:
+            p_count = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(StudyParticipant)
+                    .where(StudyParticipant.study_id == study.id)
+                )
+            ).scalar() or 0
+            e_count = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(StudyEvent)
+                    .where(StudyEvent.study_id == study.id)
+                )
+            ).scalar() or 0
+            out.append(
+                {
+                    "id": study.id,
+                    "slug": study.slug,
+                    "name": study.name,
+                    "enabled": study.enabled,
+                    "project_id": study.project_id,
+                    "persona_set_id": study.persona_set_id,
+                    "participant_count": int(p_count),
+                    "event_count": int(e_count),
+                }
+            )
+        return out
+
+    @staticmethod
+    async def update_config(
+        session: AsyncSession,
+        slug: str,
+        *,
+        name: Optional[str] = None,
+        enabled: Optional[bool] = None,
+        project_id: Optional[int] = None,
+        persona_set_id: Optional[int] = None,
+        persona_order: Optional[List[int]] = None,
+        order_rotations: Optional[List[List[str]]] = None,
+        allow_open_codes: Optional[bool] = None,
+        max_participants: Optional[int] = None,
+        welcome_text: Optional[str] = None,
+        rebuild_rotations: bool = True,
+    ) -> Study:
+        study = await StudyService.get_by_slug(session, slug)
+        if not study:
+            raise ValueError("Study not found")
+
+        if name is not None:
+            study.name = name
+        if enabled is not None:
+            study.enabled = enabled
+        if project_id is not None:
+            study.project_id = project_id
+        if allow_open_codes is not None:
+            study.allow_open_codes = allow_open_codes
+        if max_participants is not None:
+            study.max_participants = max_participants
+        if welcome_text is not None:
+            study.welcome_text = welcome_text
+        if order_rotations is not None:
+            study.order_rotations = order_rotations
+        if persona_order is not None:
+            study.persona_order = persona_order
+
+        if persona_set_id is not None and persona_set_id != study.persona_set_id:
+            ps = (
+                await session.execute(
+                    select(PersonaSet)
+                    .where(PersonaSet.id == persona_set_id)
+                    .options(selectinload(PersonaSet.personas))
+                )
+            ).scalar_one_or_none()
+            if not ps:
+                raise ValueError(f"Persona set {persona_set_id} not found")
+            study.persona_set_id = persona_set_id
+            if study.project_id is None and ps.project_id is not None:
+                study.project_id = ps.project_id
+
+            personas = list(ps.personas)
+            by_group = {
+                (p.persona_data or {}).get("stakeholder_group"): p.id
+                for p in personas
+                if (p.persona_data or {}).get("stakeholder_group")
+            }
+            groups = set(by_group.keys())
+            if rebuild_rotations:
+                rotations = StudyService._policy_study_rotations(groups)
+                study.order_rotations = rotations
+                if rotations:
+                    study.persona_order = [
+                        by_group[g] for g in rotations[0] if g in by_group
+                    ]
+                else:
+                    study.persona_order = [p.id for p in personas]
+            elif persona_order is None:
+                study.persona_order = [p.id for p in personas]
+
+        await session.flush()
+        return study
+
+    @staticmethod
+    async def list_participants(session: AsyncSession, study_id: int) -> List[dict]:
+        from sqlalchemy import func
+        from app.models.study import StudyParticipant, StudyEvent
+
+        participants = (
+            await session.execute(
+                select(StudyParticipant)
+                .where(StudyParticipant.study_id == study_id)
+                .order_by(StudyParticipant.code)
+            )
+        ).scalars().all()
+        out = []
+        for p in participants:
+            e_count = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(StudyEvent)
+                    .where(StudyEvent.participant_id == p.id)
+                )
+            ).scalar() or 0
+            out.append(
+                {
+                    "id": p.id,
+                    "code": p.code,
+                    "display_name": p.display_name,
+                    "user_id": p.user_id,
+                    "created_at": p.created_at,
+                    "last_seen_at": p.last_seen_at,
+                    "event_count": int(e_count),
+                    "is_test": is_test_participant_code(p.code),
+                }
+            )
+        return out
+
+    @staticmethod
+    async def list_events_admin(
+        session: AsyncSession,
+        study_id: int,
+        *,
+        participant_code: Optional[str] = None,
+        limit: int = 500,
+    ) -> List[dict]:
+        from app.models.study import StudyEvent, StudyParticipant
+
+        query = (
+            select(StudyEvent, StudyParticipant.code)
+            .outerjoin(StudyParticipant, StudyParticipant.id == StudyEvent.participant_id)
+            .where(StudyEvent.study_id == study_id)
+        )
+        if participant_code:
+            try:
+                norm = normalize_participant_code(participant_code)
+            except ValueError:
+                norm = participant_code.strip().upper()
+            query = query.where(StudyParticipant.code == norm)
+        query = query.order_by(StudyEvent.id.desc()).limit(min(limit, 2000))
+        rows = (await session.execute(query)).all()
+        return [
+            {
+                "id": e.id,
+                "study_id": e.study_id,
+                "participant_id": e.participant_id,
+                "participant_code": code,
+                "user_id": e.user_id,
+                "event_type": e.event_type,
+                "path": e.path,
+                "payload": e.payload,
+                "created_at": e.created_at,
+            }
+            for e, code in rows
+        ]
+
+    @staticmethod
     async def record_event(
         session: AsyncSession,
         *,

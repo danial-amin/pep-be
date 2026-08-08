@@ -35,6 +35,9 @@ export default function ProjectWorkflowPage() {
   const [interviewTopic, setInterviewTopic] = useState('');
   const [outputFormat, setOutputFormat] = useState('json');
   const [stakeholderGroupsText, setStakeholderGroupsText] = useState('');
+  const [autoIterate, setAutoIterate] = useState(true);
+  const [rqeThreshold, setRqeThreshold] = useState(0.75);
+  const [maxIterations, setMaxIterations] = useState(3);
   const [generating, setGenerating] = useState(false);
   const [expanding, setExpanding] = useState(false);
   const [generatingImages, setGeneratingImages] = useState(false);
@@ -181,13 +184,22 @@ export default function ProjectWorkflowPage() {
         true, // includeEthicalGuardrails - default to true
         outputFormat,
         parseInt(projectId),
-        stakeholderGroups.length > 0 ? stakeholderGroups : undefined
+        stakeholderGroups.length > 0 ? stakeholderGroups : undefined,
+        {
+          rqeThreshold,
+          maxIterations,
+          autoIterate,
+        }
       );
       await loadPersonaSets();
       const newSet = await personasApi.getSet(response.persona_set_id);
       setSelectedSet(newSet);
       setCurrentStep('optimize');
-      alert('Persona set generated successfully!');
+      const rqePct =
+        response.rqe_score != null ? `${(response.rqe_score * 100).toFixed(1)}%` : 'n/a';
+      alert(
+        `Persona set generated.\nRQE: ${rqePct}\nIterations: ${response.iterations_used ?? 1}/${maxIterations}`
+      );
     } catch (error: any) {
       alert(`Failed to generate personas: ${error.response?.data?.detail || error.message}`);
     } finally {
@@ -566,8 +578,46 @@ export default function ProjectWorkflowPage() {
                   />
                   <p className="mt-1 text-xs text-stone-500">
                     When set, generates exactly one persona per group (overrides count above).
-                    Use the corpus persona IDs when available.
+                    Use the corpus persona IDs when available. Iterative RQE still runs to differentiate roles.
                   </p>
+                </div>
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-3">
+                  <div className="text-sm font-medium text-stone-900">Iterative RQE</div>
+                  <label className="flex items-center gap-2 text-sm text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={autoIterate}
+                      onChange={(e) => setAutoIterate(e.target.checked)}
+                    />
+                    Auto-iterate until diversity threshold is met
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-stone-600 mb-1">RQE threshold</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={rqeThreshold}
+                        disabled={!autoIterate}
+                        onChange={(e) => setRqeThreshold(parseFloat(e.target.value) || 0.75)}
+                        className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm disabled:opacity-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-stone-600 mb-1">Max iterations</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={maxIterations}
+                        disabled={!autoIterate}
+                        onChange={(e) => setMaxIterations(parseInt(e.target.value, 10) || 3)}
+                        className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">Context Details (Optional)</label>
@@ -668,7 +718,13 @@ export default function ProjectWorkflowPage() {
                 </button>
                 {selectedSet.diversity_score && (
                   <span className="text-stone-700">
-                    RQE: {(selectedSet.diversity_score.rqe_score * 100).toFixed(1)}%
+                    RQE:{' '}
+                    {(
+                      (selectedSet.diversity_score.rqe_score ??
+                        (selectedSet.diversity_score as { final_rqe?: number }).final_rqe ??
+                        0) * 100
+                    ).toFixed(1)}
+                    %
                   </span>
                 )}
               </div>

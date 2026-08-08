@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Bot, LogOut, UserPlus, LayoutGrid } from 'lucide-react';
+import { FileText, Users, MessageSquare, BarChart3, FolderOpen, Play, Bot, LogOut, UserPlus, LayoutGrid, ClipboardList } from 'lucide-react';
 import DocumentsPage from './pages/DocumentsPage';
 import PersonasPage from './pages/PersonasPage';
 import PersonaDetailPage from './pages/PersonaDetailPage';
@@ -17,6 +17,7 @@ import AcceptInvitePage from './pages/AcceptInvitePage';
 import InvitesPage from './pages/InvitesPage';
 import StudyEnterPage from './pages/StudyEnterPage';
 import StudyProfilesPage from './pages/StudyProfilesPage';
+import StudyAdminPage from './pages/StudyAdminPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getActiveStudySlug, studyPath, studyEnterPath, DEFAULT_STUDY_SLUG } from './hooks/useStudyTracker';
@@ -104,6 +105,7 @@ function AppShell() {
                     <NavLink to="/prompts" icon={MessageSquare} label="Q&A Prompts" />
                     <NavLink to="/reports" icon={BarChart3} label="Reports" />
                     {user?.is_admin && <NavLink to="/invites" icon={UserPlus} label="Invites" />}
+                    {user?.is_admin && <NavLink to="/admin/study" icon={ClipboardList} label="Study" />}
                   </div>
                 )}
               </div>
@@ -181,6 +183,7 @@ function AppShell() {
           <Route path="/prompts" element={<ProtectedRoute><StudyParticipantGate><PromptsPage /></StudyParticipantGate></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><StudyParticipantGate><ReportsPage /></StudyParticipantGate></ProtectedRoute>} />
           <Route path="/invites" element={<ProtectedRoute><StudyParticipantGate><InvitesPage /></StudyParticipantGate></ProtectedRoute>} />
+          <Route path="/admin/study" element={<ProtectedRoute><StudyParticipantGate><StudyAdminPage /></StudyParticipantGate></ProtectedRoute>} />
         </Routes>
       </main>
     </div>

@@ -80,12 +80,16 @@ export interface PersonaSet {
   personas: Persona[];
   rqe_scores?: Array<{ cycle: number; rqe_score: number; average_similarity: number; timestamp?: string }>;
   diversity_score?: {
-    rqe_score: number;
-    average_similarity: number;
-    min_similarity: number;
-    max_similarity: number;
-    std_similarity: number;
-    num_personas: number;
+    rqe_score?: number;
+    final_rqe?: number;
+    average_similarity?: number;
+    min_similarity?: number;
+    max_similarity?: number;
+    std_similarity?: number;
+    num_personas?: number;
+    threshold?: number;
+    threshold_met?: boolean;
+    iterations_used?: number;
   };
   validation_scores?: Array<{
     persona_id: number;
@@ -107,6 +111,19 @@ export interface PersonaSetGenerateResponse {
   persona_set_id: number;
   personas: PersonaBasic[];
   status: string;
+  generation_cycle?: number;
+  rqe_score?: number;
+  rqe_threshold?: number;
+  threshold_met?: boolean;
+  iterations_used?: number;
+  iteration_history?: Array<{
+    iteration: number;
+    rqe_score: number;
+    threshold?: number;
+    threshold_met?: boolean;
+    num_personas?: number;
+    timestamp?: string;
+  }>;
 }
 
 export interface PromptCompleteRequest {

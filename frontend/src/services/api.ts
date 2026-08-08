@@ -195,7 +195,12 @@ export const personasApi = {
     includeEthicalGuardrails: boolean = true,
     outputFormat: string = 'json',
     projectId?: number,
-    stakeholderGroups?: string[]
+    stakeholderGroups?: string[],
+    options?: {
+      rqeThreshold?: number;
+      maxIterations?: number;
+      autoIterate?: boolean;
+    }
   ) => {
     const response = await api.post('/personas/generate-set', {
       num_personas: numPersonas,
@@ -208,6 +213,9 @@ export const personasApi = {
       ...(stakeholderGroups && stakeholderGroups.length > 0
         ? { stakeholder_groups: stakeholderGroups }
         : {}),
+      rqe_threshold: options?.rqeThreshold ?? 0.75,
+      max_iterations: options?.maxIterations ?? 3,
+      auto_iterate: options?.autoIterate ?? true,
     });
     return response.data;
   },
@@ -604,6 +612,90 @@ export const studyApi = {
     } catch {
       /* best-effort instrumentation */
     }
+  },
+
+  adminListStudies: async () => {
+    const response = await api.get('/study/admin/studies');
+    return response.data as Array<{
+      id: number;
+      slug: string;
+      name: string;
+      enabled: boolean;
+      project_id?: number | null;
+      persona_set_id: number;
+      participant_count: number;
+      event_count: number;
+    }>;
+  },
+
+  adminGetStudy: async (slug: string) => {
+    const response = await api.get(`/study/admin/studies/${slug}`);
+    return response.data as {
+      id: number;
+      slug: string;
+      name: string;
+      enabled: boolean;
+      project_id?: number | null;
+      persona_set_id: number;
+      persona_order?: number[] | null;
+      order_rotations?: string[][] | null;
+      allow_open_codes: boolean;
+      max_participants: number;
+      welcome_text?: string | null;
+    };
+  },
+
+  adminUpdateStudy: async (
+    slug: string,
+    body: {
+      name?: string;
+      enabled?: boolean;
+      project_id?: number | null;
+      persona_set_id?: number;
+      persona_order?: number[];
+      order_rotations?: string[][] | null;
+      allow_open_codes?: boolean;
+      max_participants?: number;
+      welcome_text?: string | null;
+      rebuild_rotations?: boolean;
+    }
+  ) => {
+    const response = await api.put(`/study/admin/studies/${slug}`, body);
+    return response.data;
+  },
+
+  adminListParticipants: async (slug: string) => {
+    const response = await api.get(`/study/admin/studies/${slug}/participants`);
+    return response.data as Array<{
+      id: number;
+      code: string;
+      display_name?: string | null;
+      user_id?: number | null;
+      created_at?: string | null;
+      last_seen_at?: string | null;
+      event_count: number;
+      is_test: boolean;
+    }>;
+  },
+
+  adminListEvents: async (slug: string, participantCode?: string, limit = 500) => {
+    const response = await api.get(`/study/admin/studies/${slug}/events`, {
+      params: {
+        participant_code: participantCode || undefined,
+        limit,
+      },
+    });
+    return response.data as Array<{
+      id: number;
+      study_id: number;
+      participant_id?: number | null;
+      participant_code?: string | null;
+      user_id?: number | null;
+      event_type: string;
+      path?: string | null;
+      payload?: Record<string, unknown> | null;
+      created_at?: string | null;
+    }>;
   },
 };
 
