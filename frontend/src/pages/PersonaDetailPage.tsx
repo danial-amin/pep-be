@@ -510,9 +510,8 @@ export default function PersonaDetailPage() {
         data-persona-profile-card="true"
         className="glass-card rounded-2xl p-6 border border-stone-200 max-w-7xl mx-auto"
       >
-        {/* Header with Image, Demographics, Quote and Overview */}
-        <div className="mb-4 flex flex-col gap-6 border-b border-stone-200 pb-4 xl:flex-row xl:items-start">
-          {/* Left: Image and Demographics */}
+        {/* Header: identity, then full-width quote/overview */}
+        <div className="mb-4 space-y-4 border-b border-stone-200 pb-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             {/* Persona Image */}
             <div className="flex-shrink-0">
@@ -545,81 +544,93 @@ export default function PersonaDetailPage() {
               )}
             </div>
             
-            {/* Demographics - Four Rows */}
-            <div className="flex min-w-0 max-w-full flex-col justify-center space-y-2 sm:min-w-[200px]">
+            {/* Demographics */}
+            <div className="min-w-0 flex-1 space-y-2">
               <h4 className="mb-2 break-words text-2xl font-bold text-stone-900">
                 {personaData.name || currentPersona.name}
               </h4>
-              {(getField('age')) && (
-                <div className="flex items-center space-x-2 text-sm text-stone-700">
-                  <User className="h-4 w-4 text-stone-500" />
-                  <span><strong>Age:</strong> {String(getField('age') || '')}</span>
-                </div>
-              )}
-              {(getField('location') || getField('nationality')) && (
-                <div className="flex items-center space-x-2 text-sm text-stone-700">
-                  <MapPin className="h-4 w-4 text-stone-500" />
-                  <span className="persona-export-text break-words">
-                    <strong>Location:</strong>{' '}
-                    {
-                      (() => {
-                        const location = getField('location');
-                        const nationality = getField('nationality');
-                        if (typeof location === 'string') {
-                          return location;
-                        } else if (location && typeof location === 'object' && 'city' in location && 'country' in location) {
-                          return `${location.city}, ${location.country}`;
-                        } else if (nationality) {
-                          return nationality;
-                        }
-                        return location ? JSON.stringify(location) : '';
-                      })()
-                    }
-                  </span>
-                </div>
-              )}
-              {(getField('occupation')) && (
-                <div className="flex items-center space-x-2 text-sm text-stone-700">
-                  <Briefcase className="h-4 w-4 text-stone-500" />
-                  <span className="persona-export-text break-words">
-                    <strong>Occupation:</strong> {String(getField('occupation') || '')}
-                  </span>
-                </div>
-              )}
-              {(getField('gender')) && (
-                <div className="flex items-center space-x-2 text-sm text-stone-700">
-                  <User className="h-4 w-4 text-stone-500" />
-                  <span><strong>Gender:</strong> {String(getField('gender') || '')}</span>
-                </div>
-              )}
-              {(getField('nationality') && !getField('location')) && (
-                <div className="flex items-center space-x-2 text-sm text-stone-700">
-                  <MapPin className="h-4 w-4 text-stone-500" />
-                  <span><strong>Nationality:</strong> {String(getField('nationality') || '')}</span>
-                </div>
-              )}
-              {(getField('education_level')) && (
-                <div className="flex items-center space-x-2 text-sm text-stone-700">
-                  <User className="h-4 w-4 text-stone-500" />
-                  <span><strong>Education:</strong> {String(getField('education_level') || '')}</span>
-                </div>
-              )}
-              {(getField('income_bracket')) && (
-                <div className="flex items-center space-x-2 text-sm text-stone-700">
-                  <User className="h-4 w-4 text-stone-500" />
-                  <span><strong>Income:</strong> {String(getField('income_bracket') || '')}</span>
-                </div>
-              )}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {(getField('age')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700">
+                    <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words"><strong>Age:</strong> {String(getField('age') || '')}</span>
+                  </div>
+                )}
+                {(getField('gender')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700">
+                    <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words"><strong>Gender:</strong> {String(getField('gender') || '')}</span>
+                  </div>
+                )}
+                {(getField('occupation')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+                    <Briefcase className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="persona-export-text min-w-0 break-words">
+                      <strong>Occupation:</strong> {String(getField('occupation') || '')}
+                    </span>
+                  </div>
+                )}
+                {(getField('location') || getField('nationality')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+                    <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="persona-export-text min-w-0 break-words">
+                      <strong>Location:</strong>{' '}
+                      {
+                        (() => {
+                          const location = getField('location');
+                          const nationality = getField('nationality');
+                          if (typeof location === 'string') {
+                            return location;
+                          } else if (location && typeof location === 'object') {
+                            const city = location.city != null ? String(location.city).trim() : '';
+                            const country = location.country != null ? String(location.country).trim() : '';
+                            if (city && country) {
+                              if (city.toLowerCase().includes(country.toLowerCase())) return city;
+                              return `${city}, ${country}`;
+                            }
+                            if (city) return city;
+                            if (country) return country;
+                          } else if (nationality) {
+                            return nationality;
+                          }
+                          return location ? JSON.stringify(location) : '';
+                        })()
+                      }
+                    </span>
+                  </div>
+                )}
+                {(getField('nationality') && !getField('location')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700">
+                    <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words"><strong>Nationality:</strong> {String(getField('nationality') || '')}</span>
+                  </div>
+                )}
+                {(getField('education') || getField('education_level')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+                    <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words">
+                      <strong>Education:</strong>{' '}
+                      {String(getField('education') || getField('education_level') || '')}
+                    </span>
+                  </div>
+                )}
+                {(getField('income_bracket')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700">
+                    <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words"><strong>Income:</strong> {String(getField('income_bracket') || '')}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Right: Quote and Overview */}
-          <div className="min-w-0 flex-1 space-y-3">
+          {/* Quote and Overview — always below identity so long demo fields cannot displace them */}
+          <div className="min-w-0 space-y-3">
             {(personaData.quote || personaData.quotes) && (
               <div className="p-3 bg-stone-50 rounded-lg border-l-4 border-purple-400">
                 <div className="flex items-start space-x-2">
                   <Quote className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm italic leading-relaxed text-stone-700 break-words">
+                  <div className="min-w-0 text-sm italic leading-relaxed text-stone-700 break-words">
                     {Array.isArray(personaData.quotes) ? (
                       <ul className="list-disc list-inside space-y-1">
                         {personaData.quotes.map((q: any, idx: number) => (
@@ -634,7 +645,7 @@ export default function PersonaDetailPage() {
               </div>
             )}
             {(personaData.basic_description || personaData.tagline || personaData.role) && (
-              <div>
+              <div className="min-w-0">
                 <h5 className="text-xs font-semibold text-stone-900 uppercase tracking-wide mb-2">Overview</h5>
                 <p className="text-sm leading-relaxed text-stone-700 break-words">
                   {(() => {
