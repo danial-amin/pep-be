@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { getApiUrl, getAuthToken } from '../services/api';
+import { getApiUrl, getAuthToken, studyApi } from '../services/api';
+import { getActiveStudySlug, getStudyScope } from '../studyScope';
 
 export type PersonaViewType = 'persona' | 'set_profiles';
 
@@ -8,6 +9,8 @@ type UsePersonaViewTimerOptions = {
   viewType: PersonaViewType;
   /** Required when viewType is 'persona' */
   personaId?: number | null;
+  /** Optional display name for study event payloads */
+  personaName?: string | null;
   enabled?: boolean;
   /** Ignore visits shorter than this (seconds). Default 1. */
   minSeconds?: number;
@@ -37,14 +40,31 @@ function sendProfileView(payload: Record<string, unknown>) {
   }
 }
 
+function sendStudyProfileDwell(payload: Record<string, unknown>) {
+  const slug = getActiveStudySlug();
+  if (!slug) return;
+  void studyApi.recordEvent(
+    slug,
+    payload.view_type === 'persona' ? 'profile_dwell' : 'profiles_page_dwell',
+    typeof window !== 'undefined' ? window.location.pathname : undefined,
+    {
+      ...payload,
+      study_scope: getStudyScope(),
+      client_ts: new Date().toISOString(),
+    }
+  );
+}
+
 /**
  * Starts timing when the page/view becomes active and records duration on leave,
  * persona switch, or page unload. Time while the tab is hidden is excluded.
+ * Also mirrors into study_events when a study session is active.
  */
 export function usePersonaViewTimer({
   personaSetId,
   viewType,
   personaId = null,
+  personaName = null,
   enabled = true,
   minSeconds = 1,
 }: UsePersonaViewTimerOptions) {
@@ -87,14 +107,17 @@ export function usePersonaViewTimer({
       const durationSeconds = accumulatedMsRef.current / 1000;
       if (durationSeconds < minSeconds) return;
 
-      sendProfileView({
+      const payload = {
         persona_set_id: personaSetId,
         persona_id: viewType === 'persona' ? personaId : null,
+        persona_name: viewType === 'persona' ? personaName : null,
         view_type: viewType,
         duration_seconds: Math.round(durationSeconds * 100) / 100,
         started_at: sessionStartRef.current,
         ended_at: new Date().toISOString(),
-      });
+      };
+      sendProfileView(payload);
+      sendStudyProfileDwell(payload);
     };
 
     const onVisibility = () => {
@@ -110,5 +133,5 @@ export function usePersonaViewTimer({
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', flush);
     };
-  }, [enabled, personaSetId, personaId, viewType, minSeconds]);
+  }, [enabled, personaSetId, personaId, personaName, viewType, minSeconds]);
 }

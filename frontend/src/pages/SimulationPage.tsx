@@ -487,6 +487,18 @@ export default function SimulationPage() {
                   closeStream();
                   loadSimulations();
 
+                  if (finalized) {
+                    track('simulation_turn_message', {
+                      simulation_id: currentSimulation.id,
+                      turn_number: finalized.turn_number,
+                      persona_id: finalized.persona_id,
+                      is_human: finalized.is_human_message ?? finalized.persona_id == null,
+                      content: finalized.content,
+                      chars: (finalized.content || '').length,
+                      streamed: true,
+                    });
+                  }
+
                   if (
                     shouldAutoContinue &&
                     autoContinueRef.current &&
@@ -558,8 +570,15 @@ export default function SimulationPage() {
       setShowSetup(false);
       track('simulation_create', {
         simulation_id: simulation.id,
+        name: simulation.name,
+        goal,
+        goal_context: goalContext || null,
+        max_turns: maxTurns,
+        run_until_agreement: runUntilAgreement || false,
+        participants,
         participant_count: participants.length,
         project_id: studyScope?.projectId,
+        persona_set_id: studyScope?.personaSetId,
       });
       if (studySlug) {
         navigate(studyPath(studySlug, `/simulations/${simulation.id}`));
@@ -576,6 +595,12 @@ export default function SimulationPage() {
 
   const handleStartSimulation = async (autoContinue: boolean = true) => {
     if (!currentSimulation) return;
+
+    track('simulation_start', {
+      simulation_id: currentSimulation.id,
+      auto_continue: autoContinue,
+      streaming: streamingEnabled,
+    });
 
     if (streamingEnabled) {
       startStreamingTurn(autoContinue);
@@ -597,8 +622,14 @@ export default function SimulationPage() {
   const handleIntervene = async () => {
     if (!currentSimulation || !interventionText.trim()) return;
     setIntervening(true);
+    const text = interventionText.trim();
     try {
-      await simulationsApi.intervene(currentSimulation.id, interventionText.trim());
+      await simulationsApi.intervene(currentSimulation.id, text);
+      track('simulation_intervention', {
+        simulation_id: currentSimulation.id,
+        message: text,
+        chars: text.length,
+      });
       setInterventionText('');
       const updated = await simulationsApi.getById(currentSimulation.id);
       setCurrentSimulation(updated);
@@ -612,6 +643,12 @@ export default function SimulationPage() {
   const handleNextTurn = async () => {
     if (!currentSimulation) return;
 
+    track('simulation_next_turn', {
+      simulation_id: currentSimulation.id,
+      current_turn: currentSimulation.current_turn,
+      streaming: streamingEnabled,
+    });
+
     if (streamingEnabled) {
       startStreamingTurn(false);
       return;
@@ -623,6 +660,17 @@ export default function SimulationPage() {
       // Reload full simulation to get updated state
       const updated = await simulationsApi.getById(currentSimulation.id);
       setCurrentSimulation(updated);
+      const last = updated.messages?.[updated.messages.length - 1];
+      if (last) {
+        track('simulation_turn_message', {
+          simulation_id: currentSimulation.id,
+          turn_number: last.turn_number,
+          persona_id: last.persona_id,
+          is_human: last.is_human_message ?? last.persona_id == null,
+          content: last.content,
+          chars: (last.content || '').length,
+        });
+      }
     } catch (error: any) {
       alert(`Failed to generate next turn: ${error.response?.data?.detail || error.message}`);
     } finally {

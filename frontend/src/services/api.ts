@@ -678,7 +678,7 @@ export const studyApi = {
     }>;
   },
 
-  adminListEvents: async (slug: string, participantCode?: string, limit = 500) => {
+  adminListEvents: async (slug: string, participantCode?: string, limit = 1000) => {
     const response = await api.get(`/study/admin/studies/${slug}/events`, {
       params: {
         participant_code: participantCode || undefined,

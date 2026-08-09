@@ -475,8 +475,20 @@ export default function PersonaChatPage() {
       setMessages((prev) => [...prev, ...assistantMsgs]);
       track('persona_chat_message', {
         session_id: session.id,
-        chars: userText.length,
-        replies: assistantMsgs.length,
+        mode: chatMode,
+        project_id: selectedProjectId,
+        persona_set_id: selectedSetId,
+        persona_id: selectedPersonaId,
+        user_message: userText,
+        user_message_chars: userText.length,
+        replies: assistantMsgs.map((m) => ({
+          persona_id: m.persona_id,
+          persona_name: m.persona_name,
+          content: m.content,
+          refused: m.refused,
+          retrieval_score: m.retrieval_score,
+        })),
+        reply_count: assistantMsgs.length,
       });
     } catch (err: any) {
       const detail = err.response?.data?.detail || err.message || 'Failed to send message';

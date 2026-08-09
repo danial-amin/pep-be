@@ -43,7 +43,9 @@ export default function StudyAdminPage() {
   const [events, setEvents] = useState<
     Array<{
       id: number;
+      participant_id?: number | null;
       participant_code?: string | null;
+      user_id?: number | null;
       event_type: string;
       path?: string | null;
       payload?: Record<string, unknown> | null;
@@ -480,38 +482,89 @@ export default function StudyAdminPage() {
             >
               Clear
             </button>
+            <span className="text-xs text-stone-400">
+              Showing {events.length} events (tagged by participant code + user id)
+            </span>
           </div>
           <div className="glass-card rounded-2xl overflow-hidden max-h-[70vh] overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-stone-50 text-left text-xs text-stone-500 uppercase">
                 <tr>
                   <th className="px-3 py-2">When</th>
-                  <th className="px-3 py-2">Code</th>
+                  <th className="px-3 py-2">Participant</th>
                   <th className="px-3 py-2">Event</th>
-                  <th className="px-3 py-2">Path / payload</th>
+                  <th className="px-3 py-2">Summary</th>
+                  <th className="px-3 py-2">Details</th>
                 </tr>
               </thead>
               <tbody>
-                {events.map((ev) => (
-                  <tr key={ev.id} className="border-t border-stone-100 align-top">
-                    <td className="px-3 py-2 text-xs text-stone-500 whitespace-nowrap">
-                      {ev.created_at ? new Date(ev.created_at).toLocaleString() : '—'}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">{ev.participant_code || '—'}</td>
-                    <td className="px-3 py-2 font-medium text-stone-900">{ev.event_type}</td>
-                    <td className="px-3 py-2 text-xs text-stone-600">
-                      <div>{ev.path || '—'}</div>
-                      {ev.payload && Object.keys(ev.payload).length > 0 && (
-                        <pre className="mt-1 whitespace-pre-wrap break-all text-[11px] text-stone-400">
-                          {JSON.stringify(ev.payload)}
-                        </pre>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {events.map((ev) => {
+                  const p = ev.payload || {};
+                  const duration =
+                    typeof p.duration_seconds === 'number'
+                      ? `${p.duration_seconds}s`
+                      : null;
+                  const summaryBits = [
+                    duration ? `dwell ${duration}` : null,
+                    typeof p.user_message === 'string'
+                      ? `msg: ${String(p.user_message).slice(0, 80)}`
+                      : null,
+                    typeof p.message === 'string'
+                      ? `intervention: ${String(p.message).slice(0, 80)}`
+                      : null,
+                    typeof p.content === 'string'
+                      ? `turn: ${String(p.content).slice(0, 80)}`
+                      : null,
+                    p.persona_name ? `persona: ${p.persona_name}` : null,
+                    p.persona_id != null ? `persona_id=${p.persona_id}` : null,
+                    p.simulation_id != null ? `sim=${p.simulation_id}` : null,
+                    p.session_id != null ? `chat=${p.session_id}` : null,
+                    ev.path || null,
+                  ].filter(Boolean);
+
+                  return (
+                    <tr key={ev.id} className="border-t border-stone-100 align-top">
+                      <td className="px-3 py-2 text-xs text-stone-500 whitespace-nowrap">
+                        {ev.created_at ? new Date(ev.created_at).toLocaleString() : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        <div className="font-mono font-medium text-stone-900">
+                          {ev.participant_code ||
+                            (typeof p.participant_code === 'string'
+                              ? p.participant_code
+                              : '—')}
+                        </div>
+                        <div className="text-stone-400">
+                          user #{ev.user_id ?? (typeof p.user_id === 'number' ? p.user_id : '—')}
+                          {ev.participant_id != null ? ` · pid ${ev.participant_id}` : ''}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 font-medium text-stone-900 whitespace-nowrap">
+                        {ev.event_type}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-stone-600 max-w-xs">
+                        {summaryBits.length ? summaryBits.join(' · ') : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-stone-500">
+                        {ev.payload && Object.keys(ev.payload).length > 0 ? (
+                          <details>
+                            <summary className="cursor-pointer text-stone-600 underline">
+                              payload
+                            </summary>
+                            <pre className="mt-1 max-w-md whitespace-pre-wrap break-all text-[11px] text-stone-400">
+                              {JSON.stringify(ev.payload, null, 2)}
+                            </pre>
+                          </details>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {!events.length && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-stone-400">
+                    <td colSpan={5} className="px-4 py-8 text-center text-stone-400">
                       No events
                     </td>
                   </tr>

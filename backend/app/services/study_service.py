@@ -502,14 +502,35 @@ class StudyService:
         payload: Optional[dict] = None,
         participant_id: Optional[int] = None,
         user_id: Optional[int] = None,
+        participant_code: Optional[str] = None,
     ) -> StudyEvent:
+        enriched: dict = dict(payload or {})
+        if participant_id is not None:
+            enriched.setdefault("participant_id", participant_id)
+        if user_id is not None:
+            enriched.setdefault("user_id", user_id)
+        if participant_code:
+            enriched.setdefault("participant_code", participant_code)
+
+        # Keep participant last_seen fresh for admin visibility
+        if participant_id is not None:
+            participant = (
+                await session.execute(
+                    select(StudyParticipant).where(StudyParticipant.id == participant_id)
+                )
+            ).scalar_one_or_none()
+            if participant:
+                participant.last_seen_at = datetime.now(timezone.utc)
+                if participant.code and "participant_code" not in enriched:
+                    enriched["participant_code"] = participant.code
+
         event = StudyEvent(
             study_id=study_id,
             participant_id=participant_id,
             user_id=user_id,
             event_type=event_type[:64],
             path=(path or "")[:512] or None,
-            payload=payload,
+            payload=enriched or None,
         )
         session.add(event)
         await session.flush()

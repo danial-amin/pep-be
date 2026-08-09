@@ -260,6 +260,7 @@ async def record_study_event(
             payload=body.payload,
             participant_id=claims.get("participant_id"),
             user_id=user.id,
+            participant_code=claims.get("participant_code"),
         )
         await db.commit()
         await db.refresh(event)

@@ -91,6 +91,7 @@ export default function StudyProfilesPage() {
   usePersonaViewTimer({
     personaSetId,
     personaId: expanded?.id ?? null,
+    personaName: expanded?.name ?? null,
     viewType: 'persona',
     enabled: !!expanded?.id,
   });
@@ -292,6 +293,7 @@ export default function StudyProfilesPage() {
                   setExpanded(persona);
                   track('profile_expand', {
                     persona_id: persona.id,
+                    persona_name: persona.name,
                     stakeholder_group:
                       persona.stakeholder_group || persona.persona_data?.stakeholder_group,
                   });
