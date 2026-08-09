@@ -243,11 +243,13 @@ export default function ProjectWorkflowPage() {
     if (!selectedSet) return;
     setMeasuringDiversity(true);
     try {
-      await personasApi.measureDiversity(selectedSet.id);
+      const result = await personasApi.measureDiversity(selectedSet.id);
       await loadPersonaSets();
       const updated = await personasApi.getSet(selectedSet.id);
       setSelectedSet(updated);
-      alert('Diversity measured successfully!');
+      const rqe = result?.metrics?.rqe_score;
+      const rqePct = rqe != null ? `${(rqe * 100).toFixed(1)}%` : 'n/a';
+      alert(`RQE measured: ${rqePct}`);
     } catch (error: any) {
       alert(`Failed to measure diversity: ${error.response?.data?.detail || error.message}`);
     } finally {
@@ -711,10 +713,16 @@ export default function ProjectWorkflowPage() {
               <div className="flex items-center space-x-4">
                 <button
                   onClick={handleMeasureDiversity}
-                  disabled={measuringDiversity}
-                  className="px-4 py-2 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50"
+                  disabled={measuringDiversity || (selectedSet.personas?.length ?? 0) < 2}
+                  className="px-4 py-2 bg-stone-900 text-white rounded-lg hover:bg-stone-800 disabled:opacity-50"
                 >
-                  {measuringDiversity ? 'Measuring...' : 'Measure Diversity'}
+                  {measuringDiversity
+                    ? 'Measuring…'
+                    : selectedSet.diversity_score?.rqe_score != null ||
+                        (selectedSet.diversity_score as { final_rqe?: number } | undefined)?.final_rqe !=
+                          null
+                      ? 'Re-measure RQE'
+                      : 'Measure RQE'}
                 </button>
                 {selectedSet.diversity_score && (
                   <span className="text-stone-700">

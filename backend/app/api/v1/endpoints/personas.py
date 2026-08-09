@@ -697,9 +697,10 @@ async def measure_diversity(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Step 2: Measure diversity of the persona set using RQE (Representation Quality Evaluation).
-    
-    Calculates how diverse the personas are and stores RQE scores.
+    Measure (or re-measure) persona-set diversity using RQE.
+
+    Can be run any time after a set has at least 2 personas. Updates
+    diversity_score and appends an entry to rqe_scores history.
     """
     try:
         metrics = await AnalyticsService.calculate_diversity(db, persona_set_id)

@@ -888,7 +888,7 @@ When answering:
         db: AsyncSession,
         session_id: int,
         user_message: str,
-        strict_mode: bool = False,
+        strict_mode: bool = True,
     ) -> Dict[str, Any]:
         chat_session = await self.get_session(db, session_id)
         if not chat_session:

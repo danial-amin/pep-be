@@ -191,7 +191,7 @@ export default function PersonaChatPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(false);
-  const [strictMode, setStrictMode] = useState(false);
+  const [strictMode, setStrictMode] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // @ mention autocomplete
@@ -303,6 +303,11 @@ export default function PersonaChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  // Study participants always use strict knowledge control (no UI toggle)
+  useEffect(() => {
+    if (isStudyMode) setStrictMode(true);
+  }, [isStudyMode]);
 
   const projectPersonas = useMemo(
     () => personaSets.flatMap((s) => s.personas.map((p) => ({ ...p, setName: s.name, setId: s.id }))),
@@ -808,15 +813,17 @@ export default function PersonaChatPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <label className="flex items-center gap-2 text-xs text-stone-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={strictMode}
-                      onChange={(e) => setStrictMode(e.target.checked)}
-                      className="rounded accent-stone-900"
-                    />
-                    Strict mode
-                  </label>
+                  {!isStudyMode && (
+                    <label className="flex items-center gap-2 text-xs text-stone-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={strictMode}
+                        onChange={(e) => setStrictMode(e.target.checked)}
+                        className="rounded accent-stone-900"
+                      />
+                      Strict mode
+                    </label>
+                  )}
                   <button
                     onClick={() => handleDownloadChat('txt')}
                     disabled={messages.length === 0}

@@ -9,6 +9,7 @@ Implements the PEP paper validation methodology:
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Dict, Any, Optional
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -133,20 +134,21 @@ class AnalyticsService:
             "min_similarity": min_similarity,
             "max_similarity": max_similarity,
             "std_similarity": std_similarity,
-            "num_personas": len(persona_set.personas)
+            "num_personas": len(persona_set.personas),
+            "measured_at": datetime.now(timezone.utc).isoformat(),
         }
         
-        # Update persona set with RQE score for current cycle
-        if persona_set.rqe_scores is None:
-            persona_set.rqe_scores = []
-        
-        persona_set.rqe_scores.append({
-            "cycle": persona_set.generation_cycle,
+        # Reassign JSON so SQLAlchemy persists the append (in-place mutate can be missed)
+        scores = list(persona_set.rqe_scores or [])
+        scores.append({
+            "cycle": len(scores) + 1,
+            "generation_cycle": persona_set.generation_cycle,
             "rqe_score": diversity_score,
             "average_similarity": avg_similarity,
-            "timestamp": persona_set.updated_at.isoformat() if persona_set.updated_at else None
+            "timestamp": metrics["measured_at"],
+            "source": "manual_measure",
         })
-        
+        persona_set.rqe_scores = scores
         persona_set.diversity_score = metrics
         await session.flush()
         

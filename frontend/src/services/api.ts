@@ -509,7 +509,7 @@ export const personaChatApi = {
     return response.data;
   },
 
-  sendMessage: async (sessionId: number, message: string, strictMode = false) => {
+  sendMessage: async (sessionId: number, message: string, strictMode = true) => {
     const response = await api.post(
       `/persona-chats/${sessionId}/messages`,
       { message, strict_mode: strictMode },

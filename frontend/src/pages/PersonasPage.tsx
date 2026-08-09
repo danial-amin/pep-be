@@ -232,18 +232,30 @@ export default function PersonasPage() {
   const handleMeasureDiversity = async (personaSetId: number) => {
     setMeasuringDiversity(personaSetId);
     try {
-      await personasApi.measureDiversity(personaSetId);
+      const result = await personasApi.measureDiversity(personaSetId);
       await loadPersonaSets();
       if (selectedSet?.id === personaSetId) {
         const updated = await personasApi.getSet(personaSetId);
         setSelectedSet(updated);
       }
-      alert('Diversity measured successfully!');
+      const rqe = result?.metrics?.rqe_score;
+      const avg = result?.metrics?.average_similarity;
+      const rqePct = rqe != null ? `${(rqe * 100).toFixed(1)}%` : 'n/a';
+      const avgPct = avg != null ? `${(avg * 100).toFixed(1)}%` : 'n/a';
+      alert(`RQE measured.\nRQE: ${rqePct}\nAvg similarity: ${avgPct}`);
     } catch (error: any) {
       alert(`Failed to measure diversity: ${error.response?.data?.detail || error.message}`);
     } finally {
       setMeasuringDiversity(null);
     }
+  };
+
+  const currentRqe = (set: PersonaSet | null | undefined) => {
+    if (!set?.diversity_score) return null;
+    const score =
+      set.diversity_score.rqe_score ??
+      (set.diversity_score as { final_rqe?: number }).final_rqe;
+    return score != null ? score : null;
   };
 
   const handleValidate = async (personaSetId: number) => {
@@ -524,9 +536,9 @@ export default function PersonasPage() {
             {/* Step 2: Diversity Measurement */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.diversity_score ? 'bg-green-400' : 'bg-stone-100'
+                currentRqe(selectedSet) != null ? 'bg-green-400' : 'bg-stone-100'
               }`}>
-                {selectedSet.diversity_score ? (
+                {currentRqe(selectedSet) != null ? (
                   <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
                   <Circle className="h-5 w-5 text-stone-900" />
@@ -534,31 +546,32 @@ export default function PersonasPage() {
               </div>
               <div className="flex-1">
                 <h4 className="font-medium text-stone-900">Step 2: Measure Diversity (RQE)</h4>
-                <p className="text-sm text-stone-600">Calculate RQE scores to measure persona set diversity</p>
-                {selectedSet.diversity_score && (
+                <p className="text-sm text-stone-600">
+                  Calculate RQE whenever you want — after generation, edits, or before reporting.
+                </p>
+                {currentRqe(selectedSet) != null && (
                   <p className="text-xs text-stone-400 mt-1">
-                    ✓ RQE:{' '}
-                    {(
-                      (selectedSet.diversity_score.rqe_score ??
-                        (selectedSet.diversity_score as { final_rqe?: number }).final_rqe ??
-                        0) * 100
-                    ).toFixed(1)}
-                    %
+                    Current RQE: {(currentRqe(selectedSet)! * 100).toFixed(1)}%
+                    {selectedSet.diversity_score?.average_similarity != null && (
+                      <> · avg similarity {(selectedSet.diversity_score.average_similarity * 100).toFixed(1)}%</>
+                    )}
                   </p>
                 )}
-                {selectedSet.personas.length > 0 &&
-                  !(
-                    selectedSet.diversity_score?.rqe_score != null ||
-                    (selectedSet.diversity_score as { final_rqe?: number } | undefined)?.final_rqe !=
-                      null
-                  ) && (
+                {selectedSet.personas.length >= 2 && (
                   <button
                     onClick={() => handleMeasureDiversity(selectedSet.id)}
                     disabled={measuringDiversity === selectedSet.id}
-                    className="mt-2 text-xs px-3 py-1 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50"
+                    className="mt-2 text-xs px-3 py-1 bg-stone-900 text-white rounded-lg hover:bg-stone-800 disabled:opacity-50"
                   >
-                    {measuringDiversity === selectedSet.id ? 'Measuring...' : 'Measure Diversity'}
+                    {measuringDiversity === selectedSet.id
+                      ? 'Measuring…'
+                      : currentRqe(selectedSet) != null
+                        ? 'Re-measure RQE'
+                        : 'Measure RQE'}
                   </button>
+                )}
+                {selectedSet.personas.length === 1 && (
+                  <p className="text-xs text-stone-400 mt-2">Need at least 2 personas to measure RQE.</p>
                 )}
               </div>
             </div>
@@ -701,7 +714,20 @@ export default function PersonasPage() {
                       {new Date(set.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="mt-3 flex space-x-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleMeasureDiversity(set.id)}
+                      disabled={measuringDiversity === set.id || set.personas.length < 2}
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded-lg hover:bg-stone-200 disabled:opacity-50 transition-all duration-150 border border-stone-200"
+                      title={set.personas.length < 2 ? 'Need at least 2 personas' : 'Measure RQE diversity'}
+                    >
+                      <BarChart3 className="inline h-3 w-3 mr-1" />
+                      {measuringDiversity === set.id
+                        ? 'Measuring…'
+                        : currentRqe(set) != null
+                          ? `RQE ${(currentRqe(set)! * 100).toFixed(0)}% · Re-measure`
+                          : 'Measure RQE'}
+                    </button>
                     <button
                       onClick={() => handleExpand(set.id)}
                       disabled={expanding === set.id}
