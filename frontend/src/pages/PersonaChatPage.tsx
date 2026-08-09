@@ -167,7 +167,7 @@ export default function PersonaChatPage() {
   const { track } = useStudyTracker(studySlug);
 
   const [chatMode, setChatMode] = useState<ChatMode>(() => {
-    if (isStudyMode) return 'set';
+    if (isStudyMode) return 'single';
     const stored = localStorage.getItem(MODE_STORAGE_KEY);
     return stored === 'set' ? 'set' : 'single';
   });
@@ -275,7 +275,15 @@ export default function PersonaChatPage() {
           setSelectedSetId(preferredSet);
         }
         if (isStudyMode) {
-          setChatMode(personaIdParam ? 'single' : 'set');
+          setChatMode('single');
+          const firstPersonaId = effective[0]?.personas?.[0]?.id ?? null;
+          const preferredPersona =
+            (personaIdParam ? parseInt(personaIdParam, 10) : null) ||
+            selectedPersonaId ||
+            firstPersonaId;
+          if (preferredPersona && allIds.includes(preferredPersona)) {
+            setSelectedPersonaId(preferredPersona);
+          }
         }
       })
       .catch(() => setError('Failed to load personas for this project'))
@@ -601,44 +609,54 @@ export default function PersonaChatPage() {
           </div>
         </div>
 
-        {/* Mode tabs */}
-        <div className="flex items-center gap-2 mt-4">
-          <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1">
-            <button
-              type="button"
-              onClick={() => setChatMode('single')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                chatMode === 'single'
-                  ? 'bg-stone-900 text-white'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              Single persona
-            </button>
-            <button
-              type="button"
-              onClick={() => setChatMode('set')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                chatMode === 'set'
-                  ? 'bg-stone-900 text-white'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              Persona set
-            </button>
-          </div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
-            <Shield className="w-3 h-3" />
-            Strict knowledge control
-          </span>
-          {chatMode === 'set' && (
-            <span className="text-xs text-stone-400">
-              No @ → all reply · @Name → only that persona
+        {/* Mode tabs — study participants stay on single-persona chat */}
+        {!isStudyMode && (
+          <div className="flex items-center gap-2 mt-4">
+            <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setChatMode('single')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  chatMode === 'single'
+                    ? 'bg-stone-900 text-white'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                Single persona
+              </button>
+              <button
+                type="button"
+                onClick={() => setChatMode('set')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  chatMode === 'set'
+                    ? 'bg-stone-900 text-white'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                Persona set
+              </button>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
+              <Shield className="w-3 h-3" />
+              Strict knowledge control
             </span>
-          )}
-        </div>
+            {chatMode === 'set' && (
+              <span className="text-xs text-stone-400">
+                No @ → all reply · @Name → only that persona
+              </span>
+            )}
+          </div>
+        )}
+        {isStudyMode && (
+          <div className="mt-4">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
+              <User className="w-3 h-3" />
+              Individual persona chat
+            </span>
+          </div>
+        )}
       </div>
 
       <div

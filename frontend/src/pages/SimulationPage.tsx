@@ -23,6 +23,11 @@ import {
 } from 'lucide-react';
 import { simulationsApi, personasApi, API_BASE_URL, getAuthToken } from '../services/api';
 import {
+  STUDY_SIMULATION_DEFAULT_CONTEXT,
+  STUDY_SIMULATION_DEFAULT_GOAL,
+  shouldUseStudySimulationDefaults,
+} from '../studySimulationDefaults';
+import {
   Simulation,
   SimulationMessage,
   PersonaSet,
@@ -205,9 +210,10 @@ export default function SimulationPage() {
   const isStudyMode = !!studySlugParam || !!user?.is_study_participant;
   const studyScope = getStudyScope();
   const { track } = useStudyTracker(studySlug);
+  const useStudyDefaults = shouldUseStudySimulationDefaults(user?.participant_code);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<AbortController | null>(null);
-  const autoContinueRef = useRef(true);
+  const autoContinueRef = useRef(!isStudyMode);
   const streamingMessageRef = useRef<SimulationMessage | null>(null);
 
   // State
@@ -218,7 +224,7 @@ export default function SimulationPage() {
   const [running, setRunning] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState<SimulationMessage | null>(null);
-  const [autoContinue, setAutoContinue] = useState(true);
+  const [autoContinue, setAutoContinue] = useState(!isStudyMode);
   const [streamingEnabled, setStreamingEnabled] = useState(true);
   const [interventionText, setInterventionText] = useState('');
   const [intervening, setIntervening] = useState(false);
@@ -243,6 +249,21 @@ export default function SimulationPage() {
   const [evaluatingDiscussion, setEvaluatingDiscussion] = useState(false);
   const [evaluationScores, setEvaluationScores] = useState<SimulationEvaluationScores | null>(null);
   const [showEvaluationScores, setShowEvaluationScores] = useState(false);
+
+  // Study mode: always proceed turn-by-turn (no auto-continue)
+  useEffect(() => {
+    if (isStudyMode) {
+      setAutoContinue(false);
+      autoContinueRef.current = false;
+    }
+  }, [isStudyMode]);
+
+  // Prefill study scenario for PX / P01… participants on the create form
+  useEffect(() => {
+    if (!useStudyDefaults || !showSetup || !!simulationId) return;
+    setGoal((prev) => (prev.trim() ? prev : STUDY_SIMULATION_DEFAULT_GOAL));
+    setGoalContext((prev) => (prev.trim() ? prev : STUDY_SIMULATION_DEFAULT_CONTEXT));
+  }, [useStudyDefaults, showSetup, simulationId, user?.participant_code]);
 
   // Load data on mount
   useEffect(() => {
@@ -772,8 +793,13 @@ export default function SimulationPage() {
     setSelectedPersonas(new Map());
     setExpandedSetIds(new Set());
     setName('');
-    setGoal('');
-    setGoalContext('');
+    if (shouldUseStudySimulationDefaults(user?.participant_code)) {
+      setGoal(STUDY_SIMULATION_DEFAULT_GOAL);
+      setGoalContext(STUDY_SIMULATION_DEFAULT_CONTEXT);
+    } else {
+      setGoal('');
+      setGoalContext('');
+    }
     setRunUntilAgreement(false);
     setAgreementThreshold(0.7);
     setAgreementHistory(null);
@@ -923,11 +949,11 @@ export default function SimulationPage() {
                     <Target className="w-4 h-4 inline mr-1" />
                     Goal / Topic *
                   </label>
-                  <input
-                    type="text"
+                  <textarea
                     value={goal}
                     onChange={(e) => setGoal(e.target.value)}
                     placeholder="e.g., Discuss how to improve our mobile app UX"
+                    rows={useStudyDefaults ? 3 : 2}
                     className="w-full px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
                   />
                 </div>
@@ -935,15 +961,20 @@ export default function SimulationPage() {
 
               <div className="mb-6">
                 <label className="block text-sm font-medium text-stone-700 mb-2">
-                  Additional Context (Optional)
+                  Additional Context {useStudyDefaults ? '' : '(Optional)'}
                 </label>
                 <textarea
                   value={goalContext}
                   onChange={(e) => setGoalContext(e.target.value)}
                   placeholder="Provide any additional context, constraints, or specific aspects to focus on..."
-                  rows={3}
+                  rows={useStudyDefaults ? 12 : 3}
                   className="w-full px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
                 />
+                {useStudyDefaults && (
+                  <p className="mt-1.5 text-xs text-stone-500">
+                    Prefilled for study code {user?.participant_code}. You can edit if needed.
+                  </p>
+                )}
               </div>
 
               {/* Limits */}
@@ -1210,69 +1241,74 @@ export default function SimulationPage() {
               </div>
 
               {/* Controls */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 {currentSimulation.status === 'pending' && (
                   <>
-                    <button
-                      onClick={() => handleStartSimulation(autoContinue)}
-                      disabled={running}
-                      className="px-4 py-2 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                    >
-                      {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                      Run Full Simulation
-                    </button>
-                    <button
-                      onClick={() => handleStartSimulation(false)}
-                      disabled={running}
-                      className="px-4 py-2 bg-stone-100 hover:bg-stone-100 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                    >
-                      <SkipForward className="w-4 h-4" />
-                      Step by Step
-                    </button>
+                    {isStudyMode ? (
+                      <button
+                        onClick={() => handleStartSimulation(false)}
+                        disabled={running}
+                        className="px-4 py-2 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
+                      >
+                        {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                        Start (step by step)
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleStartSimulation(autoContinue)}
+                          disabled={running}
+                          className="px-4 py-2 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
+                        >
+                          {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                          Run Full Simulation
+                        </button>
+                        <button
+                          onClick={() => handleStartSimulation(false)}
+                          disabled={running}
+                          className="px-4 py-2 bg-stone-100 hover:bg-stone-100 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
+                        >
+                          <SkipForward className="w-4 h-4" />
+                          Step by Step
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
 
                 {currentSimulation.status === 'running' && (
-                  <>
-                    <button
-                      onClick={handleNextTurn}
-                      disabled={running}
-                      className="px-4 py-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                    >
-                      {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <SkipForward className="w-4 h-4" />}
-                      Next Turn
-                    </button>
-                    <button
-                      onClick={handleStopSimulation}
-                      disabled={running}
-                      className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                    >
-                      <Pause className="w-4 h-4" />
-                      Stop
-                    </button>
-                  </>
+                  <button
+                    onClick={handleStopSimulation}
+                    disabled={running}
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
+                  >
+                    <Pause className="w-4 h-4" />
+                    Stop
+                  </button>
                 )}
 
-                <div className="flex items-center gap-4 text-sm text-stone-500">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={streamingEnabled}
-                      onChange={(e) => setStreamingEnabled(e.target.checked)}
-                      className="accent-white"
-                    />
-                    Stream responses
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={autoContinue}
-                      onChange={(e) => setAutoContinue(e.target.checked)}
-                      className="accent-white"
-                    />
-                    Auto-continue turns
-                  </label>
-                </div>
+                {!isStudyMode && (
+                  <div className="flex items-center gap-4 text-sm text-stone-500">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={streamingEnabled}
+                        onChange={(e) => setStreamingEnabled(e.target.checked)}
+                        className="accent-white"
+                      />
+                      Stream responses
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={autoContinue}
+                        onChange={(e) => setAutoContinue(e.target.checked)}
+                        className="accent-white"
+                      />
+                      Auto-continue turns
+                    </label>
+                  </div>
+                )}
 
                 <button
                   type="button"
@@ -1380,17 +1416,17 @@ export default function SimulationPage() {
                   )}
                 </div>
 
-                {/* Intervention box - fixed at bottom under the chat */}
+                {/* Intervention + Next Turn - fixed at bottom under the chat */}
                 {(currentSimulation.status === 'running' || currentSimulation.status === 'pending') && (
                   <div className="flex-shrink-0 p-4 pt-0 border-t border-stone-200">
-                    <div className="flex gap-2 items-center">
+                    <div className="flex gap-2 items-center flex-wrap">
                       <input
                         type="text"
                         value={interventionText}
                         onChange={(e) => setInterventionText(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleIntervene()}
                         placeholder="Facilitator intervention (e.g., Let's focus on cost...)"
-                        className="flex-1 px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        className="flex-1 min-w-[12rem] px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
                         disabled={intervening}
                       />
                       <button
@@ -1401,9 +1437,21 @@ export default function SimulationPage() {
                         {intervening ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
                         Intervene
                       </button>
+                      {currentSimulation.status === 'running' && (
+                        <button
+                          onClick={handleNextTurn}
+                          disabled={running}
+                          className="px-4 py-2.5 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                        >
+                          {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <SkipForward className="w-4 h-4" />}
+                          Next Turn
+                        </button>
+                      )}
                     </div>
                     <p className="text-xs text-stone-400 mt-1.5">
-                      Next persona turn will address your message and give it strong weight.
+                      {isStudyMode
+                        ? 'Use Next Turn to advance one speaker at a time. Interventions are addressed on the following turn.'
+                        : 'Next persona turn will address your message and give it strong weight.'}
                     </p>
                   </div>
                 )}
