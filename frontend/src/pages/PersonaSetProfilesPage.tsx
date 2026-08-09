@@ -167,7 +167,7 @@ export default function PersonaSetProfilesPage() {
             aria-label="Close profile"
             onClick={() => setExpandedPersona(null)}
           />
-          <div className="relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-[#f8f7f4] shadow-2xl">
+          <div className="relative z-10 flex max-h-[92vh] w-full max-w-4xl min-w-0 flex-col overflow-hidden rounded-2xl bg-[#f8f7f4] shadow-2xl">
             <div className="flex items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3">
               <h2 className="truncate text-base font-semibold text-stone-900">
                 {expandedPersona.persona_data?.name || expandedPersona.name}
@@ -181,8 +181,8 @@ export default function PersonaSetProfilesPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-              <PersonaProfileCard persona={expandedPersona} />
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+              <PersonaProfileCard persona={expandedPersona} className="border-0 shadow-none bg-transparent" />
             </div>
           </div>
         </div>

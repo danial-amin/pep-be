@@ -153,15 +153,25 @@ export default function PersonaProfileCard({
             }
           : undefined
       }
-      className={`glass-card rounded-2xl border border-stone-200 ${compact ? 'p-4' : 'p-6'} ${
+      className={`glass-card rounded-2xl border border-stone-200 w-full min-w-0 overflow-hidden ${compact ? 'p-4' : 'p-6'} ${
         interactive
           ? 'cursor-pointer transition-shadow hover:border-stone-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-stone-400 focus:ring-offset-2'
           : ''
       } ${className}`}
     >
-      {/* Header: identity row, then full-width quote/overview (so long demographics can't shove them aside) */}
+      {/* Expanded (modal / full): photo + quote first; demographics below so long fields cannot displace them */}
       <div className="mb-4 space-y-4 border-b border-stone-200 pb-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <h4 className={`break-words font-bold text-stone-900 ${compact ? 'text-xl' : 'text-2xl'}`}>
+          {name}
+        </h4>
+
+        <div
+          className={
+            compact
+              ? 'flex flex-col gap-3'
+              : 'grid grid-cols-1 gap-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-start'
+          }
+        >
           <div className="flex-shrink-0">
             {(persona.image_url || persona.id) && !imageError ? (
               <img
@@ -181,106 +191,101 @@ export default function PersonaProfileCard({
             )}
           </div>
 
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <h4 className={`mb-1 break-words font-bold text-stone-900 ${compact ? 'text-xl' : 'text-2xl'}`}>
-              {name}
-            </h4>
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {getField(personaData, 'age') && (
-                <div className="flex items-start gap-2 text-sm text-stone-700">
-                  <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
-                  <span className="min-w-0 break-words">
-                    <strong>Age:</strong> {String(getField(personaData, 'age') || '')}
-                  </span>
+          {(personaData.quote ||
+            personaData.quotes ||
+            personaData.basic_description ||
+            personaData.tagline ||
+            personaData.role) && (
+            <div className="min-w-0 space-y-3">
+              {(personaData.quote || personaData.quotes) && (
+                <div className="rounded-lg border-l-4 border-violet-400 bg-stone-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <Quote className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-500" />
+                    <div className="min-w-0 break-words text-sm italic leading-relaxed text-stone-700">
+                      {Array.isArray(personaData.quotes) ? (
+                        <ul className="list-inside list-disc space-y-1">
+                          {personaData.quotes.map((q: any, idx: number) => (
+                            <li key={idx}>"{renderValue(q)}"</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>"{renderValue(personaData.quote)}"</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
-              {getField(personaData, 'gender') && (
-                <div className="flex items-start gap-2 text-sm text-stone-700">
-                  <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
-                  <span className="min-w-0 break-words">
-                    <strong>Gender:</strong> {String(getField(personaData, 'gender') || '')}
-                  </span>
-                </div>
-              )}
-              {getField(personaData, 'occupation') && (
-                <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
-                  <Briefcase className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
-                  <span className="min-w-0 break-words">
-                    <strong>Occupation:</strong> {String(getField(personaData, 'occupation') || '')}
-                  </span>
-                </div>
-              )}
-              {(getField(personaData, 'location') || getField(personaData, 'nationality')) && (
-                <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
-                  <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
-                  <span className="min-w-0 break-words">
-                    <strong>Location:</strong>{' '}
-                    {formatLocation(
-                      getField(personaData, 'location'),
-                      getField(personaData, 'nationality')
-                    )}
-                  </span>
-                </div>
-              )}
-              {(getField(personaData, 'education') || getField(personaData, 'education_level')) && (
-                <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
-                  <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
-                  <span className="min-w-0 break-words">
-                    <strong>Education:</strong>{' '}
-                    {String(
-                      getField(personaData, 'education') ||
-                        getField(personaData, 'education_level') ||
-                        ''
-                    )}
-                  </span>
+              {(personaData.basic_description || personaData.tagline || personaData.role) && (
+                <div className="min-w-0">
+                  <h5 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-stone-900">
+                    Overview
+                  </h5>
+                  <p className="break-words text-sm leading-relaxed text-stone-700">
+                    {renderValue(personaData.basic_description) ||
+                      renderValue(personaData.tagline) ||
+                      renderValue(personaData.role)}
+                  </p>
                 </div>
               )}
             </div>
-          </div>
+          )}
         </div>
 
-        {(personaData.quote ||
-          personaData.quotes ||
-          personaData.basic_description ||
-          personaData.tagline ||
-          personaData.role) && (
-          <div className="min-w-0 space-y-3">
-            {(personaData.quote || personaData.quotes) && (
-              <div className="rounded-lg border-l-4 border-violet-400 bg-stone-50 p-3">
-                <div className="flex items-start gap-2">
-                  <Quote className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-500" />
-                  <div className="min-w-0 break-words text-sm italic leading-relaxed text-stone-700">
-                    {Array.isArray(personaData.quotes) ? (
-                      <ul className="list-inside list-disc space-y-1">
-                        {personaData.quotes.map((q: any, idx: number) => (
-                          <li key={idx}>"{renderValue(q)}"</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>"{renderValue(personaData.quote)}"</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-            {(personaData.basic_description || personaData.tagline || personaData.role) && (
-              <div className="min-w-0">
-                <h5 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-stone-900">
-                  Overview
-                </h5>
-                <p className="break-words text-sm leading-relaxed text-stone-700">
-                  {renderValue(personaData.basic_description) ||
-                    renderValue(personaData.tagline) ||
-                    renderValue(personaData.role)}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {getField(personaData, 'age') && (
+            <div className="flex min-w-0 items-start gap-2 text-sm text-stone-700">
+              <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+              <span className="min-w-0 break-words">
+                <strong>Age:</strong> {String(getField(personaData, 'age') || '')}
+              </span>
+            </div>
+          )}
+          {getField(personaData, 'gender') && (
+            <div className="flex min-w-0 items-start gap-2 text-sm text-stone-700">
+              <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+              <span className="min-w-0 break-words">
+                <strong>Gender:</strong> {String(getField(personaData, 'gender') || '')}
+              </span>
+            </div>
+          )}
+          {getField(personaData, 'occupation') && (
+            <div className="flex min-w-0 items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+              <Briefcase className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+              <span className="min-w-0 break-words">
+                <strong>Occupation:</strong> {String(getField(personaData, 'occupation') || '')}
+              </span>
+            </div>
+          )}
+          {(getField(personaData, 'location') || getField(personaData, 'nationality')) && (
+            <div className="flex min-w-0 items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+              <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+              <span className="min-w-0 break-words">
+                <strong>Location:</strong>{' '}
+                {formatLocation(
+                  getField(personaData, 'location'),
+                  getField(personaData, 'nationality')
+                )}
+              </span>
+            </div>
+          )}
+          {(getField(personaData, 'education') || getField(personaData, 'education_level')) && (
+            <div className="flex min-w-0 items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+              <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+              <span className="min-w-0 break-words">
+                <strong>Education:</strong>{' '}
+                {String(
+                  getField(personaData, 'education') ||
+                    getField(personaData, 'education_level') ||
+                    ''
+                )}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Body sections */}
-      <div className={compact ? 'space-y-1' : 'grid grid-cols-1 gap-2 lg:grid-cols-2'}>
+      <div className={`min-w-0 ${compact ? 'space-y-1' : 'grid grid-cols-1 gap-2 lg:grid-cols-2'}`}>
         <Section
           title="Background"
           icon={<User className="h-3 w-3 text-stone-500" />}
