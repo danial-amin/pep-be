@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Bot, LayoutGrid, LogOut, Maximize2, Play, Save, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, LayoutGrid, LogOut, Maximize2, Save, X } from 'lucide-react';
 import PersonaProfileCard from '../components/PersonaProfileCard';
 import { studyApi, clearAuthToken } from '../services/api';
 import { Persona } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { setStudyScope, studyPath, useStudyTracker, clearStudyScope } from '../hooks/useStudyTracker';
+import { setStudyScope, useStudyTracker, clearStudyScope } from '../hooks/useStudyTracker';
 import { usePersonaViewTimer } from '../hooks/usePersonaViewTimer';
 
 type StudyPersona = Persona & { stakeholder_group?: string | null };
@@ -198,32 +198,6 @@ export default function StudyProfilesPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {slug && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    track('nav_chat');
-                    navigate(studyPath(slug, '/persona-chat'));
-                  }}
-                  className="inline-flex items-center gap-2 rounded-lg bg-stone-900 px-3 py-2 text-sm text-white"
-                >
-                  <Bot className="h-4 w-4" />
-                  Chat
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    track('nav_simulation');
-                    navigate(studyPath(slug, '/simulations'));
-                  }}
-                  className="inline-flex items-center gap-2 rounded-lg bg-stone-900 px-3 py-2 text-sm text-white"
-                >
-                  <Play className="h-4 w-4" />
-                  Simulation
-                </button>
-              </>
-            )}
             {canReorder && (
               <button
                 type="button"
@@ -278,17 +252,15 @@ export default function StudyProfilesPage() {
                 Expand
               </span>
             </div>
-            {(persona.stakeholder_group || persona.persona_data?.stakeholder_group) && (
-              <div className="absolute bottom-3 left-3 z-10">
-                <span className="rounded-full bg-stone-900/80 text-white text-[10px] px-2 py-0.5 font-mono">
-                  {String(persona.stakeholder_group || persona.persona_data?.stakeholder_group)}
-                </span>
-              </div>
-            )}
             <div className="max-h-[70vh] overflow-hidden rounded-2xl">
               <PersonaProfileCard
                 persona={persona}
                 compact
+                stakeholderSubtext={
+                  persona.stakeholder_group ||
+                  persona.persona_data?.stakeholder_group ||
+                  null
+                }
                 onClick={() => {
                   setExpanded(persona);
                   track('profile_expand', {
@@ -338,7 +310,15 @@ export default function StudyProfilesPage() {
               </button>
             </div>
             <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
-              <PersonaProfileCard persona={expanded} className="border-0 shadow-none bg-transparent" />
+              <PersonaProfileCard
+                persona={expanded}
+                stakeholderSubtext={
+                  expanded.stakeholder_group ||
+                  expanded.persona_data?.stakeholder_group ||
+                  null
+                }
+                className="border-0 shadow-none bg-transparent"
+              />
             </div>
           </div>
         </div>

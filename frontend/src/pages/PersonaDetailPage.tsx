@@ -734,7 +734,7 @@ export default function PersonaDetailPage() {
                   )}
                   {personaData.technology_profile.interaction_preferences && (
                     <div>
-                      <span className="text-xs text-stone-500 font-medium">Preferences:</span>
+                      <span className="text-xs text-stone-500 font-medium">Communication Preferences:</span>
                       <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-stone-700">
                         {personaData.technology_profile.interaction_preferences.map((pref: any, idx: number) => (
                           <li key={idx} className="leading-tight">

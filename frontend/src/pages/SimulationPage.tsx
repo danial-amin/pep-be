@@ -641,19 +641,62 @@ export default function SimulationPage() {
   };
 
   const handleIntervene = async () => {
-    if (!currentSimulation || !interventionText.trim()) return;
+    if (!currentSimulation || !interventionText.trim() || running) return;
     setIntervening(true);
     const text = interventionText.trim();
+    const simId = currentSimulation.id;
     try {
-      await simulationsApi.intervene(currentSimulation.id, text);
+      await simulationsApi.intervene(simId, text);
       track('simulation_intervention', {
-        simulation_id: currentSimulation.id,
+        simulation_id: simId,
         message: text,
         chars: text.length,
       });
       setInterventionText('');
-      const updated = await simulationsApi.getById(currentSimulation.id);
+      let updated = await simulationsApi.getById(simId);
       setCurrentSimulation(updated);
+
+      // Intervention should immediately advance the discussion with a persona reply
+      if (updated.status === 'pending' || updated.status === 'running') {
+        track('simulation_next_turn', {
+          simulation_id: simId,
+          current_turn: updated.current_turn,
+          streaming: streamingEnabled,
+          after_intervention: true,
+        });
+
+        if (streamingEnabled) {
+          setIntervening(false);
+          startStreamingTurn(false);
+          return;
+        }
+
+        setRunning(true);
+        try {
+          if (updated.status === 'pending') {
+            updated = await simulationsApi.start(simId, false);
+          } else {
+            await simulationsApi.nextTurn(simId);
+            updated = await simulationsApi.getById(simId);
+          }
+          setCurrentSimulation(updated);
+          await loadSimulations();
+          const last = updated.messages?.[updated.messages.length - 1];
+          if (last) {
+            track('simulation_turn_message', {
+              simulation_id: simId,
+              turn_number: last.turn_number,
+              persona_id: last.persona_id,
+              is_human: last.is_human_message ?? last.persona_id == null,
+              content: last.content,
+              chars: (last.content || '').length,
+              after_intervention: true,
+            });
+          }
+        } finally {
+          setRunning(false);
+        }
+      }
     } catch (error: any) {
       alert(`Failed to add intervention: ${error.response?.data?.detail || error.message}`);
     } finally {
@@ -809,10 +852,18 @@ export default function SimulationPage() {
     navigate(studySlug ? studyPath(studySlug, '/simulations') : '/simulations');
   };
 
-  const displayMessages =
-    currentSimulation && streamingMessage
-      ? [...currentSimulation.messages, streamingMessage]
-      : currentSimulation?.messages || [];
+  const displayMessages = (() => {
+    const base = currentSimulation?.messages ? [...currentSimulation.messages] : [];
+    if (streamingMessage) base.push(streamingMessage);
+    return base.sort((a, b) => {
+      const aid = a.id == null || a.id < 0 ? Number.MAX_SAFE_INTEGER : a.id;
+      const bid = b.id == null || b.id < 0 ? Number.MAX_SAFE_INTEGER : b.id;
+      if (aid !== bid) return aid - bid;
+      const at = a.created_at ? Date.parse(a.created_at) : 0;
+      const bt = b.created_at ? Date.parse(b.created_at) : 0;
+      return at - bt;
+    });
+  })();
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -1424,17 +1475,17 @@ export default function SimulationPage() {
                         type="text"
                         value={interventionText}
                         onChange={(e) => setInterventionText(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleIntervene()}
+                        onKeyDown={(e) => e.key === 'Enter' && !running && handleIntervene()}
                         placeholder="Facilitator intervention (e.g., Let's focus on cost...)"
                         className="flex-1 min-w-[12rem] px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                        disabled={intervening}
+                        disabled={intervening || running}
                       />
                       <button
                         onClick={handleIntervene}
-                        disabled={intervening || !interventionText.trim()}
+                        disabled={intervening || running || !interventionText.trim()}
                         className="px-4 py-2.5 bg-amber-100 hover:bg-amber-200 disabled:opacity-50 text-amber-800 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
                       >
-                        {intervening ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                        {intervening || running ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
                         Intervene
                       </button>
                       {currentSimulation.status === 'running' && (
@@ -1450,8 +1501,8 @@ export default function SimulationPage() {
                     </div>
                     <p className="text-xs text-stone-400 mt-1.5">
                       {isStudyMode
-                        ? 'Use Next Turn to advance one speaker at a time. Interventions are addressed on the following turn.'
-                        : 'Next persona turn will address your message and give it strong weight.'}
+                        ? 'Intervene posts your message and immediately runs the next persona turn.'
+                        : 'Intervene posts your message and runs the next persona turn, which will address it.'}
                     </p>
                   </div>
                 )}

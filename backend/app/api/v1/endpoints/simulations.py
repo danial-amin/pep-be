@@ -157,7 +157,11 @@ async def _build_simulation_response(
         )
 
     message_responses = []
-    for msg in simulation.messages:
+    sorted_messages = sorted(
+        list(simulation.messages or []),
+        key=lambda m: (m.id or 0, getattr(m, "created_at", None) or 0),
+    )
+    for msg in sorted_messages:
         persona = personas_map.get(msg.persona_id)
         message_responses.append(_build_message_response(msg, persona))
 
@@ -699,12 +703,14 @@ async def human_intervene(
 
     persona_count = simulation_service._count_persona_messages(list(simulation.messages))
     num_participants = max(1, len(simulation.participants))
-    current_round = max(1, (persona_count + num_participants - 1) // num_participants)
+    # Use the same turn numbering as the next persona reply so interventions
+    # land chronologically with the turn they trigger (not mid-previous-round).
+    turn_number = simulation_service._round_turn_number(persona_count, num_participants)
     message = SimulationMessage(
         simulation_id=simulation.id,
         persona_id=None,
         content=request.content.strip(),
-        turn_number=current_round,
+        turn_number=turn_number,
         tokens=0,
         is_human_message=True,
     )

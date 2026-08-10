@@ -117,6 +117,20 @@ function Section({
   );
 }
 
+function formatStakeholderLabel(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const key = raw.trim().toLowerCase();
+  const map: Record<string, string> = {
+    'affected household': 'Affected Household',
+    'affected_households': 'Affected Household',
+    'local ngo worker': 'Local NGO Worker',
+    'local_humanitarian_workers': 'Local NGO Worker',
+    'bisp representative': 'BISP Representative',
+    'bisp_programme_representatives': 'BISP Representative',
+  };
+  return map[key] || raw.trim().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /**
  * Full persona profile card — matches the downloadable card on the detail page.
  */
@@ -125,17 +139,22 @@ export default function PersonaProfileCard({
   compact = false,
   className = '',
   onClick,
+  stakeholderSubtext = null,
 }: {
   persona: Persona;
   compact?: boolean;
   className?: string;
   onClick?: () => void;
+  stakeholderSubtext?: string | null;
 }) {
   const [imageError, setImageError] = useState(false);
   const personaData = persona.persona_data || {};
   const name = personaData.name || persona.name;
   const imageSize = compact ? 'w-24 h-24' : 'w-32 h-32';
   const interactive = typeof onClick === 'function';
+  const stakeholderLabel = formatStakeholderLabel(
+    stakeholderSubtext || personaData.stakeholder_group || null
+  );
 
   return (
     <div
@@ -161,9 +180,16 @@ export default function PersonaProfileCard({
     >
       {/* Expanded (modal / full): photo + quote first; demographics below so long fields cannot displace them */}
       <div className="mb-4 space-y-4 border-b border-stone-200 pb-4">
-        <h4 className={`break-words font-bold text-stone-900 ${compact ? 'text-xl' : 'text-2xl'}`}>
-          {name}
-        </h4>
+        <div>
+          <h4 className={`break-words font-bold text-stone-900 ${compact ? 'text-xl' : 'text-2xl'}`}>
+            {name}
+          </h4>
+          {stakeholderLabel && (
+            <p className={`mt-0.5 text-stone-500 ${compact ? 'text-xs' : 'text-sm'}`}>
+              {stakeholderLabel}
+            </p>
+          )}
+        </div>
 
         <div
           className={
@@ -335,7 +361,7 @@ export default function PersonaProfileCard({
               )}
               {personaData.technology_profile.interaction_preferences && (
                 <div>
-                  <span className="text-xs text-stone-500 font-medium">Preferences:</span>
+                  <span className="text-xs text-stone-500 font-medium">Communication Preferences:</span>
                   <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-stone-700">
                     {personaData.technology_profile.interaction_preferences.map(
                       (pref: any, idx: number) => (
