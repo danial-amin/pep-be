@@ -21,7 +21,7 @@ import {
   ChevronRight,
   BarChart3
 } from 'lucide-react';
-import { simulationsApi, personasApi, API_BASE_URL, getAuthToken } from '../services/api';
+import { simulationsApi, personasApi, studyApi, API_BASE_URL, getAuthToken } from '../services/api';
 import {
   STUDY_SIMULATION_DEFAULT_CONTEXT,
   STUDY_SIMULATION_DEFAULT_GOAL,
@@ -304,13 +304,41 @@ export default function SimulationPage() {
         isStudyMode && studyScope?.personaSetId
           ? data.filter((s: PersonaSet) => s.id === studyScope.personaSetId)
           : data;
-      const effective = scoped.length > 0 ? scoped : data;
+      let effective = scoped.length > 0 ? scoped : data;
+
+      // Study: reorder set personas to this participant's Latin-square order
+      let studyOrder: number[] | null = null;
+      if (isStudyMode && studySlug) {
+        try {
+          const studyPersonas = await studyApi.getPersonas(studySlug);
+          studyOrder = studyPersonas.persona_order || null;
+          if (studyOrder?.length && effective.length > 0) {
+            const set = { ...effective[0] };
+            const byId = new Map(set.personas.map((p: Persona) => [p.id, p]));
+            const ordered = studyOrder.map((id) => byId.get(id)).filter(Boolean) as Persona[];
+            const seen = new Set(studyOrder);
+            ordered.push(...set.personas.filter((p: Persona) => !seen.has(p.id)));
+            set.personas = ordered;
+            effective = [set, ...effective.slice(1)];
+          }
+        } catch (e) {
+          console.error('Failed to load study persona order:', e);
+        }
+      }
+
       setPersonaSets(effective);
       if (isStudyMode && effective.length > 0) {
         const set = effective[0];
         setExpandedSetIds(new Set([set.id]));
+        // Insert into Map in Latin-square order so create() preserves speaking order
         const next = new Map<number, string>();
-        set.personas.forEach((p: Persona) => next.set(p.id, ''));
+        const ids = studyOrder?.length
+          ? [
+              ...studyOrder.filter((id: number) => set.personas.some((p: Persona) => p.id === id)),
+              ...set.personas.map((p: Persona) => p.id).filter((id: number) => !studyOrder!.includes(id)),
+            ]
+          : set.personas.map((p: Persona) => p.id);
+        ids.forEach((id: number) => next.set(id, ''));
         setSelectedPersonas(next);
         if (studySlug) {
           setStudyScope({
@@ -575,6 +603,7 @@ export default function SimulationPage() {
         persona_id,
         role: role || undefined
       }));
+      // Preserve Map insertion order (= study Latin-square order in study mode)
 
       const simulation = await simulationsApi.create({
         name: name || `Simulation - ${new Date().toLocaleString()}`,

@@ -497,7 +497,14 @@ If you change your earlier view, say so explicitly and name what persuaded you.
             logger.error(f"No valid participants for simulation {simulation.id}")
             return None
 
-        num_participants = len(participants)
+        # Speaking order = participant creation order (study Latin-square when created that way)
+        participant_ids = [
+            p.persona_id
+            for p in sorted(simulation.participants, key=lambda sp: sp.id or 0)
+            if p.persona_id in participants
+        ] or list(participants.keys())
+
+        num_participants = len(participant_ids)
         persona_count_before = self._count_persona_messages(list(simulation.messages))
         completed_before = self._completed_full_rounds(persona_count_before, num_participants)
         # max_turns = number of full rounds (schema). Stop only after that many rounds finish.
@@ -510,7 +517,7 @@ If you change your earlier view, say so explicitly and name what persuaded you.
 
         next_speaker_id = self._select_next_speaker(
             list(simulation.messages),
-            list(participants.keys()),
+            participant_ids,
             simulation.current_turn,
         )
         next_persona = participants[next_speaker_id]
@@ -908,7 +915,13 @@ Respond in JSON format:
             yield {"type": "error", "message": "No valid participants"}
             return
 
-        num_participants = len(participants)
+        participant_ids = [
+            p.persona_id
+            for p in sorted(simulation.participants, key=lambda sp: sp.id or 0)
+            if p.persona_id in participants
+        ] or list(participants.keys())
+
+        num_participants = len(participant_ids)
         persona_count_before = self._count_persona_messages(list(simulation.messages))
         completed_before = self._completed_full_rounds(persona_count_before, num_participants)
         if completed_before >= simulation.max_turns:
@@ -927,7 +940,7 @@ Respond in JSON format:
 
         next_speaker_id = self._select_next_speaker(
             list(simulation.messages),
-            list(participants.keys()),
+            participant_ids,
             simulation.current_turn,
         )
         next_persona = participants[next_speaker_id]

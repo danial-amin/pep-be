@@ -23,12 +23,36 @@ _CODE_RE = re.compile(r"^P\d{1,3}$", re.IGNORECASE)
 # Researcher / pilot test codes: PX (default order) or PX1…PX6 (specific rotation)
 _TEST_CODE_RE = re.compile(r"^PX([1-6])?$", re.IGNORECASE)
 
-# Short labels for logging / UI (stakeholder_group → study condition code)
+# Short labels for logging / UI (canonical stakeholder_group → study condition code)
 GROUP_LABELS = {
     "affected_households": "AH",
     "local_humanitarian_workers": "HW",
     "bisp_programme_representatives": "BISP",
 }
+
+# Map free-form / display stakeholder labels onto Latin-square keys
+GROUP_ALIASES = {
+    "affected_households": "affected_households",
+    "affected_household": "affected_households",
+    "affected household": "affected_households",
+    "local_humanitarian_workers": "local_humanitarian_workers",
+    "local_humanitarian_worker": "local_humanitarian_workers",
+    "local ngo worker": "local_humanitarian_workers",
+    "local_ngo_worker": "local_humanitarian_workers",
+    "bisp_programme_representatives": "bisp_programme_representatives",
+    "bisp_programme_representative": "bisp_programme_representatives",
+    "bisp representative": "bisp_programme_representatives",
+    "bisp_representative": "bisp_programme_representatives",
+}
+
+
+def normalize_stakeholder_group(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    key = str(raw).strip().lower().replace("-", " ")
+    key = re.sub(r"\s+", " ", key)
+    underscored = key.replace(" ", "_")
+    return GROUP_ALIASES.get(key) or GROUP_ALIASES.get(underscored) or underscored
 
 
 def normalize_participant_code(code: str) -> str:
@@ -219,17 +243,19 @@ class StudyService:
         When study.order_rotations is set, Pn uses rotations[(n-1) % len].
         Otherwise falls back to study.persona_order (persona IDs).
         """
-        by_group = {
-            (p.persona_data or {}).get("stakeholder_group"): p
-            for p in personas
-            if (p.persona_data or {}).get("stakeholder_group")
-        }
+        by_group = {}
+        for p in personas:
+            g = normalize_stakeholder_group((p.persona_data or {}).get("stakeholder_group"))
+            if g and g not in by_group:
+                by_group[g] = p
         by_id = {p.id: p for p in personas}
         rotations = study.order_rotations or []
+        if isinstance(rotations, str):
+            rotations = []
 
         if rotations and participant_code:
             idx = rotation_index_for_code(participant_code, len(rotations))
-            groups = list(rotations[idx] or [])
+            groups = [normalize_stakeholder_group(g) or g for g in (rotations[idx] or [])]
             ordered = [by_group[g] for g in groups if g in by_group]
             seen = {p.id for p in ordered}
             ordered.extend([p for p in personas if p.id not in seen])
@@ -398,11 +424,11 @@ class StudyService:
                 study.project_id = ps.project_id
 
             personas = list(ps.personas)
-            by_group = {
-                (p.persona_data or {}).get("stakeholder_group"): p.id
-                for p in personas
-                if (p.persona_data or {}).get("stakeholder_group")
-            }
+            by_group = {}
+            for p in personas:
+                g = normalize_stakeholder_group((p.persona_data or {}).get("stakeholder_group"))
+                if g and g not in by_group:
+                    by_group[g] = p.id
             groups = set(by_group.keys())
             if rebuild_rotations:
                 rotations = StudyService._policy_study_rotations(groups)
