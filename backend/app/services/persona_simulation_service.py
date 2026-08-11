@@ -1058,6 +1058,7 @@ Respond in JSON format:
             yield {
                 "type":              "complete",
                 "message_id":        message.id,
+                "content":           full_content,
                 "tokens":            tokens_used,
                 "simulation_status": simulation.status,
                 "current_turn":      simulation.current_turn,

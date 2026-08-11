@@ -130,7 +130,7 @@ function MessageBubble({ message, isLeft }: { message: SimulationMessage; isLeft
               </span>
             )}
           </div>
-          <p className="text-stone-700 text-sm leading-relaxed">{message.content}</p>
+            <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
         </div>
       </div>
     </div>
@@ -429,13 +429,23 @@ export default function SimulationPage() {
     closeStream();
     setRunning(true);
     setStreamingMessage(null);
+    streamingMessageRef.current = null;
 
     const streamUrl = `${API_BASE_URL}/simulations/${currentSimulation.id}/stream`;
-    
+    const simulationId = currentSimulation.id;
+
     // Use fetch with ReadableStream for better error handling and CORS support
     const abortController = new AbortController();
     const token = getAuthToken();
-    
+    // Accumulate in the reader closure — React state/ref can lag behind the last chunks
+    let streamedContent = '';
+    let streamPersonaMeta: {
+      persona_id: number;
+      persona_name: string;
+      persona_image_url?: string | null;
+      turn_number: number;
+    } | null = null;
+
     fetch(streamUrl, {
       signal: abortController.signal,
       headers: {
@@ -465,112 +475,172 @@ export default function SimulationPage() {
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
 
-                if (data.type === 'start') {
-                  setCurrentSimulation(prev => {
-                    if (!prev) return prev;
-                    const personaImageUrl = prev.participants.find(
-                      p => p.persona_id === data.persona_id
-                    )?.persona_image_url;
-
-                    setStreamingMessage({
-                      id: -1,
-                      persona_id: data.persona_id,
-                      persona_name: data.persona_name,
-                      persona_image_url: personaImageUrl,
-                      content: '',
-                      turn_number: data.turn_number,
-                      tokens: 0,
-                      is_moderator_message: false,
-                      created_at: new Date().toISOString()
-                    });
-
-                    return { ...prev, status: 'running' };
-                  });
-                  continue;
-                }
-
-                if (data.type === 'chunk') {
-                  setStreamingMessage(prev =>
-                    prev ? { ...prev, content: prev.content + data.content } : prev
-                  );
-                  continue;
-                }
-
-                if (data.type === 'complete') {
-                  const finalized = streamingMessageRef.current
-                    ? {
-                        ...streamingMessageRef.current,
-                        id: data.message_id ?? streamingMessageRef.current.id,
-                        tokens: data.tokens ?? streamingMessageRef.current.tokens
-                      }
-                    : null;
-
-                  const evalResult: AgreementEvaluation | undefined = data.agreement_evaluation;
-
-                  setCurrentSimulation(prev => {
-                    if (!prev) return prev;
-                    return {
-                      ...prev,
-                      status: data.simulation_status ?? prev.status,
-                      current_turn: data.current_turn ?? prev.current_turn,
-                      tokens_used: data.tokens_used ?? prev.tokens_used,
-                      messages: finalized ? [...prev.messages, finalized] : prev.messages,
-                      latest_agreement_score: evalResult?.overall_agreement_score ?? prev.latest_agreement_score,
-                      agreement_reached: evalResult?.agreement_reached ?? prev.agreement_reached
-                    };
-                  });
-
-                  if (evalResult) {
-                    setAgreementHistory(prev => {
-                      if (!prev) return null;
-                      return { ...prev, evaluations: [...prev.evaluations, evalResult] };
-                    });
-                  }
-
-                  setStreamingMessage(null);
-                  setRunning(false);
-                  closeStream();
-                  loadSimulations();
-
-                  if (finalized) {
-                    track('simulation_turn_message', {
-                      simulation_id: currentSimulation.id,
-                      turn_number: finalized.turn_number,
-                      persona_id: finalized.persona_id,
-                      is_human: finalized.is_human_message ?? finalized.persona_id == null,
-                      content: finalized.content,
-                      chars: (finalized.content || '').length,
-                      streamed: true,
-                    });
-                  }
-
-                  if (
-                    shouldAutoContinue &&
-                    autoContinueRef.current &&
-                    data.simulation_status === 'running'
-                  ) {
-                    setTimeout(() => startStreamingTurn(true), 400);
-                  }
-                  return;
-                }
-
-                if (data.type === 'error') {
-                  console.error('Streaming error:', data.message);
-                  alert(data.message || 'Streaming error');
-                  setRunning(false);
-                  closeStream();
-                  return;
-                }
-              } catch (parseError) {
-                console.error('Failed to parse SSE data:', parseError, line);
+              if (data.type === 'start') {
+                streamedContent = '';
+                const personaImageUrl =
+                  currentSimulation.participants.find((p) => p.persona_id === data.persona_id)
+                    ?.persona_image_url || undefined;
+                streamPersonaMeta = {
+                  persona_id: data.persona_id,
+                  persona_name: data.persona_name,
+                  persona_image_url: personaImageUrl,
+                  turn_number: data.turn_number,
+                };
+                const nextMsg: SimulationMessage = {
+                  id: -1,
+                  persona_id: data.persona_id,
+                  persona_name: data.persona_name,
+                  persona_image_url: personaImageUrl,
+                  content: '',
+                  turn_number: data.turn_number,
+                  tokens: 0,
+                  is_moderator_message: false,
+                  created_at: new Date().toISOString(),
+                };
+                streamingMessageRef.current = nextMsg;
+                setStreamingMessage(nextMsg);
+                setCurrentSimulation((prev) => (prev ? { ...prev, status: 'running' } : prev));
+                continue;
               }
+
+              if (data.type === 'chunk') {
+                streamedContent += data.content || '';
+                setStreamingMessage((prev) => {
+                  const next: SimulationMessage | null = prev
+                    ? { ...prev, content: streamedContent }
+                    : streamPersonaMeta
+                      ? {
+                          id: -1,
+                          persona_id: streamPersonaMeta.persona_id,
+                          persona_name: streamPersonaMeta.persona_name,
+                          persona_image_url: streamPersonaMeta.persona_image_url || undefined,
+                          content: streamedContent,
+                          turn_number: streamPersonaMeta.turn_number,
+                          tokens: 0,
+                          is_moderator_message: false,
+                          created_at: new Date().toISOString(),
+                        }
+                      : null;
+                  streamingMessageRef.current = next;
+                  return next;
+                });
+                continue;
+              }
+
+              if (data.type === 'complete') {
+                const fullContent =
+                  (typeof data.content === 'string' && data.content.length > 0
+                    ? data.content
+                    : streamedContent) ||
+                  streamingMessageRef.current?.content ||
+                  '';
+
+                const finalized: SimulationMessage = {
+                  id: data.message_id ?? streamingMessageRef.current?.id ?? Date.now(),
+                  persona_id:
+                    streamingMessageRef.current?.persona_id ??
+                    streamPersonaMeta?.persona_id,
+                  persona_name:
+                    streamingMessageRef.current?.persona_name ||
+                    streamPersonaMeta?.persona_name ||
+                    'Unknown',
+                  persona_image_url:
+                    streamingMessageRef.current?.persona_image_url ||
+                    streamPersonaMeta?.persona_image_url ||
+                    undefined,
+                  content: fullContent,
+                  turn_number:
+                    streamingMessageRef.current?.turn_number ??
+                    streamPersonaMeta?.turn_number ??
+                    0,
+                  tokens: data.tokens ?? 0,
+                  is_moderator_message: false,
+                  is_human_message: false,
+                  created_at:
+                    streamingMessageRef.current?.created_at || new Date().toISOString(),
+                };
+
+                const evalResult: AgreementEvaluation | undefined = data.agreement_evaluation;
+
+                setCurrentSimulation((prev) => {
+                  if (!prev) return prev;
+                  const withoutTemp = prev.messages.filter((m) => m.id !== -1);
+                  const already = withoutTemp.some((m) => m.id === finalized.id);
+                  return {
+                    ...prev,
+                    status: data.simulation_status ?? prev.status,
+                    current_turn: data.current_turn ?? prev.current_turn,
+                    tokens_used: data.tokens_used ?? prev.tokens_used,
+                    messages: already ? withoutTemp : [...withoutTemp, finalized],
+                    latest_agreement_score:
+                      evalResult?.overall_agreement_score ?? prev.latest_agreement_score,
+                    agreement_reached: evalResult?.agreement_reached ?? prev.agreement_reached,
+                  };
+                });
+
+                if (evalResult) {
+                  setAgreementHistory((prev) => {
+                    if (!prev) return null;
+                    return { ...prev, evaluations: [...prev.evaluations, evalResult] };
+                  });
+                }
+
+                streamingMessageRef.current = null;
+                setStreamingMessage(null);
+                setRunning(false);
+                closeStream();
+                loadSimulations();
+
+                track('simulation_turn_message', {
+                  simulation_id: simulationId,
+                  turn_number: finalized.turn_number,
+                  persona_id: finalized.persona_id,
+                  is_human: false,
+                  content: finalized.content,
+                  chars: (finalized.content || '').length,
+                  streamed: true,
+                });
+
+                if (
+                  shouldAutoContinue &&
+                  autoContinueRef.current &&
+                  data.simulation_status === 'running'
+                ) {
+                  setTimeout(() => startStreamingTurn(true), 400);
+                }
+                return;
+              }
+
+              if (data.type === 'error') {
+                console.error('Streaming error:', data.message);
+                alert(data.message || 'Streaming error');
+                setRunning(false);
+                closeStream();
+                return;
+              }
+            } catch (parseError) {
+              console.error('Failed to parse SSE data:', parseError, line);
             }
           }
         }
+
+        // Stream ended without a complete event — keep accumulated text
+        if (streamedContent && streamingMessageRef.current) {
+          const fallback = { ...streamingMessageRef.current, content: streamedContent };
+          setCurrentSimulation((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              messages: [...prev.messages.filter((m) => m.id !== -1), fallback],
+            };
+          });
+        }
+        setStreamingMessage(null);
+        setRunning(false);
       })
       .catch((error) => {
         if (error.name === 'AbortError') {
@@ -580,6 +650,7 @@ export default function SimulationPage() {
         console.error('Streaming fetch error:', error);
         alert(`Failed to stream simulation: ${error.message}`);
         setRunning(false);
+        setStreamingMessage(null);
         closeStream();
       });
 
@@ -1480,7 +1551,7 @@ export default function SimulationPage() {
                     <>
                       {displayMessages.map((msg, idx) => (
                         <MessageBubble
-                          key={msg.id}
+                          key={msg.id > 0 ? msg.id : `stream-${msg.persona_id}-${msg.turn_number}`}
                           message={msg}
                           isLeft={idx % 2 === 0}
                         />
