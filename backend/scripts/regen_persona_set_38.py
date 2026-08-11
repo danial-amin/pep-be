@@ -25,14 +25,16 @@ logger = logging.getLogger("regen_set_38")
 TARGET_SET_ID = 38
 GROUPS = [
     "affected household",
-    "Local NGO Worker",
+    "Local Volunteer",
     "BISP Representative",
 ]
 CONTEXT_DETAILS = (
     "All three personas should belong to the town of Hyderabad, Sindh, Pakistan. "
     "Keep goals, frustrations, and quotes locally consistent with Hyderabad / Sindh "
     "and each persona's role scope. Do not treat other provinces' statistics as this "
-    "persona's personal lived concerns unless their role is explicitly national."
+    "persona's personal lived concerns unless their role is explicitly national. "
+    "The affected-household persona should be a widow and head of household. "
+    "The local volunteer should be an unpaid community volunteer (not an NGO employee)."
 )
 
 

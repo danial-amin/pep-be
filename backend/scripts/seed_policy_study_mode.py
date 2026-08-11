@@ -98,7 +98,7 @@ async def main() -> None:
         heuristics = [
             (AH, ("flood-affected", "community member navigating", "mother of", "household")),
             (BISP, ("bisp", "programme official", "nser", "social protection")),
-            (HW, ("ngo", "humanitarian", "on the ground", "local worker", "community needs")),
+            (HW, ("ngo", "humanitarian", "on the ground", "local worker", "community needs", "volunteer")),
         ]
         for p in chosen.personas:
             data = dict(p.persona_data or {})

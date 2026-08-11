@@ -123,8 +123,11 @@ function formatStakeholderLabel(raw: string | null | undefined): string | null {
   const map: Record<string, string> = {
     'affected household': 'Affected Household',
     'affected_households': 'Affected Household',
-    'local ngo worker': 'Local NGO Worker',
-    'local_humanitarian_workers': 'Local NGO Worker',
+    'local ngo worker': 'Local Volunteer',
+    'local volunteer': 'Local Volunteer',
+    'local_volunteer': 'Local Volunteer',
+    'local_humanitarian_workers': 'Local Volunteer',
+    'local_humanitarian_worker': 'Local Volunteer',
     'bisp representative': 'BISP Representative',
     'bisp_programme_representatives': 'BISP Representative',
   };
