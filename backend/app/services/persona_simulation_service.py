@@ -21,7 +21,7 @@ Key design principles (all production defaults):
   6. PHASED MID-TURNS: after openings, prompts move challenge → propose → decide
      and ban pure restatement, so agents advance stakes instead of circling
      each other's points. Naming others is optional and only for a specific claim.
-  7. TOKEN BUDGET: SIMULATION_MAX_OUTPUT_TOKENS per turn (default 128), clamped 100–150 in code.
+  7. TOKEN BUDGET: SIMULATION_MAX_OUTPUT_TOKENS per turn (default 400), clamped 200–800 in code.
   8. NO PERIODIC REMINDER: CORE IDENTITY ANCHOR in the system prompt does
      the stability work; a mid-conversation reminder is a confound.
 """
@@ -45,13 +45,12 @@ from app.utils.token_utils import estimate_tokens
 logger = logging.getLogger(__name__)
 
 # ─── Token budget ──────────────────────────────────────────────────────────────
-# Output cap per turn: settings.SIMULATION_MAX_OUTPUT_TOKENS, clamped to 100–150.
+# Output cap per turn: settings.SIMULATION_MAX_OUTPUT_TOKENS (default 400).
 # Count only completion tokens toward simulation.tokens_used (not full prompt+completion).
-# Prompts must not ask for ~100+ words — that exceeds the cap and causes truncation.
 
 _SIMULATION_REPLY_LENGTH = (
-    "LENGTH (strict): Your whole reply must fit in roughly 50–80 words (about 2–3 short paragraphs). "
-    "Prioritize one clear point plus one brief example or reason; skip preamble and long lists. "
+    "LENGTH: Keep answers short and to the point — usually 2–4 sentences. "
+    "One clear claim, brief reason, then stop. No preamble, no lists, no restating the whole debate. "
     "Always finish with a complete sentence — never stop mid-thought."
 )
 
@@ -86,9 +85,9 @@ class PersonaSimulationService:
 
     @staticmethod
     def _max_output_tokens() -> int:
-        """Per persona message: 100–150 completion tokens (short turns, lower cost)."""
-        n = getattr(settings, "SIMULATION_MAX_OUTPUT_TOKENS", 128)
-        return max(100, min(int(n), 150))
+        """Per persona message: enough headroom to finish complete sentences."""
+        n = getattr(settings, "SIMULATION_MAX_OUTPUT_TOKENS", 400)
+        return max(200, min(int(n), 800))
 
     # ──────────────────────────────────────────────────────────────────────────
     # Prompt building

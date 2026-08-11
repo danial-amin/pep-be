@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Union[str, List[str]] = ["*"]
 
     # Persona simulation: max output tokens per persona message (API max_tokens).
-    # Clamped in PersonaSimulationService to 100–150 per turn. Override via env in that band.
-    SIMULATION_MAX_OUTPUT_TOKENS: int = 128
+    # Keep high enough that turns finish full sentences (~2–4 short paragraphs).
+    SIMULATION_MAX_OUTPUT_TOKENS: int = 400
 
     # Controlled 1:1 persona chat
     PERSONA_CHAT_REFUSAL_THRESHOLD: float = 0.55  # Min RAG score to hard-refuse factual questions (strict mode)
