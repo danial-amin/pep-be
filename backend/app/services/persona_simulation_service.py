@@ -19,8 +19,8 @@ Key design principles (all production defaults):
   5. FINAL POSITION DECLARATION: the last round forces each agent to state
      their final position and account for any change from their opening.
   6. PHASED MID-TURNS: after openings, prompts move challenge → propose → decide
-     and ban pure restatement, so agents advance stakes instead of circling
-     each other's points. Naming others is optional and only for a specific claim.
+     with a rotating rhetorical move per speaker/round, and ban agree-first
+     restatement so agents advance stakes instead of circling politely.
   7. TOKEN BUDGET: SIMULATION_MAX_OUTPUT_TOKENS per turn (default 400), clamped 200–800 in code.
   8. NO PERIODIC REMINDER: CORE IDENTITY ANCHOR in the system prompt does
      the stability work; a mid-conversation reminder is a confound.
@@ -52,6 +52,56 @@ _SIMULATION_REPLY_LENGTH = (
     "LENGTH: Keep answers short and to the point — usually 2–4 sentences. "
     "One clear claim, brief reason, then stop. No preamble, no lists, no restating the whole debate. "
     "Always finish with a complete sentence — never stop mid-thought."
+)
+
+# Prefer variety over a hard ban: the agree→gloss template is fine sometimes,
+# especially early, but must not be the only shape.
+_STYLE_VARIETY = (
+    "STYLE: Do not use the same reply shape every turn. "
+    "Especially after the opening, mix how you enter — challenge, personal stake, "
+    "hard question, counterexample, priority, or a blunt line. "
+    "Brief genuine agreement is fine when earned, but do not open every turn with "
+    "'I agree' / 'You're right' / 'That makes sense' / 'Fair point' and then a soft gloss. "
+    "If you agree, immediately add a new stake, constraint, or concrete next step."
+)
+
+# Rotating rhetorical moves so mid-discussion does not converge on one voice.
+_RHETORICAL_MOVES = (
+    (
+        "pushback",
+        "Open with a clear disagreement, caveat, or risk others are underplaying.",
+    ),
+    (
+        "personal_stake",
+        "Lead with one concrete detail from your own life or work that others have not used yet. "
+        "Then tie it to what you want changed.",
+    ),
+    (
+        "hard_question",
+        "Ask one pointed tradeoff question that forces a real choice. "
+        "Then state which side you take and why.",
+    ),
+    (
+        "counterexample",
+        "Give a concrete case or edge case that complicates the last claim. "
+        "Do not politely summarize that claim first.",
+    ),
+    (
+        "priority",
+        "Name your top priority and what you would deprioritize. "
+        "Make the ranking explicit; do not circle back to vague common ground.",
+    ),
+    (
+        "blunt_line",
+        "State one thing you will not accept. Keep it short and specific. "
+        "Only then, if needed, offer one condition under which you might move.",
+    ),
+    (
+        "earned_agree",
+        "If — and only if — someone made a point that genuinely addresses your concern, "
+        "acknowledge it in one short clause, then advance with a new requirement or next step. "
+        "Do not use empty politeness agreement.",
+    ),
 )
 
 # ─── Group mandates ────────────────────────────────────────────────────────────
@@ -119,6 +169,13 @@ class PersonaSimulationService:
         motivations  = persona_data.get("motivations", [])
         behaviors    = persona_data.get("behaviors", "")
         quote        = persona_data.get("quote", "")
+        starting_position = (persona_data.get("starting_position") or "").strip()
+        tech = persona_data.get("technology_profile")
+        interaction_prefs = []
+        if isinstance(tech, dict):
+            prefs = tech.get("interaction_preferences")
+            if isinstance(prefs, list):
+                interaction_prefs = [str(p) for p in prefs if p][:4]
 
         # ── Demographic string ──────────────────────────────────────────────
         demo_parts = []
@@ -139,6 +196,7 @@ class PersonaSimulationService:
         goals_str        = "\n".join([f"  - {g}" for g in goals])        if goals        else "  - Not specified"
         frustrations_str = "\n".join([f"  - {f}" for f in frustrations]) if frustrations else "  - Not specified"
         motivations_str  = "\n".join([f"  - {m}" for m in motivations])  if motivations  else ""
+        prefs_str        = "\n".join([f"  - {p}" for p in interaction_prefs]) if interaction_prefs else ""
 
         # ── Core identity anchor ─────────────────────────────────────────────
         primary_goal        = goals[0]        if goals        else "personal growth"
@@ -188,6 +246,22 @@ persuaded you. Do not agree with others simply to be agreeable or to move the
 conversation forward. Surface agreement without genuine persuasion is not
 acceptable."""
 
+        starting_position_section = ""
+        if starting_position:
+            starting_position_section = f"""
+YOUR STARTING POSITION ON THIS KIND OF ISSUE:
+{starting_position}
+Hold this unless someone gives you a specific reason to revise it.
+"""
+
+        voice_section = ""
+        if prefs_str:
+            voice_section = f"""
+HOW YOU TEND TO COMMUNICATE:
+{prefs_str}
+Let these shape your wording and rhythm — do not sound like a generic meeting participant.
+"""
+
         # ── Assemble ─────────────────────────────────────────────────────────
         system_prompt = f"""You are {name}, {demographic_str}.
 
@@ -205,6 +279,8 @@ YOUR FRUSTRATIONS AND PAIN POINTS:
 
 {"BEHAVIOURAL TRAITS:" if behaviors else ""}
 {behaviors}
+{starting_position_section}
+{voice_section}
 {core_identity_section}
 {non_negotiable_section}
 {group_mandate_section}
@@ -220,6 +296,8 @@ CONVERSATION GUIDELINES:
 - If you have expertise relevant to the topic, mention it briefly
 - Express frustrations when relevant, in one tight sentence if possible
 - NEVER adopt another participant's communication style — remain distinctly yourself
+- Mix your reply shape across turns; do not settle into one fixed template
+- {_STYLE_VARIETY}
 - {_SIMULATION_REPLY_LENGTH}"""
 
         if facilitator_must_address:
@@ -228,8 +306,9 @@ CONVERSATION GUIDELINES:
 CRITICAL — FACILITATOR INTERVENTION:
 The facilitator has said: "{facilitator_must_address}"
 Address this directly in your next response. Let it change the course of your
-reply. Do not continue the previous thread without first acknowledging the
-facilitator's intervention.
+reply. Do not continue the previous thread without engaging the intervention.
+Bring your own stake — do not only agree or politely acknowledge.
+{_STYLE_VARIETY}
 {_SIMULATION_REPLY_LENGTH}"""
 
         return system_prompt
@@ -258,6 +337,12 @@ facilitator's intervention.
             return "propose"
         return "decide"
 
+    @staticmethod
+    def _rhetorical_move(persona_id: int, completed_before: int) -> tuple:
+        """Pick a reply shape that varies by speaker and round — avoids one shared template."""
+        idx = (int(persona_id or 0) + int(completed_before or 0) * 3) % len(_RHETORICAL_MOVES)
+        return _RHETORICAL_MOVES[idx]
+
     def _build_turn_prompt(
         self,
         simulation: Simulation,
@@ -267,6 +352,7 @@ facilitator's intervention.
         other_participant_names: List[str],
         is_final_round: bool,
         completed_before: int = 0,
+        persona_id: Optional[int] = None,
     ) -> str:
         """
         Return the user-turn prompt appropriate for the current moment.
@@ -276,8 +362,8 @@ facilitator's intervention.
           Final round: closing declaration — agent states final position and
             accounts for any change.
           Facilitator intervention: acknowledgement required.
-          Mid turns: phase prompts (challenge → propose → decide) that require
-            new content instead of circling each other's points.
+          Mid turns: phase prompts (challenge → propose → decide) plus a
+            rotating rhetorical move so agents do not circle in one style.
         """
         goal_context_block = ""
         if simulation.goal_context and str(simulation.goal_context).strip():
@@ -287,10 +373,12 @@ facilitator's intervention.
         if is_first_turn_for_agent:
             # Must follow simulation.goal only — never inject unrelated product/study
             # names (e.g. a fixed chatbot scenario) or the personas will hallucinate them.
+            # First turns may use a natural stance style; variety is enforced on later turns.
             return f"""The topic for this discussion is: {simulation.goal}
 
 {goal_context_block}State your position clearly on this topic: what do you advocate for, and what do you oppose or resist?
-Name one stance you support and one you oppose, each with one short reason. {_SIMULATION_REPLY_LENGTH}"""
+Name one stance you support and one you oppose, each with one short reason.
+{_SIMULATION_REPLY_LENGTH}"""
 
         # ── Final round ───────────────────────────────────────────────────────
         if is_final_round:
@@ -300,6 +388,7 @@ If your view has changed from what you said at the start, name specifically
 which argument changed your mind. If your view has not changed, say so and
 explain why the discussion did not shift your position.
 End with one concrete priority or next step you would insist on.
+Do not only recap the conversation — land on your final stake.
 {_SIMULATION_REPLY_LENGTH}"""
 
         # ── Facilitator intervention ──────────────────────────────────────────
@@ -308,14 +397,19 @@ End with one concrete priority or next step you would insist on.
 
 Respond directly to this. Let it change the direction of your reply.
 Bring in your own stake — do not only acknowledge the facilitator.
+{_STYLE_VARIETY}
 {_SIMULATION_REPLY_LENGTH}"""
 
-        # ── Standard continue turn (phased) ───────────────────────────────────
+        # ── Standard continue turn (phased + rhetorical move) ─────────────────
         facilitator_note = ""
         if last_facilitator_content:
             facilitator_note = f'The facilitator recently said: "{last_facilitator_content}" — keep this in mind.\n\n'
 
         phase = self._discussion_phase(completed_before, simulation.max_turns or 10)
+        move_name, move_instruction = self._rhetorical_move(
+            persona_id or 0, completed_before
+        )
+        # Prefer non-agree shapes for most mid-turns; "earned_agree" is only ~1/7 of the rotation.
         names_hint = (
             f"Other participants: {', '.join(other_participant_names)}."
             if other_participant_names
@@ -324,7 +418,8 @@ Bring in your own stake — do not only acknowledge the facilitator.
 
         anti_circle = (
             "Do not summarize or politely rephrase what was just said. "
-            "Add something new from your perspective."
+            "Add something new from your perspective. "
+            "Do not end by circling back to a vague shared hope."
         )
 
         if phase == "challenge":
@@ -347,6 +442,9 @@ Bring in your own stake — do not only acknowledge the facilitator.
 {names_hint}
 {anti_circle}
 {phase_instruction}
+THIS TURN'S REPLY SHAPE ({move_name}): {move_instruction}
+Use this shape for this turn — do not fall back to the same agree-then-comment pattern every time.
+{_STYLE_VARIETY}
 If you change your earlier view, say so explicitly and name what persuaded you.
 {_SIMULATION_REPLY_LENGTH}"""
 
@@ -573,13 +671,14 @@ If you change your earlier view, say so explicitly and name what persuaded you.
             other_participant_names=other_names,
             is_final_round=is_final_round,
             completed_before=completed_before,
+            persona_id=next_speaker_id,
         )
         conversation_context.append({"role": "user", "content": turn_prompt})
 
-        temperature = 0.65 if is_last_facilitator else 0.9
+        temperature = 0.7 if is_last_facilitator else 0.95
         # Stronger anti-repetition on mid turns; slightly softer on opening/final
-        frequency_penalty = 0.25 if (is_first_turn_for_agent or is_final_round) else 0.55
-        presence_penalty = 0.25 if (is_first_turn_for_agent or is_final_round) else 0.45
+        frequency_penalty = 0.3 if (is_first_turn_for_agent or is_final_round) else 0.7
+        presence_penalty = 0.3 if (is_first_turn_for_agent or is_final_round) else 0.55
 
         try:
             response = await self.client.chat.completions.create(
@@ -999,12 +1098,13 @@ Respond in JSON format:
             other_participant_names=other_names,
             is_final_round=is_final_round,
             completed_before=completed_before,
+            persona_id=next_speaker_id,
         )
         conversation_context.append({"role": "user", "content": turn_prompt})
 
-        temperature = 0.65 if is_last_facilitator else 0.9
-        frequency_penalty = 0.25 if (is_first_turn_for_agent or is_final_round) else 0.55
-        presence_penalty = 0.25 if (is_first_turn_for_agent or is_final_round) else 0.45
+        temperature = 0.7 if is_last_facilitator else 0.95
+        frequency_penalty = 0.3 if (is_first_turn_for_agent or is_final_round) else 0.7
+        presence_penalty = 0.3 if (is_first_turn_for_agent or is_final_round) else 0.55
         full_content = ""
 
         try:
