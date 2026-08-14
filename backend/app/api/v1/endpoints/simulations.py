@@ -420,7 +420,10 @@ async def _build_simulation_export(simulation: Simulation, session: AsyncSession
     }
 
     conversations = []
-    for msg in simulation.messages:
+    for msg in sorted(
+        list(simulation.messages or []),
+        key=lambda m: (m.id or 0, getattr(m, "created_at", None) or 0),
+    ):
         persona = personas_map.get(msg.persona_id)
         name = (
             "Facilitator"

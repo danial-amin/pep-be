@@ -1576,7 +1576,7 @@ export default function SimulationPage() {
                         value={interventionText}
                         onChange={(e) => setInterventionText(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && !running && handleIntervene()}
-                        placeholder="Facilitator intervention (e.g., Let's focus on cost...)"
+                        placeholder="Intervene — name who should reply, e.g. Bilal, what about remote villages?"
                         className="flex-1 min-w-[12rem] px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
                         disabled={intervening || running}
                       />

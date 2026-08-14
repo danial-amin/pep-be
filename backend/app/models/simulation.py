@@ -55,7 +55,12 @@ class Simulation(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
 
     # Relationships
-    messages = relationship("SimulationMessage", back_populates="simulation", cascade="all, delete-orphan", order_by="SimulationMessage.turn_number")
+    messages = relationship(
+        "SimulationMessage",
+        back_populates="simulation",
+        cascade="all, delete-orphan",
+        order_by="SimulationMessage.id",
+    )
     participants = relationship("SimulationParticipant", back_populates="simulation", cascade="all, delete-orphan")
     project = relationship("Project", back_populates="simulations")
     agreement_evaluations = relationship("SimulationAgreementEvaluation", back_populates="simulation", cascade="all, delete-orphan", order_by="SimulationAgreementEvaluation.turn_number")

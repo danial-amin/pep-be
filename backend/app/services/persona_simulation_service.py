@@ -28,11 +28,12 @@ Key design principles (all production defaults):
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Dict, Any, Optional, AsyncGenerator
+from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple
 from datetime import datetime, timezone
 import json
 import logging
 import asyncio
+import re
 
 from app.core.config import settings
 from app.core.openai_compat import chat_completion_kwargs
@@ -511,7 +512,7 @@ If you change your earlier view, say so explicitly and name what persuaded you.
         self, messages: List[SimulationMessage]
     ) -> tuple[Optional[str], bool]:
         """Returns (last_facilitator_content, is_last_message_facilitator)."""
-        msgs = sorted(messages, key=lambda m: (m.turn_number, m.id))
+        msgs = self._chronological_messages(messages)
         if not msgs:
             return None, False
         last_facilitator_content = None
@@ -612,18 +613,16 @@ If you change your earlier view, say so explicitly and name what persuaded you.
             await session.commit()
             return None
 
+        messages_ordered = self._chronological_messages(list(simulation.messages))
         next_speaker_id = self._select_next_speaker(
-            list(simulation.messages),
+            messages_ordered,
             participant_ids,
             simulation.current_turn,
+            participants=participants,
         )
         next_persona = participants[next_speaker_id]
         next_role = participant_roles.get(next_speaker_id)
 
-        messages_ordered = sorted(
-            simulation.messages,
-            key=lambda m: (m.turn_number, getattr(m, "id", 0)),
-        )
         last_facilitator_content, is_last_facilitator = self._get_facilitator_context(
             messages_ordered
         )
@@ -758,16 +757,116 @@ If you change your earlier view, say so explicitly and name what persuaded you.
             return 0
         return persona_message_count // num_participants
 
+    def _chronological_messages(messages: List[SimulationMessage]) -> List[SimulationMessage]:
+        """True speak order: by id (turn_number alone is not unique within a round)."""
+        return sorted(messages or [], key=lambda m: (m.id is None, m.id or 0))
+
+    @staticmethod
+    def _persona_display_name(persona: Optional[Persona]) -> str:
+        if not persona:
+            return ""
+        pd = persona.persona_data or {}
+        return str(pd.get("name") or persona.name or "").strip()
+
+    @classmethod
+    def _addressed_persona_id(
+        cls,
+        facilitator_text: str,
+        participant_ids: List[int],
+        participants: Optional[Dict[int, Persona]],
+    ) -> Optional[int]:
+        """
+        If the facilitator named / @mentioned a participant, return that persona id.
+        Longest name match wins so "Amina Khan" beats "Amina".
+        """
+        if not facilitator_text or not participants:
+            return None
+        text = facilitator_text.strip()
+        if not text:
+            return None
+
+        candidates: List[Tuple[int, str]] = []
+        for pid in participant_ids:
+            name = cls._persona_display_name(participants.get(pid))
+            if name:
+                candidates.append((pid, name))
+        # Longest first to avoid partial overlaps
+        candidates.sort(key=lambda x: len(x[1]), reverse=True)
+
+        lowered = text.lower()
+        for pid, name in candidates:
+            n = name.lower()
+            # @Name or @FirstName
+            if re.search(r"@" + re.escape(n) + r"\b", lowered):
+                return pid
+            # Name at start: "Bilal, …" / "Bilal —" / "Bilal:"
+            if re.match(re.escape(n) + r"\b\s*[,:\-—–]", lowered):
+                return pid
+            # "to Bilal" / "ask Bilal" / "Bilal should" / speaking to Bilal
+            if re.search(
+                r"\b(?:to|ask|asking|for|addressing|calling on|@)\s+"
+                + re.escape(n)
+                + r"\b",
+                lowered,
+            ):
+                return pid
+            # Bare full name anywhere (prefer full names; first-name-only only if unique)
+            if " " in n and re.search(r"\b" + re.escape(n) + r"\b", lowered):
+                return pid
+
+        # First-name / single-token fallback when unique among participants
+        first_names: Dict[str, List[int]] = {}
+        for pid, name in candidates:
+            first = name.split()[0].lower()
+            first_names.setdefault(first, []).append(pid)
+        for first, pids in first_names.items():
+            if len(pids) != 1:
+                continue
+            if re.match(re.escape(first) + r"\b\s*[,:\-—–]", lowered):
+                return pids[0]
+            if re.search(
+                r"\b(?:to|ask|asking|for|addressing|calling on|@)\s+"
+                + re.escape(first)
+                + r"\b",
+                lowered,
+            ):
+                return pids[0]
+            if re.search(r"\b" + re.escape(first) + r"\b", lowered):
+                return pids[0]
+        return None
+
     def _select_next_speaker(
         self,
         messages: List[SimulationMessage],
         participant_ids: List[int],
         current_turn: int,
+        participants: Optional[Dict[int, Persona]] = None,
     ) -> int:
-        """Round-robin with load balancing. Human interventions are ignored."""
+        """
+        Round-robin with load balancing.
+
+        If the latest message is a facilitator intervention that addresses a
+        specific persona, that persona speaks next; afterwards order continues
+        from them (normal round-robin).
+        """
         ordered = list(participant_ids)
+        chronological = self._chronological_messages(messages)
+        if not chronological:
+            return ordered[0]
+
+        last_msg = chronological[-1]
+        last_is_facilitator = (
+            getattr(last_msg, "is_human_message", False) or last_msg.persona_id is None
+        )
+        if last_is_facilitator:
+            addressed = self._addressed_persona_id(
+                last_msg.content or "", ordered, participants
+            )
+            if addressed is not None and addressed in ordered:
+                return addressed
+
         persona_messages = [
-            m for m in messages
+            m for m in chronological
             if not (getattr(m, "is_human_message", False) or m.persona_id is None)
         ]
         if not persona_messages:
@@ -1037,9 +1136,10 @@ Respond in JSON format:
             return
 
         next_speaker_id = self._select_next_speaker(
-            list(simulation.messages),
+            self._chronological_messages(list(simulation.messages)),
             participant_ids,
             simulation.current_turn,
+            participants=participants,
         )
         next_persona = participants[next_speaker_id]
         next_role    = participant_roles.get(next_speaker_id)
@@ -1053,10 +1153,7 @@ Respond in JSON format:
             "turn_number":  turn_number,
         }
 
-        messages_ordered = sorted(
-            simulation.messages,
-            key=lambda m: (m.turn_number, getattr(m, "id", 0)),
-        )
+        messages_ordered = self._chronological_messages(list(simulation.messages))
         last_facilitator_content, is_last_facilitator = self._get_facilitator_context(
             messages_ordered
         )
