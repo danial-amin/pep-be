@@ -757,6 +757,7 @@ If you change your earlier view, say so explicitly and name what persuaded you.
             return 0
         return persona_message_count // num_participants
 
+    @staticmethod
     def _chronological_messages(messages: List[SimulationMessage]) -> List[SimulationMessage]:
         """True speak order: by id (turn_number alone is not unique within a round)."""
         return sorted(messages or [], key=lambda m: (m.id is None, m.id or 0))
