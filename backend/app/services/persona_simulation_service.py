@@ -733,6 +733,106 @@ If you change your earlier view, say so explicitly and name what persuaded you.
             logger.error(f"Error generating turn for simulation {simulation.id}: {e}", exc_info=True)
             raise
 
+    async def generate_turn_from_state(
+        self,
+        session: AsyncSession,
+        simulation: Simulation,
+        messages_prefix: List[SimulationMessage],
+        speaker_persona_id: int,
+    ) -> str:
+        """
+        Generate one persona turn from a frozen message prefix (no DB writes).
+
+        Used for repeated-run stability analysis: same inputs, new sample.
+        """
+        participants: Dict[int, Persona] = {}
+        participant_roles: Dict[int, Optional[str]] = {}
+        for p in simulation.participants:
+            result = await session.execute(select(Persona).where(Persona.id == p.persona_id))
+            persona = result.scalar_one_or_none()
+            if persona:
+                participants[p.persona_id] = persona
+                participant_roles[p.persona_id] = p.role
+
+        if speaker_persona_id not in participants:
+            raise ValueError(f"Speaker persona {speaker_persona_id} not in simulation")
+
+        participant_ids = [
+            p.persona_id
+            for p in sorted(simulation.participants, key=lambda sp: sp.id or 0)
+            if p.persona_id in participants
+        ]
+        num_participants = len(participant_ids)
+        messages_ordered = self._chronological_messages(messages_prefix)
+        persona_count_before = self._count_persona_messages(messages_ordered)
+        completed_before = self._completed_full_rounds(persona_count_before, num_participants)
+
+        next_persona = participants[speaker_persona_id]
+        next_role = participant_roles.get(speaker_persona_id)
+
+        last_facilitator_content, is_last_facilitator = self._get_facilitator_context(
+            messages_ordered
+        )
+        facilitator_must_address = last_facilitator_content if is_last_facilitator else None
+
+        system_prompt = self._build_persona_system_prompt(
+            next_persona,
+            next_role,
+            facilitator_must_address=facilitator_must_address,
+        )
+        rag_grounding = await self._get_rag_grounding(
+            session, simulation, messages_ordered, participants
+        )
+        if rag_grounding:
+            system_prompt += (
+                "\n\nGROUNDING — EVIDENCE FROM PROJECT DOCUMENTS (use this):\n"
+                + rag_grounding
+                + "\n\nBase your reply on this project data where relevant. Do not invent facts. "
+                "Use at most one tight idea from this text — do not quote long passages."
+            )
+
+        conversation_context = self._build_conversation_context(
+            messages_ordered, participants, speaker_persona_id,
+        )
+
+        is_first_turn_for_agent = not any(
+            m.persona_id == speaker_persona_id
+            for m in messages_ordered
+            if not getattr(m, "is_human_message", False) and m.persona_id is not None
+        )
+        is_final_round = completed_before >= max(0, simulation.max_turns - 1)
+        other_names = [p.name for pid, p in participants.items() if pid != speaker_persona_id]
+
+        turn_prompt = self._build_turn_prompt(
+            simulation=simulation,
+            is_first_turn_for_agent=is_first_turn_for_agent,
+            is_last_facilitator=is_last_facilitator,
+            last_facilitator_content=last_facilitator_content,
+            other_participant_names=other_names,
+            is_final_round=is_final_round,
+            completed_before=completed_before,
+            persona_id=speaker_persona_id,
+        )
+        conversation_context.append({"role": "user", "content": turn_prompt})
+
+        temperature = 0.7 if is_last_facilitator else 0.95
+        frequency_penalty = 0.3 if (is_first_turn_for_agent or is_final_round) else 0.7
+        presence_penalty = 0.3 if (is_first_turn_for_agent or is_final_round) else 0.55
+
+        response = await self.client.chat.completions.create(
+            **chat_completion_kwargs(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *conversation_context,
+                ],
+                temperature=temperature,
+                max_tokens=self._max_output_tokens(),
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty,
+            )
+        )
+        return (response.choices[0].message.content or "").strip()
+
     # ──────────────────────────────────────────────────────────────────────────
     # Static helpers
     # ──────────────────────────────────────────────────────────────────────────

@@ -756,8 +756,9 @@ When answering:
         shared_study_knowledge: Optional[str] = None,
         is_set_mode: bool = False,
         addressed_directly: bool = True,
+        persist: bool = True,
     ) -> Dict[str, Any]:
-        """Generate one persona's reply and persist the assistant message."""
+        """Generate one persona's reply; set persist=False for stability reruns."""
         profile_data = self._get_chat_profile_data(persona)
         profile_text = self._format_persona_profile(profile_data)
         persona_name = (persona.persona_data or {}).get("name") or persona.name
@@ -795,19 +796,23 @@ When answering:
             conversation_text,
         )
         if refuse:
-            assistant_msg = PersonaChatMessage(
-                session_id=chat_session.id,
-                role="assistant",
-                content=REFUSAL_PHRASE,
-                persona_id=persona.id,
-                persona_name=persona_name,
-                refused=True,
-                retrieval_score=retrieval_score,
-                sources_used=[],
-                refusal_reason=refusal_reason,
-            )
-            db.add(assistant_msg)
-            await db.flush()
+            if persist:
+                assistant_msg = PersonaChatMessage(
+                    session_id=chat_session.id,
+                    role="assistant",
+                    content=REFUSAL_PHRASE,
+                    persona_id=persona.id,
+                    persona_name=persona_name,
+                    refused=True,
+                    retrieval_score=retrieval_score,
+                    sources_used=[],
+                    refusal_reason=refusal_reason,
+                )
+                db.add(assistant_msg)
+                await db.flush()
+                message_id = assistant_msg.id
+            else:
+                message_id = None
             return {
                 "reply": REFUSAL_PHRASE,
                 "refused": True,
@@ -817,7 +822,7 @@ When answering:
                 "retrieval_score": retrieval_score,
                 "sources_used": [],
                 "refusal_reason": refusal_reason,
-                "message_id": assistant_msg.id,
+                "message_id": message_id,
             }
 
         system_prompt = self._build_strict_system_prompt(
@@ -878,8 +883,11 @@ When answering:
             sources_used=final_sources,
             refusal_reason=final_reason,
         )
-        db.add(assistant_msg)
-        await db.flush()
+        message_id = None
+        if persist:
+            db.add(assistant_msg)
+            await db.flush()
+            message_id = assistant_msg.id
 
         return {
             "reply": reply,
@@ -890,7 +898,7 @@ When answering:
             "retrieval_score": retrieval_score,
             "sources_used": final_sources,
             "refusal_reason": final_reason,
-            "message_id": assistant_msg.id,
+            "message_id": message_id,
         }
 
     async def send_message(
