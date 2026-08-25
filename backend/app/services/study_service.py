@@ -8,7 +8,8 @@ import secrets
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import cast, or_, select
+from sqlalchemy.types import Text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -489,6 +490,7 @@ class StudyService:
         study_id: int,
         *,
         participant_code: Optional[str] = None,
+        q: Optional[str] = None,
         limit: int = 500,
     ) -> List[dict]:
         from app.models.study import StudyEvent, StudyParticipant
@@ -498,12 +500,26 @@ class StudyService:
             .outerjoin(StudyParticipant, StudyParticipant.id == StudyEvent.participant_id)
             .where(StudyEvent.study_id == study_id)
         )
-        if participant_code:
-            try:
-                norm = normalize_participant_code(participant_code)
-            except ValueError:
-                norm = participant_code.strip().upper()
-            query = query.where(StudyParticipant.code == norm)
+        search_term = (q or participant_code or "").strip()
+        if search_term:
+            if participant_code and not q:
+                try:
+                    norm = normalize_participant_code(participant_code)
+                except ValueError:
+                    norm = participant_code.strip().upper()
+                query = query.where(StudyParticipant.code == norm)
+            else:
+                pattern = f"%{search_term}%"
+                clauses = [
+                    StudyEvent.event_type.ilike(pattern),
+                    StudyEvent.path.ilike(pattern),
+                    cast(StudyEvent.payload, Text).ilike(pattern),
+                    StudyParticipant.code.ilike(pattern),
+                ]
+                if search_term.isdigit():
+                    clauses.append(StudyEvent.user_id == int(search_term))
+                    clauses.append(StudyEvent.id == int(search_term))
+                query = query.where(or_(*clauses))
         query = query.order_by(StudyEvent.id.desc()).limit(min(limit, 2000))
         rows = (await session.execute(query)).all()
         return [

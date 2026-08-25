@@ -15,12 +15,11 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   }
 
   if (!isAuthenticated) {
-    // Study routes (and the app default) go to participant entry — never /login
     if (location.pathname.startsWith('/study/')) {
       const slug = location.pathname.split('/')[2];
       return <Navigate to={studyEnterPath(slug)} replace />;
     }
-    return <Navigate to={studyEnterPath()} replace />;
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
   return <>{children}</>;

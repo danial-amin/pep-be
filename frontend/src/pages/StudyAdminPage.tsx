@@ -52,7 +52,8 @@ export default function StudyAdminPage() {
       created_at?: string | null;
     }>
   >([]);
-  const [eventFilter, setEventFilter] = useState('');
+  const [eventSearch, setEventSearch] = useState('');
+  const [debouncedEventSearch, setDebouncedEventSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,17 +116,24 @@ export default function StudyAdminPage() {
   }, [config?.project_id, isAdmin]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedEventSearch(eventSearch.trim());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [eventSearch]);
+
+  useEffect(() => {
     if (!isAdmin) return;
     if (tab === 'participants') {
       void studyApi.adminListParticipants(slug).then(setParticipants).catch((e) => setError(e.message));
     }
     if (tab === 'events') {
       void studyApi
-        .adminListEvents(slug, eventFilter || undefined)
+        .adminListEvents(slug, debouncedEventSearch || undefined)
         .then(setEvents)
         .catch((e) => setError(e.message));
     }
-  }, [tab, slug, eventFilter, isAdmin]);
+  }, [tab, slug, debouncedEventSearch, isAdmin]);
 
   const selectedSet = useMemo(
     () => personaSets.find((s) => s.id === config?.persona_set_id),
@@ -202,7 +210,7 @@ export default function StudyAdminPage() {
           setParticipants(await studyApi.adminListParticipants(slug));
         }
         if (tab === 'events') {
-          setEvents(await studyApi.adminListEvents(slug, eventFilter || undefined));
+          setEvents(await studyApi.adminListEvents(slug, debouncedEventSearch || undefined));
         }
       })
       .catch((e: any) => setError(e?.response?.data?.detail || e.message || 'Refresh failed'))
@@ -446,7 +454,7 @@ export default function StudyAdminPage() {
                         type="button"
                         className="text-xs text-stone-600 underline"
                         onClick={() => {
-                          setEventFilter(p.code);
+                          setEventSearch(p.code);
                           setTab('events');
                         }}
                       >
@@ -470,20 +478,23 @@ export default function StudyAdminPage() {
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <input
-              value={eventFilter}
-              onChange={(e) => setEventFilter(e.target.value.toUpperCase())}
-              placeholder="Filter by code e.g. P01"
-              className="rounded-xl border border-stone-200 px-3 py-2 text-sm font-mono"
+              type="search"
+              value={eventSearch}
+              onChange={(e) => setEventSearch(e.target.value)}
+              placeholder="Search events — code, type, path, message, sim id…"
+              className="min-w-[16rem] flex-1 rounded-xl border border-stone-200 px-3 py-2 text-sm"
             />
             <button
               type="button"
-              onClick={() => setEventFilter('')}
+              onClick={() => setEventSearch('')}
               className="text-xs text-stone-500 underline"
             >
               Clear
             </button>
             <span className="text-xs text-stone-400">
-              Showing {events.length} events (tagged by participant code + user id)
+              {debouncedEventSearch
+                ? `${events.length} match${events.length === 1 ? '' : 'es'} for “${debouncedEventSearch}”`
+                : `Showing ${events.length} recent events`}
             </span>
           </div>
           <div className="glass-card rounded-2xl overflow-hidden max-h-[70vh] overflow-y-auto">

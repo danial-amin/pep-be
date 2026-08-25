@@ -4,7 +4,7 @@ export const STUDY_SLUG_KEY = 'pep_study_slug';
 export const STUDY_PROJECT_KEY = 'pep_study_project_id';
 export const STUDY_PERSONA_SET_KEY = 'pep_study_persona_set_id';
 
-/** Default study entry for this deployment (Policy Study user study). */
+/** Fallback slug for study admin links when no active study is selected. */
 export const DEFAULT_STUDY_SLUG = 'policy-study';
 
 export type StudyScope = {
@@ -37,7 +37,7 @@ export function getStudyEntrySlug(): string {
   return getActiveStudySlug() || DEFAULT_STUDY_SLUG;
 }
 
-/** Study enter URL (no password) — use instead of /login for participants. */
+/** Study enter URL (participant code entry) under /study/:slug. */
 export function studyEnterPath(slug?: string | null): string {
   return `/study/${slug || getStudyEntrySlug()}`;
 }

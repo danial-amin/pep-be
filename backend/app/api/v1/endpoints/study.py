@@ -130,13 +130,18 @@ async def admin_list_events(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_admin),
     participant_code: Optional[str] = None,
+    q: Optional[str] = None,
     limit: int = 500,
 ):
     study = await StudyService.get_by_slug(db, slug)
     if not study:
         raise HTTPException(status_code=404, detail="Study not found")
     rows = await StudyService.list_events_admin(
-        db, study.id, participant_code=participant_code, limit=limit
+        db,
+        study.id,
+        participant_code=participant_code,
+        q=q,
+        limit=limit,
     )
     return [StudyEventAdminResponse(**r) for r in rows]
 

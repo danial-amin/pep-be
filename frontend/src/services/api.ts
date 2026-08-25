@@ -89,17 +89,20 @@ api.interceptors.response.use(
           if (path.startsWith('/login') || path.startsWith('/invite')) {
             return Promise.reject(error);
           }
-          let studySlug: string | null = null;
-          try {
-            studySlug = localStorage.getItem('pep_study_slug');
-          } catch {
-            studySlug = null;
+          if (path.startsWith('/study/')) {
+            const slugFromPath = path.split('/')[2] || null;
+            let studySlug: string | null = slugFromPath;
+            if (!studySlug) {
+              try {
+                studySlug = localStorage.getItem('pep_study_slug');
+              } catch {
+                studySlug = null;
+              }
+            }
+            window.location.href = `/study/${studySlug || 'policy-study'}`;
+          } else {
+            window.location.href = '/login';
           }
-          if (!studySlug && path.startsWith('/study/')) {
-            studySlug = path.split('/')[2] || null;
-          }
-          // Default entry for this deployment is the user study, not /login
-          window.location.href = `/study/${studySlug || 'policy-study'}`;
         }
       }
     }
@@ -678,10 +681,10 @@ export const studyApi = {
     }>;
   },
 
-  adminListEvents: async (slug: string, participantCode?: string, limit = 1000) => {
+  adminListEvents: async (slug: string, search?: string, limit = 1000) => {
     const response = await api.get(`/study/admin/studies/${slug}/events`, {
       params: {
-        participant_code: participantCode || undefined,
+        q: search || undefined,
         limit,
       },
     });

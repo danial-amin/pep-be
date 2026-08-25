@@ -32,6 +32,34 @@ logger = logging.getLogger(__name__)
 
 REFUSAL_MARKERS = ("i don't know", "i do not know", "i'm not sure", "i am not sure")
 
+# Exclude greeting-only exchanges from SCI shortest selection / stability reruns.
+MIN_SCI_USER_INPUT_CHARS = 50
+_SCI_GREETING_USER_INPUTS = frozenset({"hi", "hello", "hey", "hi!", "hello!", "hey!"})
+_SCI_GREETING_RESPONSE_PREFIXES = (
+    "hello",
+    "hi,",
+    "hi ",
+    "hey,",
+    "hey ",
+    "good morning",
+    "good afternoon",
+    "good evening",
+)
+
+
+def _is_substantive_sci_exchange(row: Any) -> bool:
+    """True when the exchange is policy-relevant (not a greeting opener)."""
+    user = (row.get("user_input") or "").strip()
+    resp = (row.get("content") or "").strip()
+    if len(user) < MIN_SCI_USER_INPUT_CHARS:
+        return False
+    if user.lower() in _SCI_GREETING_USER_INPUTS:
+        return False
+    resp_lower = resp.lower()
+    if len(resp) < 80 and any(resp_lower.startswith(p) for p in _SCI_GREETING_RESPONSE_PREFIXES):
+        return False
+    return True
+
 
 @dataclass
 class RoundCandidate:
@@ -204,7 +232,10 @@ class StabilityAnalysisService:
             return None, None
 
         longest_row = all_rows[0]
-        shortest_row = min(all_rows, key=lambda r: r["resp_len"])
+        substantive_rows = [r for r in all_rows if _is_substantive_sci_exchange(r)]
+        shortest_row = (
+            min(substantive_rows, key=lambda r: r["resp_len"]) if substantive_rows else None
+        )
 
         def _to_candidate(row, label: str) -> RoundCandidate:
             return RoundCandidate(
@@ -220,7 +251,9 @@ class StabilityAnalysisService:
                 session_id=row["session_id"],
             )
 
-        return _to_candidate(longest_row, "longest"), _to_candidate(shortest_row, "shortest")
+        longest = _to_candidate(longest_row, "longest")
+        shortest = _to_candidate(shortest_row, "shortest") if shortest_row else None
+        return longest, shortest
 
     async def find_mps_candidates(
         self,
@@ -412,6 +445,7 @@ class StabilityAnalysisService:
         study_slug: str = "policy-study",
         iterations: int = 30,
         strict_mode: bool = True,
+        include_sci_shortest: bool = False,
     ) -> Dict[str, Any]:
         sci_long, sci_short = await self.find_sci_candidates(session, study_slug)
         mps_long, mps_short = await self.find_mps_candidates(session, study_slug)
@@ -437,7 +471,7 @@ class StabilityAnalysisService:
         if sci_long:
             tasks.append(self.rerun_sci(session, sci_long, iterations, strict_mode))
             task_keys.append("sci_longest")
-        if sci_short:
+        if sci_short and include_sci_shortest:
             tasks.append(self.rerun_sci(session, sci_short, iterations, strict_mode))
             task_keys.append("sci_shortest")
         if mps_long:
