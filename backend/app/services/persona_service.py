@@ -1,6 +1,7 @@
 """
 Persona generation and management service.
 """
+import copy
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional, Dict, Any
@@ -29,7 +30,7 @@ class PersonaService:
         include_ethical_guardrails: bool = True,
         output_format: str = "json",
         document_ids: Optional[List[int]] = None,
-        project_id: Optional[str] = None
+        project_id: Optional[int] = None
     ) -> PersonaSet:
         """
         Generate initial persona set with basic demographics using RAG.
@@ -71,13 +72,12 @@ class PersonaService:
         # Process interviews if available
         if interviews:
             # Get interview document IDs for vector DB filtering
-            interview_doc_ids = [str(doc.id) for doc in interviews] if document_ids or project_id else None
+            interview_doc_ids = [str(doc.id) for doc in interviews] if (document_ids or project_id) else None
             
-            # Use RAG to retrieve relevant chunks for persona generation
+            # Use RAG to retrieve relevant chunks. Prefer document_id over project_id.
             interview_query_text = "user interviews, user research, interview transcripts, user feedback, user needs"
             interview_filter = {"document_type": "interview"}
             if interview_doc_ids and len(interview_doc_ids) > 0:
-                # Filter by document IDs for session isolation
                 if len(interview_doc_ids) == 1:
                     interview_filter["document_id"] = interview_doc_ids[0]
                 else:
@@ -89,16 +89,22 @@ class PersonaService:
                 filter_metadata=interview_filter
             )
             
-            # Extract document texts from vector DB results
+            # Extract document texts from vector DB results (filter None; vector DB can return None)
             if interview_results.get("documents") and len(interview_results["documents"]) > 0:
-                # Flatten the results (ChromaDB returns lists of lists)
                 for doc_list in interview_results["documents"]:
-                    interview_texts.extend(doc_list)
+                    for t in doc_list:
+                        if t is not None:
+                            interview_texts.append(t if isinstance(t, str) else str(t))
             
             # If no results from vector DB, fall back to full documents (for backward compatibility)
             if not interview_texts:
                 logger.warning("No interview chunks found in vector DB, falling back to full documents")
-                interview_texts = [interview.content for interview in interviews]
+                interview_texts = [
+                    (c if isinstance(c, str) else str(c))
+                    for interview in interviews
+                    for c in [getattr(interview, "content", None)]
+                    if c is not None
+                ]
         
         # Process context if available
         if contexts:
@@ -107,7 +113,6 @@ class PersonaService:
             
             context_filter = {"document_type": "context"}
             if context_doc_ids and len(context_doc_ids) > 0:
-                # Filter by document IDs for session isolation
                 if len(context_doc_ids) == 1:
                     context_filter["document_id"] = context_doc_ids[0]
                 else:
@@ -119,15 +124,22 @@ class PersonaService:
                 filter_metadata=context_filter
             )
             
-            # Extract document texts from vector DB results
+            # Extract document texts from vector DB results (filter None; vector DB can return None)
             if context_results.get("documents") and len(context_results["documents"]) > 0:
                 for doc_list in context_results["documents"]:
-                    context_texts.extend(doc_list)
+                    for t in doc_list:
+                        if t is not None:
+                            context_texts.append(t if isinstance(t, str) else str(t))
             
             # If no results from vector DB, fall back to full documents
             if not context_texts:
                 logger.warning("No context chunks found in vector DB, falling back to full documents")
-                context_texts = [context.content for context in contexts]
+                context_texts = [
+                    (c if isinstance(c, str) else str(c))
+                    for context in contexts
+                    for c in [getattr(context, "content", None)]
+                    if c is not None
+                ]
         
         logger.info(f"Using {len(interview_texts)} interview chunks and {len(context_texts)} context chunks for persona generation")
         
@@ -146,13 +158,15 @@ class PersonaService:
             include_ethical_guardrails=include_ethical_guardrails,
             output_format=output_format,
             has_interviews=has_interviews,
-            has_context=has_context
+            has_context=has_context,
+            project_id=project_id
         )
         
         # Create persona set
         persona_set = PersonaSet(
             name=f"Persona Set {len(await PersonaService._get_all_persona_sets(session)) + 1}",
             description=persona_set_data.get("description", "Generated persona set"),
+            project_id=project_id,  # Link to project
             status="generated",
             generation_cycle=1
         )
@@ -214,12 +228,15 @@ class PersonaService:
     ) -> Persona:
         """
         Expand a basic persona into a full-fledged persona using RAG.
-        
+
         Uses vector database to retrieve relevant context chunks based on
         the persona's characteristics, making it more targeted and efficient.
         """
+        from sqlalchemy.orm import selectinload
         result = await session.execute(
-            select(Persona).where(Persona.id == persona_id)
+            select(Persona)
+            .where(Persona.id == persona_id)
+            .options(selectinload(Persona.persona_set))
         )
         persona = result.scalar_one_or_none()
         
@@ -234,11 +251,18 @@ class PersonaService:
         # Create a semantic query from persona characteristics
         query = f"{persona_name} {persona_occupation} {persona_description} demographics psychographics behaviors goals challenges"
         
+        # Get persona set to check for project_id
+        persona_set = persona.persona_set
+        
         # Use RAG to retrieve relevant context chunks
+        context_filter = {"document_type": "context"}
+        if persona_set and persona_set.project_id:
+            context_filter["project_id"] = str(persona_set.project_id)
+        
         context_results = await vector_db.query_documents(
             query_texts=[query],
             n_results=8,  # Get top 8 relevant chunks
-            filter_metadata={"document_type": "context"}
+            filter_metadata=context_filter
         )
         
         # Extract document texts from vector DB results
@@ -250,20 +274,29 @@ class PersonaService:
         # Fall back to full documents if no chunks found
         if not context_texts:
             logger.warning("No context chunks found in vector DB, falling back to full documents")
-            context_result = await session.execute(
-                select(Document).where(Document.document_type == DocumentType.CONTEXT)
-            )
+            context_query = select(Document).where(Document.document_type == DocumentType.CONTEXT)
+            if persona_set and persona_set.project_id:
+                context_query = context_query.where(Document.project_id == persona_set.project_id)
+            context_result = await session.execute(context_query)
             contexts = list(context_result.scalars().all())
-            context_texts = [context.content for context in contexts]
+            # Document.content can be NULL; only include non-empty content
+            context_texts = [c.content for c in contexts if c.content]
         
         logger.info(f"Using {len(context_texts)} context chunks for persona expansion")
         
         # Expand persona using LLM with retrieved chunks
+        # Get project_id from persona_set if available
+        project_id = persona_set.project_id if persona_set else None
+        
         expanded_data = await llm_service.expand_persona(
             persona_basic=persona.persona_data,
-            context_documents=context_texts
+            context_documents=context_texts,
+            project_id=project_id
         )
-        
+
+        # Keep a copy of raw original so we can restore demographics if merge would empty them
+        raw_original = copy.deepcopy(persona.persona_data)
+
         # Demographic fields that must NEVER be changed (flat structure)
         DEMOGRAPHIC_FIELDS = {
             'name', 'age', 'gender', 'nationality', 'education_level', 'income_bracket',
@@ -295,10 +328,10 @@ class PersonaService:
             original_keys = set(original.keys())
             expanded_keys = set(expanded.keys())
             
-            # Log any new fields that were added
+            # Log any new fields that were added (informational; we intentionally ignore them)
             new_fields = expanded_keys - original_keys
             if new_fields:
-                logger.warning(f"Expansion added new fields {new_fields} which don't exist in original. These will be ignored.")
+                logger.info(f"Expansion added new fields {new_fields} which don't exist in original. These will be ignored.")
             
             for key in original_keys:
                 # If key doesn't exist in expanded, keep original (shouldn't happen, but be safe)
@@ -352,37 +385,75 @@ class PersonaService:
         # Strict merge: Only expand existing fields, remove any new fields
         merged_data = strict_deep_merge(original_normalized, expanded_normalized)
         
-        # Final validation: Ensure structure matches original
-        # If original had flat structure, ensure merged doesn't have nested demographics
-        original_has_flat_demographics = all(
-            key in persona.persona_data for key in ['age', 'gender', 'occupation']
-        ) and 'demographics' not in persona.persona_data
+        # Final validation: If original had flat demographics (no nested 'demographics' key),
+        # flatten merged demographics back to top-level so we don't lose age, gender, occupation, etc.
+        original_has_flat_demographics = 'demographics' not in persona.persona_data
         
         if original_has_flat_demographics and 'demographics' in merged_data:
-            logger.warning("Expansion tried to add nested 'demographics' but original has flat structure. Removing nested structure.")
-            # Remove nested demographics and keep flat structure
             if isinstance(merged_data['demographics'], dict):
-                # Extract flat fields from nested demographics if they exist
                 nested_demo = merged_data.pop('demographics')
-                # But don't add them back - keep original flat structure
-                logger.info("Removed nested demographics structure to preserve original flat structure")
-        
+                # Restore flat demographic keys so we don't remove demographic components
+                for k, v in nested_demo.items():
+                    if v is not None and v != "":
+                        merged_data[k] = v
+                logger.debug("Flattened demographics back to top-level to preserve original structure")
+
+        # Never overwrite non-empty demographics with empty: if merged demographics are empty
+        # but the raw original had any demographic content, restore from raw.
+        def _has_demographic_content(data: dict) -> bool:
+            if not data:
+                return False
+            nested = data.get("demographics") if isinstance(data.get("demographics"), dict) else None
+            if nested:
+                if any(v is not None and v != "" for v in nested.values()):
+                    return True
+            flat_keys = ("age", "gender", "location", "occupation", "education", "nationality", "income_bracket", "relationship_status")
+            if any(data.get(k) not in (None, "") for k in flat_keys):
+                return True
+            return False
+
+        def _get_demographics_from_raw(data: dict) -> dict:
+            out = {}
+            nested = data.get("demographics") if isinstance(data.get("demographics"), dict) else {}
+            flat_keys = ("age", "gender", "location", "occupation", "education", "education_level", "nationality", "income_bracket", "relationship_status")
+            for k in flat_keys:
+                out[k] = data.get(k) if data.get(k) not in (None, "") else nested.get(k)
+            for k, v in (nested or {}).items():
+                if k not in out and v is not None and v != "":
+                    out[k] = v
+            return {k: v for k, v in out.items() if v is not None and v != ""}
+
+        merged_demo = merged_data.get("demographics") if isinstance(merged_data.get("demographics"), dict) else {}
+        merged_flat_has_demo = any(merged_data.get(k) not in (None, "") for k in ("age", "gender", "location", "occupation"))
+        merged_has_demo = bool(merged_demo and any(v not in (None, "") for v in merged_demo.values())) or merged_flat_has_demo
+        if not merged_has_demo and _has_demographic_content(raw_original):
+            restored = _get_demographics_from_raw(raw_original)
+            if restored:
+                merged_data["demographics"] = restored
+                logger.debug("Restored demographics from original so expansion does not remove them")
+
         # Update persona with merged data
         persona.persona_data = merged_data
-        
+
         # Update persona set status if all personas are expanded
+        # Use explicit query to avoid lazy loading issues in async context
         persona_set = persona.persona_set
         if persona_set:
+            # Query all personas in the set explicitly
+            all_personas_result = await session.execute(
+                select(Persona).where(Persona.persona_set_id == persona_set.id)
+            )
+            all_personas = list(all_personas_result.scalars().all())
             all_expanded = all(
                 p.persona_data.get("detailed_description") or p.persona_data.get("personal_background")
-                for p in persona_set.personas
+                for p in all_personas
             )
             if all_expanded:
                 persona_set.status = "expanded"
-        
+
         await session.flush()
         await session.refresh(persona)
-        
+
         return persona
     
     @staticmethod
@@ -391,7 +462,7 @@ class PersonaService:
         persona_id: int
     ) -> Persona:
         """Generate an image for a persona."""
-        from app.utils.image_utils import download_and_save_image
+        from app.utils.image_utils import download_and_save_image, save_base64_image
         
         result = await session.execute(
             select(Persona).where(Persona.id == persona_id)
@@ -404,19 +475,20 @@ class PersonaService:
         # Generate image prompt
         image_prompt = await llm_service.generate_persona_image_prompt(persona.persona_data)
         
-        # Generate image (returns temporary DALL-E URL)
-        dall_e_url = await llm_service.generate_image(image_prompt)
-        
-        # Download and save the image locally
-        local_image_path = await download_and_save_image(dall_e_url, persona_id)
-        
+        # GPT Image returns base64; legacy models may still return a URL
+        image_result = await llm_service.generate_image(image_prompt)
+
+        if image_result.startswith(("http://", "https://")):
+            local_image_path, image_base64 = await download_and_save_image(image_result, persona_id)
+        else:
+            local_image_path, image_base64 = await save_base64_image(image_result, persona_id)
+
         if not local_image_path:
-            logger.warning(f"Failed to download image for persona {persona_id}, using DALL-E URL")
-            local_image_path = dall_e_url
+            raise ValueError(f"Failed to save generated image for persona {persona_id}")
         
-        # Update persona with local image path
         persona.image_url = local_image_path
         persona.image_prompt = image_prompt
+        persona.image_data = image_base64
         await session.commit()
         await session.refresh(persona)
         
@@ -464,13 +536,15 @@ class PersonaService:
     
     @staticmethod
     async def get_all_persona_sets(
-        session: AsyncSession
+        session: AsyncSession,
+        project_id: Optional[int] = None
     ) -> List[PersonaSet]:
-        """Get all persona sets."""
+        """Get persona sets, optionally filtered by project (only sets affiliated to that project)."""
         from sqlalchemy.orm import selectinload
-        result = await session.execute(
-            select(PersonaSet).options(selectinload(PersonaSet.personas))
-        )
+        query = select(PersonaSet).options(selectinload(PersonaSet.personas))
+        if project_id is not None:
+            query = query.where(PersonaSet.project_id == project_id)
+        result = await session.execute(query)
         return list(result.scalars().all())
     
     @staticmethod

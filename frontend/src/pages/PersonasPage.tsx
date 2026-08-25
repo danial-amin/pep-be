@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3 } from 'lucide-react';
+import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3, Play, FileJson, LayoutGrid } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet, PersonaSetGenerateResponse, Persona } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -11,49 +11,92 @@ function ExpandedPersonaCard({ persona }: { persona: Persona }) {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
 
+  const downloadPersonaJson = () => {
+    const blob = new Blob([JSON.stringify(persona, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const base = (personaData.name || persona.name || 'persona').replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'persona';
+    a.download = `${base}_${persona.id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
   return (
-    <div className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue">
+    <div className="glass-card rounded-2xl p-6 border border-stone-200">
       {/* Persona Image and Name */}
       <div className="flex items-center gap-4 mb-4">
-        {persona.image_url && !imageError ? (
+        {(persona.image_url || persona.id) && !imageError ? (
           <img
-            src={getPersonaImageUrl(persona.image_url) || ''}
+            src={getPersonaImageUrl(persona.image_url, persona.id) || ''}
             alt={persona.name}
-            className="w-20 h-20 object-cover rounded-xl border-4 border-white/30 shadow-lg flex-shrink-0"
+            className="w-20 h-20 object-cover rounded-xl border-4 border-stone-200 shadow-lg flex-shrink-0"
             onError={() => setImageError(true)}
           />
         ) : (
-          <div className="w-20 h-20 rounded-xl border-4 border-white/30 bg-white/10 flex items-center justify-center flex-shrink-0">
-            <span className="text-white/40 text-2xl font-bold">
+          <div className="w-20 h-20 rounded-xl border-4 border-stone-200 bg-stone-50 flex items-center justify-center flex-shrink-0">
+            <span className="text-stone-300 text-2xl font-bold">
               {(personaData.name || persona.name).charAt(0).toUpperCase()}
             </span>
           </div>
         )}
         <div className="flex-1">
-          <h4 className="text-2xl font-bold text-white mb-1">{personaData.name || persona.name}</h4>
+          <h4 className="text-2xl font-bold text-stone-900 mb-1">{personaData.name || persona.name}</h4>
         </div>
       </div>
 
       {/* Background */}
       <div className="mb-4">
-        <h5 className="text-sm font-semibold text-white uppercase tracking-wide mb-2">Background</h5>
-        <p className="text-sm text-white/90 leading-relaxed">
-          {personaData.background || 
-           personaData.detailed_description || 
-           personaData.personal_background || 
-           personaData.background_and_personal_history ||
-           personaData.other_information ||
-           'No background information available.'}
+        <h5 className="text-sm font-semibold text-stone-900 uppercase tracking-wide mb-2">Background</h5>
+        <p className="text-sm text-stone-700 leading-relaxed">
+          {(() => {
+            const getStringValue = (value: any): string | null => {
+              if (!value) return null;
+              if (typeof value === 'string') return value;
+              if (typeof value === 'object') {
+                // If it's an object, try to extract meaningful text or stringify it
+                if (Array.isArray(value)) {
+                  return value.map(String).join(', ');
+                }
+                // For objects, try to find a text field or stringify
+                if ('text' in value || 'description' in value || 'content' in value) {
+                  return String(value.text || value.description || value.content);
+                }
+                return JSON.stringify(value);
+              }
+              return String(value);
+            };
+            
+            return getStringValue(personaData.background) || 
+                   getStringValue(personaData.detailed_description) || 
+                   getStringValue(personaData.personal_background) || 
+                   getStringValue(personaData.background_and_personal_history) ||
+                   getStringValue(personaData.other_information) ||
+                   'No background information available.';
+          })()}
         </p>
       </div>
 
-      {/* Button to view expanded version */}
-      <button
-        onClick={() => navigate(`/personas/${persona.persona_set_id}/${persona.id}`)}
-        className="w-full mt-4 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-lg font-medium transition-all duration-200 shadow-lg transform hover:scale-105"
-      >
-        View Complete Persona
-      </button>
+      {/* Actions */}
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        <button
+          type="button"
+          onClick={() => navigate(`/personas/${persona.persona_set_id}/${persona.id}`)}
+          className="flex flex-1 items-center justify-center rounded-lg bg-stone-900 hover:bg-stone-800 px-4 py-2.5 font-medium text-white shadow-sm transition-all duration-200 sm:py-2"
+        >
+          View complete persona
+        </button>
+        <button
+          type="button"
+          onClick={downloadPersonaJson}
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-4 py-2.5 text-sm font-medium text-stone-900 transition-colors hover:bg-stone-100 sm:py-2"
+        >
+          <FileJson className="h-4 w-4 shrink-0" />
+          <span className="text-center leading-snug">Download JSON</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -75,6 +118,10 @@ export default function PersonasPage() {
   const [includeEthicalGuardrails, setIncludeEthicalGuardrails] = useState(true);
   const [outputFormat, setOutputFormat] = useState('json');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [stakeholderGroupsText, setStakeholderGroupsText] = useState('');
+  const [autoIterate, setAutoIterate] = useState(true);
+  const [rqeThreshold, setRqeThreshold] = useState(0.75);
+  const [maxIterations, setMaxIterations] = useState(3);
 
   useEffect(() => {
     loadPersonaSets();
@@ -95,18 +142,35 @@ export default function PersonasPage() {
   const handleGenerateSet = async () => {
     setGenerating(true);
     try {
+      const stakeholderGroups = stakeholderGroupsText
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       const response: PersonaSetGenerateResponse = await personasApi.generateSet(
-        numPersonas,
+        stakeholderGroups.length > 0 ? stakeholderGroups.length : numPersonas,
         contextDetails || undefined,
         interviewTopic || undefined,
         userStudyDesign || undefined,
         includeEthicalGuardrails,
-        outputFormat
+        outputFormat,
+        undefined,
+        stakeholderGroups.length > 0 ? stakeholderGroups : undefined,
+        {
+          rqeThreshold,
+          maxIterations,
+          autoIterate,
+        }
       );
       await loadPersonaSets();
       const newSet = await personasApi.getSet(response.persona_set_id);
       setSelectedSet(newSet);
-      alert('Persona set generated successfully!');
+      const rqePct =
+        response.rqe_score != null ? `${(response.rqe_score * 100).toFixed(1)}%` : 'n/a';
+      const iters = response.iterations_used ?? 1;
+      const met = response.threshold_met ? 'met' : 'not met';
+      alert(
+        `Persona set generated.\nRQE: ${rqePct} (threshold ${met})\nIterations: ${iters}/${maxIterations}`
+      );
     } catch (error: any) {
       alert(`Failed to generate personas: ${error.response?.data?.detail || error.message}`);
     } finally {
@@ -168,18 +232,30 @@ export default function PersonasPage() {
   const handleMeasureDiversity = async (personaSetId: number) => {
     setMeasuringDiversity(personaSetId);
     try {
-      await personasApi.measureDiversity(personaSetId);
+      const result = await personasApi.measureDiversity(personaSetId);
       await loadPersonaSets();
       if (selectedSet?.id === personaSetId) {
         const updated = await personasApi.getSet(personaSetId);
         setSelectedSet(updated);
       }
-      alert('Diversity measured successfully!');
+      const rqe = result?.metrics?.rqe_score;
+      const avg = result?.metrics?.average_similarity;
+      const rqePct = rqe != null ? `${(rqe * 100).toFixed(1)}%` : 'n/a';
+      const avgPct = avg != null ? `${(avg * 100).toFixed(1)}%` : 'n/a';
+      alert(`RQE measured.\nRQE: ${rqePct}\nAvg similarity: ${avgPct}`);
     } catch (error: any) {
       alert(`Failed to measure diversity: ${error.response?.data?.detail || error.message}`);
     } finally {
       setMeasuringDiversity(null);
     }
+  };
+
+  const currentRqe = (set: PersonaSet | null | undefined) => {
+    if (!set?.diversity_score) return null;
+    const score =
+      set.diversity_score.rqe_score ??
+      (set.diversity_score as { final_rqe?: number }).final_rqe;
+    return score != null ? score : null;
   };
 
   const handleValidate = async (personaSetId: number) => {
@@ -205,15 +281,24 @@ export default function PersonasPage() {
 
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Personas</h2>
-        <p className="text-white/80 text-lg">Generate and manage user personas from your documents</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-stone-900 mb-2 ">Personas</h2>
+          <p className="text-stone-600 text-lg">Generate and manage user personas from your documents</p>
+        </div>
+        <button
+          onClick={() => navigate('/simulations')}
+          className="px-6 py-3 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-semibold transition-all duration-200 flex items-center gap-2"
+        >
+          <Play className="w-5 h-5" />
+          Launch Simulation
+        </button>
       </div>
 
       {/* Generate New Persona Set */}
-      <div className="glass-card rounded-2xl p-6 mb-6 pastel-blue">
+      <div className="glass-card rounded-2xl p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-semibold text-white">Generate New Persona Set</h3>
+          <h3 className="text-xl font-semibold text-stone-900">Generate New Persona Set</h3>
           <button
             onClick={async () => {
               try {
@@ -235,7 +320,7 @@ export default function PersonasPage() {
               }
             }}
             disabled={generating}
-            className="px-4 py-2 text-sm font-medium rounded-xl text-white bg-gradient-to-r from-purple-400 to-pink-400 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
+            className="px-4 py-2 text-sm font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 disabled:opacity-50 transition-all duration-200"
           >
             {generating ? 'Loading...' : 'Load Default Personas (Manual)'}
           </button>
@@ -244,7 +329,7 @@ export default function PersonasPage() {
         {/* Basic Options */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-white/90 mb-1">
+            <label className="block text-sm font-medium text-stone-700 mb-1">
               Number of Personas
             </label>
             <input
@@ -253,17 +338,17 @@ export default function PersonasPage() {
               max="10"
               value={numPersonas}
               onChange={(e) => setNumPersonas(parseInt(e.target.value) || 3)}
-              className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-white/90 mb-1">
+            <label className="block text-sm font-medium text-stone-700 mb-1">
               Output Format
             </label>
             <select
               value={outputFormat}
               onChange={(e) => setOutputFormat(e.target.value)}
-              className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
             >
               <option value="json">JSON</option>
               <option value="profile">Profile</option>
@@ -281,16 +366,32 @@ export default function PersonasPage() {
         {/* Advanced Options Toggle */}
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-sm text-white/90 hover:text-white mb-4 font-medium transition-all duration-200"
+          className="text-sm text-stone-700 hover:text-stone-900 mb-4 font-medium transition-all duration-200"
         >
           {showAdvanced ? '▼ Hide' : '▶ Show'} Advanced Options
         </button>
 
         {/* Advanced Options */}
         {showAdvanced && (
-          <div className="space-y-4 border-t border-white/20 pt-4">
+          <div className="space-y-4 border-t border-stone-200 pt-4">
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-1">
+              <label className="block text-sm font-medium text-stone-700 mb-1">
+                Stakeholder groups (optional)
+              </label>
+              <textarea
+                value={stakeholderGroupsText}
+                onChange={(e) => setStakeholderGroupsText(e.target.value)}
+                placeholder={"One group per line, e.g.\naffected_households\nbisp_programme_representatives\nlocal_humanitarian_workers"}
+                rows={3}
+                className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
+              />
+              <p className="mt-1 text-xs text-stone-500">
+                When set, generates exactly one persona per group (overrides number of personas).
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">
                 Context Details (Optional)
               </label>
               <textarea
@@ -298,12 +399,12 @@ export default function PersonasPage() {
                 onChange={(e) => setContextDetails(e.target.value)}
                 placeholder="Additional context about the research, market, or domain..."
                 rows={3}
-                className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-1">
+              <label className="block text-sm font-medium text-stone-700 mb-1">
                 Interview Topic (Optional)
               </label>
               <input
@@ -311,12 +412,12 @@ export default function PersonasPage() {
                 value={interviewTopic}
                 onChange={(e) => setInterviewTopic(e.target.value)}
                 placeholder="e.g., user experience with mobile app, customer pain points..."
-                className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-1">
+              <label className="block text-sm font-medium text-stone-700 mb-1">
                 User Study Design (Optional)
               </label>
               <textarea
@@ -324,7 +425,7 @@ export default function PersonasPage() {
                 onChange={(e) => setUserStudyDesign(e.target.value)}
                 placeholder="Description of user study design, methodology, and research approach..."
                 rows={3}
-                className="w-full px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
               />
             </div>
 
@@ -334,11 +435,62 @@ export default function PersonasPage() {
                 id="ethical-guardrails"
                 checked={includeEthicalGuardrails}
                 onChange={(e) => setIncludeEthicalGuardrails(e.target.checked)}
-                className="h-4 w-4 text-purple-400 focus:ring-purple-300 border-white/30 rounded bg-white/20"
+                className="h-4 w-4 text-purple-400 focus:ring-purple-300 border-stone-200 rounded bg-stone-100"
               />
-              <label htmlFor="ethical-guardrails" className="ml-2 block text-sm text-white/90">
+              <label htmlFor="ethical-guardrails" className="ml-2 block text-sm text-stone-700">
                 Include Ethical and Fairness Guardrails
               </label>
+            </div>
+
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-3">
+              <div className="text-sm font-medium text-stone-900">Iterative RQE (diversity loop)</div>
+              <p className="text-xs text-stone-500">
+                After each generation, RQE is measured. If below the threshold, personas are regenerated
+                with diversity hints (up to max iterations). Works with stakeholder groups too.
+              </p>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="auto-iterate"
+                  checked={autoIterate}
+                  onChange={(e) => setAutoIterate(e.target.checked)}
+                  className="h-4 w-4 border-stone-200 rounded bg-white"
+                />
+                <label htmlFor="auto-iterate" className="ml-2 block text-sm text-stone-700">
+                  Auto-iterate until RQE threshold is met
+                </label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1">
+                    RQE threshold (0–1, paper ≈ 0.75)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={rqeThreshold}
+                    onChange={(e) => setRqeThreshold(parseFloat(e.target.value) || 0.75)}
+                    disabled={!autoIterate}
+                    className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 text-sm disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1">
+                    Max iterations
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={maxIterations}
+                    onChange={(e) => setMaxIterations(parseInt(e.target.value, 10) || 3)}
+                    disabled={!autoIterate}
+                    className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 text-sm disabled:opacity-50"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -348,7 +500,7 @@ export default function PersonasPage() {
           <button
             onClick={handleGenerateSet}
             disabled={generating}
-            className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 hover:from-purple-500 hover:via-pink-500 hover:to-rose-500 disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105"
+            className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 disabled:opacity-50 transition-all duration-200"
           >
             <Plus className="mr-2 h-4 w-4" />
             {generating ? 'Generating...' : 'Generate Personas'}
@@ -358,25 +510,25 @@ export default function PersonasPage() {
 
       {/* Workflow Steps */}
       {selectedSet && (
-        <div className="glass-card rounded-2xl p-6 mb-6 pastel-green">
-          <h3 className="text-xl font-semibold text-white mb-4">Persona Generation Workflow</h3>
+        <div className="glass-card rounded-2xl p-6 mb-6">
+          <h3 className="text-xl font-semibold text-stone-900 mb-4">Persona Generation Workflow</h3>
           <div className="space-y-4">
             {/* Step 1: Generation */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.personas.length > 0 ? 'bg-green-400' : 'bg-white/20'
+                selectedSet.personas.length > 0 ? 'bg-green-400' : 'bg-stone-100'
               }`}>
                 {selectedSet.personas.length > 0 ? (
-                  <CheckCircle className="h-5 w-5 text-white" />
+                  <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
-                  <Circle className="h-5 w-5 text-white" />
+                  <Circle className="h-5 w-5 text-stone-900" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-medium text-white">Step 1: Persona Set Generation</h4>
-                <p className="text-sm text-white/80">Generate initial persona set with basic demographics</p>
+                <h4 className="font-medium text-stone-900">Step 1: Persona Set Generation</h4>
+                <p className="text-sm text-stone-600">Generate initial persona set with basic demographics</p>
                 {selectedSet.personas.length > 0 && (
-                  <p className="text-xs text-white/60 mt-1">✓ {selectedSet.personas.length} personas generated</p>
+                  <p className="text-xs text-stone-400 mt-1">✓ {selectedSet.personas.length} personas generated</p>
                 )}
               </div>
             </div>
@@ -384,30 +536,42 @@ export default function PersonasPage() {
             {/* Step 2: Diversity Measurement */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.diversity_score ? 'bg-green-400' : 'bg-white/20'
+                currentRqe(selectedSet) != null ? 'bg-green-400' : 'bg-stone-100'
               }`}>
-                {selectedSet.diversity_score ? (
-                  <CheckCircle className="h-5 w-5 text-white" />
+                {currentRqe(selectedSet) != null ? (
+                  <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
-                  <Circle className="h-5 w-5 text-white" />
+                  <Circle className="h-5 w-5 text-stone-900" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-medium text-white">Step 2: Measure Diversity (RQE)</h4>
-                <p className="text-sm text-white/80">Calculate RQE scores to measure persona set diversity</p>
-                {selectedSet.diversity_score && (
-                  <p className="text-xs text-white/60 mt-1">
-                    ✓ RQE: {(selectedSet.diversity_score.rqe_score * 100).toFixed(1)}%
+                <h4 className="font-medium text-stone-900">Step 2: Measure Diversity (RQE)</h4>
+                <p className="text-sm text-stone-600">
+                  Calculate RQE whenever you want — after generation, edits, or before reporting.
+                </p>
+                {currentRqe(selectedSet) != null && (
+                  <p className="text-xs text-stone-400 mt-1">
+                    Current RQE: {(currentRqe(selectedSet)! * 100).toFixed(1)}%
+                    {selectedSet.diversity_score?.average_similarity != null && (
+                      <> · avg similarity {(selectedSet.diversity_score.average_similarity * 100).toFixed(1)}%</>
+                    )}
                   </p>
                 )}
-                {selectedSet.personas.length > 0 && !selectedSet.diversity_score && (
+                {selectedSet.personas.length >= 2 && (
                   <button
                     onClick={() => handleMeasureDiversity(selectedSet.id)}
                     disabled={measuringDiversity === selectedSet.id}
-                    className="mt-2 text-xs px-3 py-1 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50"
+                    className="mt-2 text-xs px-3 py-1 bg-stone-900 text-white rounded-lg hover:bg-stone-800 disabled:opacity-50"
                   >
-                    {measuringDiversity === selectedSet.id ? 'Measuring...' : 'Measure Diversity'}
+                    {measuringDiversity === selectedSet.id
+                      ? 'Measuring…'
+                      : currentRqe(selectedSet) != null
+                        ? 'Re-measure RQE'
+                        : 'Measure RQE'}
                   </button>
+                )}
+                {selectedSet.personas.length === 1 && (
+                  <p className="text-xs text-stone-400 mt-2">Need at least 2 personas to measure RQE.</p>
                 )}
               </div>
             </div>
@@ -415,22 +579,22 @@ export default function PersonasPage() {
             {/* Step 3: Expansion */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.personas.some(p => p.persona_data.detailed_description) ? 'bg-green-400' : 'bg-white/20'
+                selectedSet.personas.some(p => p.persona_data.detailed_description) ? 'bg-green-400' : 'bg-stone-100'
               }`}>
                 {selectedSet.personas.some(p => p.persona_data.detailed_description) ? (
-                  <CheckCircle className="h-5 w-5 text-white" />
+                  <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
-                  <Circle className="h-5 w-5 text-white" />
+                  <Circle className="h-5 w-5 text-stone-900" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-medium text-white">Step 3: Expand Personas</h4>
-                <p className="text-sm text-white/80">Expand basic personas into full-fledged personas</p>
+                <h4 className="font-medium text-stone-900">Step 3: Expand Personas</h4>
+                <p className="text-sm text-stone-600">Expand basic personas into full-fledged personas</p>
                 {selectedSet.personas.length > 0 && (
                   <button
                     onClick={() => handleExpand(selectedSet.id)}
                     disabled={expanding === selectedSet.id}
-                    className="mt-2 text-xs px-3 py-1 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50"
+                    className="mt-2 text-xs px-3 py-1 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50"
                   >
                     {expanding === selectedSet.id ? 'Expanding...' : 'Expand All'}
                   </button>
@@ -441,24 +605,24 @@ export default function PersonasPage() {
             {/* Step 4: Validation */}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                selectedSet.validation_scores ? 'bg-green-400' : 'bg-white/20'
+                selectedSet.validation_scores ? 'bg-green-400' : 'bg-stone-100'
               }`}>
                 {selectedSet.validation_scores ? (
-                  <CheckCircle className="h-5 w-5 text-white" />
+                  <CheckCircle className="h-5 w-5 text-stone-900" />
                 ) : (
-                  <Circle className="h-5 w-5 text-white" />
+                  <Circle className="h-5 w-5 text-stone-900" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-medium text-white">Step 4: Validate Against Transcripts</h4>
-                <p className="text-sm text-white/80">Calculate cosine similarity with real interview data</p>
+                <h4 className="font-medium text-stone-900">Step 4: Validate Against Transcripts</h4>
+                <p className="text-sm text-stone-600">Calculate cosine similarity with real interview data</p>
                 {selectedSet.validation_scores && (
                   <div className="mt-1">
-                    <p className="text-xs text-white/60">
+                    <p className="text-xs text-stone-400">
                       ✓ {selectedSet.validation_scores.filter((v: any) => v.validation_status === 'validated').length} validated
                     </p>
                     {selectedSet.validation_scores.some((v: any) => v.dummy) && (
-                      <p className="text-xs text-yellow-300 mt-1">
+                      <p className="text-xs text-amber-600 mt-1">
                         ⚠ Using simulated validation (no interview documents available)
                       </p>
                     )}
@@ -469,14 +633,14 @@ export default function PersonasPage() {
                     <button
                       onClick={() => handleValidate(selectedSet.id)}
                       disabled={validating === selectedSet.id}
-                      className="text-xs px-3 py-1 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50"
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50"
                     >
                       {validating === selectedSet.id ? 'Validating...' : 'Validate'}
                     </button>
                     {selectedSet.validation_scores && (
                       <button
                         onClick={() => handleViewReport(selectedSet.id)}
-                        className="text-xs px-3 py-1 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-lg hover:from-purple-500 hover:to-pink-500"
+                        className="text-xs px-3 py-1 bg-stone-900 hover:bg-stone-800 text-white rounded-lg"
                       >
                         <BarChart3 className="inline h-3 w-3 mr-1" />
                         View Report
@@ -492,35 +656,42 @@ export default function PersonasPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Persona Sets List */}
-        <div className="glass-card rounded-2xl overflow-hidden pastel-purple">
-          <div className="px-6 py-4 border-b border-white/20">
-            <h3 className="text-lg font-semibold text-white">Persona Sets</h3>
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-200">
+            <h3 className="text-lg font-semibold text-stone-900">Persona Sets</h3>
           </div>
-          <div className="divide-y divide-white/10">
+          <div className="divide-y divide-stone-100">
             {loading ? (
-              <div className="px-6 py-8 text-center text-white/80">Loading...</div>
+              <div className="px-6 py-8 text-center text-stone-600">Loading...</div>
             ) : personaSets.length === 0 ? (
-              <div className="px-6 py-8 text-center text-white/80">
+              <div className="px-6 py-8 text-center text-stone-600">
                 No persona sets found. Generate your first set above.
               </div>
             ) : (
               personaSets.map((set) => (
-                <div key={set.id} className="px-6 py-4 hover:bg-white/10 transition-all duration-200">
+                <div key={set.id} className="px-6 py-4 hover:bg-stone-50 transition-all duration-200">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium text-white">
+                    <h4 className="text-sm font-medium text-stone-900">
                       {set.name || `Persona Set #${set.id}`}
                     </h4>
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleViewSet(set.id)}
-                        className="text-white/80 hover:text-white transition-colors"
+                        className="text-stone-600 hover:text-stone-900 transition-colors"
                         title="View in sidebar"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
+                        onClick={() => navigate(`/personas/${set.id}/profiles`)}
+                        className="text-stone-600 hover:text-stone-900 transition-colors"
+                        title="View all profiles"
+                      >
+                        <LayoutGrid className="h-4 w-4" />
+                      </button>
+                      <button
                         onClick={() => handleViewExpanded(set.id)}
-                        className="text-white/80 hover:text-white transition-colors"
+                        className="text-stone-600 hover:text-stone-900 transition-colors"
                         title="View expanded"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -531,23 +702,36 @@ export default function PersonasPage() {
                       </button>
                     </div>
                   </div>
-                  <p className="text-sm text-white/70 mb-3">
+                  <p className="text-sm text-stone-500 mb-3">
                     {set.description || 'No description'}
                   </p>
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs text-white/70">
+                    <span className="text-xs text-stone-500">
                       {set.personas.length} persona{set.personas.length !== 1 ? 's' : ''}
                     </span>
-                    <span className="text-xs text-white/50">•</span>
-                    <span className="text-xs text-white/70">
+                    <span className="text-xs text-stone-400">•</span>
+                    <span className="text-xs text-stone-500">
                       {new Date(set.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="mt-3 flex space-x-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleMeasureDiversity(set.id)}
+                      disabled={measuringDiversity === set.id || set.personas.length < 2}
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded-lg hover:bg-stone-200 disabled:opacity-50 transition-all duration-150 border border-stone-200"
+                      title={set.personas.length < 2 ? 'Need at least 2 personas' : 'Measure RQE diversity'}
+                    >
+                      <BarChart3 className="inline h-3 w-3 mr-1" />
+                      {measuringDiversity === set.id
+                        ? 'Measuring…'
+                        : currentRqe(set) != null
+                          ? `RQE ${(currentRqe(set)! * 100).toFixed(0)}% · Re-measure`
+                          : 'Measure RQE'}
+                    </button>
                     <button
                       onClick={() => handleExpand(set.id)}
                       disabled={expanding === set.id}
-                      className="text-xs px-3 py-1 bg-purple-400/30 text-white rounded-lg hover:bg-purple-400/40 disabled:opacity-50 transition-all duration-200 border border-purple-300/30"
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded-lg hover:bg-stone-200 disabled:opacity-50 transition-all duration-150 border border-stone-200"
                     >
                       <Sparkles className="inline h-3 w-3 mr-1" />
                       {expanding === set.id ? 'Expanding...' : 'Expand'}
@@ -555,7 +739,7 @@ export default function PersonasPage() {
                     <button
                       onClick={() => handleGenerateImages(set.id)}
                       disabled={generatingImages === set.id}
-                      className="text-xs px-3 py-1 bg-pink-400/30 text-white rounded-lg hover:bg-pink-400/40 disabled:opacity-50 transition-all duration-200 border border-pink-300/30"
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded-lg hover:bg-stone-200 disabled:opacity-50 transition-all duration-150 border border-stone-200"
                     >
                       <ImageIcon className="inline h-3 w-3 mr-1" />
                       {generatingImages === set.id ? 'Generating...' : 'Images'}
@@ -568,20 +752,20 @@ export default function PersonasPage() {
         </div>
 
         {/* Selected Persona Set Details */}
-        <div className="glass-card rounded-2xl overflow-hidden pastel-pink">
-          <div className="px-6 py-4 border-b border-white/20">
-            <h3 className="text-lg font-semibold text-white">Persona Details</h3>
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-200">
+            <h3 className="text-lg font-semibold text-stone-900">Persona Details</h3>
           </div>
           <div className="p-6">
             {selectedSet ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-white">
+                  <h4 className="text-lg font-semibold text-stone-900">
                     {selectedSet.personas.length} Persona{selectedSet.personas.length !== 1 ? 's' : ''}
                   </h4>
                   <button
                     onClick={() => handleViewExpanded(selectedSet.id)}
-                    className="px-4 py-2 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-lg hover:from-purple-500 hover:to-pink-500 transition-all duration-200 flex items-center space-x-2"
+                    className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg transition-all duration-200 flex items-center space-x-2"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h3a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1z"/>
@@ -598,7 +782,7 @@ export default function PersonasPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-center text-white/80 py-8">
+              <div className="text-center text-stone-600 py-8">
                 Select a persona set to view details
               </div>
             )}

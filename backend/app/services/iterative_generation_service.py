@@ -1,0 +1,613 @@
+"""
+Iterative persona generation service implementing the PEP paper methodology.
+
+This service implements the core PEP (Persona Engineering Process) algorithm:
+1. Generate initial persona set
+2. Calculate RQE (Rao's Quadratic Entropy) for diversity
+3. If RQE < threshold, regenerate with prompt refinement hints
+4. Iterate until threshold met or max iterations reached
+5. Return final set with metrics and iteration history
+"""
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from typing import List, Optional, Dict, Any, Tuple
+import logging
+from datetime import datetime
+
+from app.models.persona import PersonaSet, Persona
+from app.models.document import Document, DocumentType
+from app.core.llm_service import llm_service
+from app.core.vector_db import vector_db
+from app.utils.persona_normalizer import normalize_persona_to_nested
+
+logger = logging.getLogger(__name__)
+
+# Default thresholds from PEP paper
+DEFAULT_RQE_THRESHOLD = 0.75  # Paper recommends >= 0.75 for good diversity
+DEFAULT_CS_THRESHOLD = 0.80   # Cosine similarity threshold for validation
+DEFAULT_MAX_ITERATIONS = 3
+
+
+class IterativeGenerationService:
+    """
+    Service for iterative persona generation following PEP paper methodology.
+
+    Key features:
+    - Iterative generation until RQE threshold is met
+    - Prompt refinement hints based on diversity gaps
+    - Source traceability for generated personas
+    - Comprehensive metrics tracking
+    """
+
+    @staticmethod
+    async def generate_persona_set_iterative(
+        session: AsyncSession,
+        num_personas: int = 5,
+        rqe_threshold: float = DEFAULT_RQE_THRESHOLD,
+        max_iterations: int = DEFAULT_MAX_ITERATIONS,
+        auto_iterate: bool = True,
+        cs_threshold: float = DEFAULT_CS_THRESHOLD,
+        context_details: Optional[str] = None,
+        interview_topic: Optional[str] = None,
+        user_study_design: Optional[str] = None,
+        include_ethical_guardrails: bool = True,
+        output_format: str = "json",
+        document_ids: Optional[List[int]] = None,
+        project_id: Optional[int] = None,
+        stakeholder_groups: Optional[List[str]] = None,
+    ) -> Tuple[PersonaSet, Dict[str, Any]]:
+        """
+        Generate persona set with iterative refinement until RQE threshold is met.
+
+        When stakeholder_groups is provided, generates exactly one persona per group
+        and retrieves RAG evidence filtered/prioritized for those stakeholders.
+        """
+        groups = [g.strip() for g in (stakeholder_groups or []) if g and str(g).strip()]
+        if groups:
+            num_personas = len(groups)
+            # Keep stakeholder mapping; still allow RQE iteration to differentiate
+            # within those fixed roles (one persona per group each cycle).
+
+        # Retrieve documents for generation
+        interview_texts, context_texts = await IterativeGenerationService._get_documents(
+            session, document_ids, project_id, stakeholder_groups=groups or None
+        )
+
+        if not interview_texts and not context_texts:
+            raise ValueError("No documents found. Please process at least one interview or context document first.")
+
+        # Store generation configuration
+        generation_config = {
+            "num_personas": num_personas,
+            "rqe_threshold": rqe_threshold,
+            "max_iterations": max_iterations,
+            "cs_threshold": cs_threshold,
+            "auto_iterate": auto_iterate,
+            "output_format": output_format,
+            "context_details": context_details,
+            "interview_topic": interview_topic,
+            "user_study_design": user_study_design,
+            "include_ethical_guardrails": include_ethical_guardrails,
+            "document_ids": document_ids,
+            "project_id": project_id,
+            "stakeholder_groups": groups or None,
+        }
+
+        # Iteration tracking
+        iteration_history = []
+        current_iteration = 0
+        current_rqe = 0.0
+        threshold_met = False
+        diversity_hints = None
+
+        # Create initial persona set record
+        persona_set = PersonaSet(
+            name=f"Persona Set (Iterative)",
+            description=f"Generated with RQE threshold {rqe_threshold}",
+            project_id=project_id,
+            generation_config=generation_config,
+            rqe_threshold=rqe_threshold,
+            max_iterations=max_iterations,
+            generation_cycle=1,
+            status="generating"
+        )
+        session.add(persona_set)
+        await session.flush()
+
+        # Iterative generation loop
+        while current_iteration < max_iterations:
+            current_iteration += 1
+            logger.info(f"Generation iteration {current_iteration}/{max_iterations}")
+
+            # Generate personas (with diversity hints if not first iteration)
+            persona_data_list = await IterativeGenerationService._generate_personas(
+                interview_texts=interview_texts,
+                context_texts=context_texts,
+                num_personas=num_personas,
+                context_details=context_details,
+                interview_topic=interview_topic,
+                user_study_design=user_study_design,
+                include_ethical_guardrails=include_ethical_guardrails,
+                output_format=output_format,
+                diversity_hints=diversity_hints,
+                stakeholder_groups=groups or None,
+            )
+
+            # Clear existing personas for this set (if iterating)
+            if current_iteration > 1:
+                # Query personas explicitly to avoid lazy loading issues
+                personas_result = await session.execute(
+                    select(Persona).where(Persona.persona_set_id == persona_set.id)
+                )
+                existing_personas = personas_result.scalars().all()
+                for persona in existing_personas:
+                    await session.delete(persona)
+                await session.flush()
+
+            # Create persona records
+            for idx, persona_data in enumerate(persona_data_list):
+                normalized_data = normalize_persona_to_nested(persona_data)
+                if groups:
+                    # Enforce stakeholder mapping by position if model omitted the field
+                    assigned = normalized_data.get("stakeholder_group") or (
+                        groups[idx] if idx < len(groups) else None
+                    )
+                    if assigned:
+                        normalized_data["stakeholder_group"] = assigned
+                persona = Persona(
+                    persona_set_id=persona_set.id,
+                    name=normalized_data.get("name", "Unknown"),
+                    persona_data=normalized_data
+                )
+                session.add(persona)
+
+            await session.flush()
+            # Avoid refresh() without attribute_names — it can expire relationships and
+            # invite async lazy-load (greenlet_spawn) errors later in the loop.
+
+            # Calculate RQE diversity score
+            rqe_metrics = await IterativeGenerationService._calculate_rqe(session, persona_set)
+            current_rqe = rqe_metrics["rqe_score"]
+
+            # Get persona count explicitly
+            personas_count_result = await session.execute(
+                select(Persona).where(Persona.persona_set_id == persona_set.id)
+            )
+            personas_count = len(list(personas_count_result.scalars().all()))
+            
+            # Record iteration
+            iteration_record = {
+                "iteration": current_iteration,
+                "rqe_score": current_rqe,
+                "threshold": rqe_threshold,
+                "threshold_met": current_rqe >= rqe_threshold,
+                "num_personas": personas_count,
+                "diversity_hints_used": diversity_hints is not None,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            iteration_history.append(iteration_record)
+
+            # Check if threshold is met
+            if current_rqe >= rqe_threshold:
+                threshold_met = True
+                logger.info(f"RQE threshold met! Score: {current_rqe:.3f} >= {rqe_threshold}")
+                break
+
+            # If not auto-iterating, stop after first generation
+            if not auto_iterate:
+                logger.info(f"Auto-iterate disabled. RQE: {current_rqe:.3f} (threshold: {rqe_threshold})")
+                break
+
+            # Generate diversity hints for next iteration
+            if current_iteration < max_iterations:
+                diversity_hints = await IterativeGenerationService._generate_diversity_hints(
+                    session,
+                    persona_set,
+                    rqe_metrics,
+                    stakeholder_groups=groups or None,
+                )
+                logger.info(f"Generated diversity hints for iteration {current_iteration + 1}")
+
+        # Update persona set with final metrics
+        persona_set.generation_cycle = current_iteration
+        persona_set.status = "generated"
+        persona_set.rqe_scores = [
+            {
+                "cycle": rec["iteration"],
+                "rqe_score": rec["rqe_score"],
+                "average_similarity": 1 - float(rec["rqe_score"]),
+                "timestamp": rec.get("timestamp"),
+                "threshold": rec.get("threshold"),
+                "threshold_met": rec.get("threshold_met"),
+            }
+            for rec in iteration_history
+        ]
+        # Do not touch persona_set.personas here — lazy load breaks in async sessions.
+        last_count = (
+            iteration_history[-1]["num_personas"] if iteration_history else num_personas
+        )
+        persona_set.diversity_score = {
+            "rqe_score": current_rqe,
+            "final_rqe": current_rqe,
+            "average_similarity": 1 - float(current_rqe) if current_rqe is not None else None,
+            "threshold": rqe_threshold,
+            "threshold_met": threshold_met,
+            "iterations_used": current_iteration,
+            "num_personas": last_count,
+        }
+
+        await session.flush()
+
+        # Reload persona_set with personas relationship eagerly loaded
+        # This is required for the endpoint to access persona_set.personas
+        result = await session.execute(
+            select(PersonaSet)
+            .where(PersonaSet.id == persona_set.id)
+            .options(selectinload(PersonaSet.personas))
+        )
+        persona_set = result.scalar_one()
+
+        # Build metrics response
+        metrics = {
+            "rqe_score": current_rqe,
+            "rqe_threshold": rqe_threshold,
+            "threshold_met": threshold_met,
+            "iterations_used": current_iteration,
+            "max_iterations": max_iterations,
+            "iteration_history": iteration_history,
+            "num_personas": len(persona_set.personas),
+        }
+
+        return persona_set, metrics
+
+    @staticmethod
+    async def _get_documents(
+        session: AsyncSession,
+        document_ids: Optional[List[int]] = None,
+        project_id: Optional[int] = None,
+        stakeholder_groups: Optional[List[str]] = None,
+    ) -> Tuple[List[str], List[str]]:
+        """Retrieve documents for persona generation using RAG."""
+        # Build query filter for documents
+        document_query = select(Document)
+
+        if document_ids:
+            document_query = document_query.where(Document.id.in_(document_ids))
+        elif project_id:
+            document_query = document_query.where(Document.project_id == project_id)
+
+        # Get interview documents
+        interview_query = document_query.where(Document.document_type == DocumentType.INTERVIEW)
+        interview_result = await session.execute(interview_query)
+        interviews = list(interview_result.scalars().all())
+
+        # Get context documents
+        context_query_db = select(Document)
+        if document_ids:
+            context_query_db = context_query_db.where(Document.id.in_(document_ids))
+        elif project_id:
+            context_query_db = context_query_db.where(Document.project_id == project_id)
+        context_query_db = context_query_db.where(Document.document_type == DocumentType.CONTEXT)
+        context_result = await session.execute(context_query_db)
+        contexts = list(context_result.scalars().all())
+
+        interview_texts = []
+        context_texts = []
+        groups = [g.strip() for g in (stakeholder_groups or []) if g and str(g).strip()]
+
+        async def _query_chunks(
+            document_type: str,
+            doc_ids: List[str],
+            default_query: str,
+            per_group_n: int = 8,
+            default_n: int = 15,
+        ) -> List[str]:
+            texts: List[str] = []
+            base_filter: Dict[str, Any] = {"document_type": document_type}
+            if len(doc_ids) == 1:
+                base_filter["document_id"] = doc_ids[0]
+            elif len(doc_ids) > 1:
+                base_filter["document_id"] = {"$in": doc_ids}
+
+            if groups:
+                for group in groups:
+                    # Prefer metadata.persona match (policy corpus), fall back to query text
+                    group_filter = {**base_filter, "persona": group}
+                    label = group.replace("_", " ")
+                    results = await vector_db.query_documents(
+                        query_texts=[
+                            f"{label} stakeholder needs behaviors constraints lived experience policy"
+                        ],
+                        n_results=per_group_n,
+                        filter_metadata=group_filter,
+                    )
+                    got = 0
+                    if results.get("documents"):
+                        for doc_list in results["documents"]:
+                            for t in doc_list:
+                                if t is not None:
+                                    texts.append(t if isinstance(t, str) else str(t))
+                                    got += 1
+                    if got == 0:
+                        # No persona-tagged vectors — broader retrieval mentioning the group
+                        results = await vector_db.query_documents(
+                            query_texts=[f"{label}: {default_query}"],
+                            n_results=per_group_n,
+                            filter_metadata=base_filter,
+                        )
+                        if results.get("documents"):
+                            for doc_list in results["documents"]:
+                                for t in doc_list:
+                                    if t is not None:
+                                        texts.append(t if isinstance(t, str) else str(t))
+            else:
+                results = await vector_db.query_documents(
+                    query_texts=[default_query],
+                    n_results=default_n,
+                    filter_metadata=base_filter,
+                )
+                if results.get("documents"):
+                    for doc_list in results["documents"]:
+                        for t in doc_list:
+                            if t is not None:
+                                texts.append(t if isinstance(t, str) else str(t))
+            return texts
+
+        if interviews:
+            interview_doc_ids = [str(doc.id) for doc in interviews]
+            interview_texts = await _query_chunks(
+                "interview",
+                interview_doc_ids,
+                "user interviews, user research, interview transcripts, user feedback, user needs, behaviors, patterns",
+            )
+            if not interview_texts:
+                interview_texts = [
+                    (c if isinstance(c, str) else str(c))
+                    for interview in interviews
+                    for c in [getattr(interview, "content", None)]
+                    if c is not None
+                ]
+
+        if contexts:
+            context_doc_ids = [str(doc.id) for doc in contexts]
+            context_texts = await _query_chunks(
+                "context",
+                context_doc_ids,
+                "research context, background information, market research, user behavior, demographics, domain knowledge",
+            )
+            if not context_texts:
+                context_texts = [
+                    (c if isinstance(c, str) else str(c))
+                    for context in contexts
+                    for c in [getattr(context, "content", None)]
+                    if c is not None
+                ]
+
+        logger.info(f"Retrieved {len(interview_texts)} interview chunks and {len(context_texts)} context chunks")
+        return interview_texts, context_texts
+
+    @staticmethod
+    async def _generate_personas(
+        interview_texts: List[str],
+        context_texts: List[str],
+        num_personas: int,
+        context_details: Optional[str],
+        interview_topic: Optional[str],
+        user_study_design: Optional[str],
+        include_ethical_guardrails: bool,
+        output_format: str,
+        diversity_hints: Optional[str] = None,
+        stakeholder_groups: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Generate personas using LLM with optional diversity hints."""
+        # Add diversity hints to context if provided
+        enhanced_context = context_details or ""
+        if diversity_hints:
+            enhanced_context = f"{enhanced_context}\n\nDIVERSITY REQUIREMENTS:\n{diversity_hints}"
+
+        has_interviews = len(interview_texts) > 0
+        has_context = len(context_texts) > 0
+
+        persona_set_data = await llm_service.generate_persona_set(
+            interview_documents=interview_texts if has_interviews else [],
+            context_documents=context_texts if has_context else [],
+            num_personas=num_personas,
+            context_details=enhanced_context if enhanced_context else None,
+            interview_topic=interview_topic,
+            user_study_design=user_study_design,
+            include_ethical_guardrails=include_ethical_guardrails,
+            output_format=output_format,
+            has_interviews=has_interviews,
+            has_context=has_context,
+            stakeholder_groups=stakeholder_groups,
+        )
+
+        # Extract personas from response
+        personas_data = persona_set_data.get("personas", [])
+        if not isinstance(personas_data, list):
+            personas_data = [personas_data] if personas_data else []
+
+        return [p for p in personas_data if isinstance(p, dict)]
+
+    @staticmethod
+    async def _calculate_rqe(session: AsyncSession, persona_set: PersonaSet) -> Dict[str, Any]:
+        """
+        Calculate RQE (Rao's Quadratic Entropy) for persona set diversity.
+
+        RQE measures the overall differentiation across all personas:
+        - 0 = identical personas
+        - 1 = maximally diverse
+
+        Per PEP paper:
+        - RQE >= 0.75 = good diversity
+        - RQE 0.60-0.74 = moderate diversity
+        - RQE < 0.60 = insufficient differentiation
+        """
+        try:
+            import numpy as np
+            from sklearn.metrics.pairwise import cosine_similarity
+        except ImportError:
+            logger.warning("scikit-learn not available. Using fallback RQE calculation.")
+            return {"rqe_score": 0.7, "method": "fallback"}
+
+        # Query personas explicitly to avoid lazy loading
+        personas_result = await session.execute(
+            select(Persona).where(Persona.persona_set_id == persona_set.id)
+        )
+        personas = list(personas_result.scalars().all())
+
+        if not personas or len(personas) < 2:
+            return {"rqe_score": 1.0, "num_personas": len(personas)}
+
+        # Create text representations of personas (supports nested persona_data)
+        persona_texts = [
+            IterativeGenerationService._persona_to_embedding_text(p) for p in personas
+        ]
+
+        # Generate embeddings
+        persona_embeddings = await llm_service.create_embeddings(persona_texts)
+        embeddings_array = np.array(persona_embeddings)
+
+        # Calculate pairwise cosine similarities
+        similarity_matrix = cosine_similarity(embeddings_array)
+
+        # RQE: 1 - average pairwise similarity (excluding self-similarity)
+        mask = ~np.eye(similarity_matrix.shape[0], dtype=bool)
+        pairwise_similarities = similarity_matrix[mask]
+
+        avg_similarity = float(np.mean(pairwise_similarities))
+        rqe_score = 1 - avg_similarity
+
+        # Additional metrics
+        min_similarity = float(np.min(pairwise_similarities))
+        max_similarity = float(np.max(pairwise_similarities))
+
+        return {
+            "rqe_score": rqe_score,
+            "average_similarity": avg_similarity,
+            "min_similarity": min_similarity,
+            "max_similarity": max_similarity,
+            "num_personas": len(personas),
+            "similarity_matrix": similarity_matrix.tolist()
+        }
+
+    @staticmethod
+    def _persona_to_embedding_text(persona: Persona) -> str:
+        """Flatten nested or flat persona_data into text for embedding / RQE."""
+        data = persona.persona_data or {}
+        dem = data.get("demographics") if isinstance(data.get("demographics"), dict) else {}
+
+        def as_text(value: Any) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, list):
+                return " ".join(str(v) for v in value if v is not None)
+            if isinstance(value, dict):
+                return " ".join(str(v) for v in value.values() if v is not None)
+            return str(value)
+
+        parts = [
+            persona.name,
+            as_text(data.get("tagline") or data.get("role")),
+            as_text(data.get("stakeholder_group")),
+            as_text(data.get("background") or data.get("basic_description") or data.get("detailed_description")),
+            as_text(data.get("goals")),
+            as_text(data.get("frustrations")),
+            as_text(data.get("motivations")),
+            as_text(data.get("behaviors")),
+            as_text(data.get("quote") or data.get("quotes")),
+            as_text(dem.get("occupation") or data.get("occupation")),
+            as_text(dem.get("location") or data.get("location")),
+            as_text(dem.get("age") or data.get("age")),
+            as_text(dem.get("education") or data.get("education")),
+            as_text(data.get("technology_profile")),
+            as_text(data.get("other_information")),
+        ]
+        return " ".join(p for p in parts if p).strip() or persona.name or "persona"
+
+    @staticmethod
+    async def _generate_diversity_hints(
+        session: AsyncSession,
+        persona_set: PersonaSet,
+        rqe_metrics: Dict[str, Any],
+        stakeholder_groups: Optional[List[str]] = None,
+    ) -> str:
+        """
+        Generate diversity hints based on similarity analysis.
+
+        Analyzes which personas are too similar and generates specific
+        guidance for the next iteration to increase differentiation.
+        """
+        try:
+            import numpy as np
+        except ImportError:
+            return "Please ensure personas are distinctly different from each other in demographics, goals, and behaviors."
+
+        similarity_matrix = rqe_metrics.get("similarity_matrix")
+        if similarity_matrix is None:
+            return "Ensure each persona has unique demographics, distinct goals, and different behavioral patterns."
+
+        # Query personas explicitly to avoid lazy loading
+        personas_result = await session.execute(
+            select(Persona).where(Persona.persona_set_id == persona_set.id)
+        )
+        personas = list(personas_result.scalars().all())
+
+        similarity_matrix = np.array(similarity_matrix)
+        n_personas = len(personas)
+
+        # Find most similar pairs
+        similar_pairs = []
+        for i in range(n_personas):
+            for j in range(i + 1, n_personas):
+                if similarity_matrix[i][j] > 0.7:  # High similarity threshold
+                    similar_pairs.append({
+                        "persona1": personas[i].name,
+                        "persona2": personas[j].name,
+                        "similarity": float(similarity_matrix[i][j])
+                    })
+
+        # Sort by similarity (most similar first)
+        similar_pairs.sort(key=lambda x: x["similarity"], reverse=True)
+
+        # Generate hints
+        hints = []
+        hints.append("IMPORTANT: The following personas are too similar and need more differentiation:")
+
+        for pair in similar_pairs[:3]:  # Top 3 most similar pairs
+            hints.append(f"- {pair['persona1']} and {pair['persona2']} are {pair['similarity']:.0%} similar")
+
+        if stakeholder_groups:
+            hints.append(
+                "\nKeep exactly one persona per stakeholder group "
+                f"({', '.join(stakeholder_groups)}). Do not merge or swap groups."
+            )
+            hints.append("Increase differentiation across groups by:")
+            hints.append("1. Contrasting lived experience, power, and incentives between groups")
+            hints.append("2. Giving each role distinct goals, constraints, and success metrics")
+            hints.append("3. Using different language, priorities, and risk tolerance per stakeholder")
+            hints.append("4. Anchoring each persona in evidence unique to their group")
+            hints.append("5. Avoiding shared boilerplate biography across roles")
+            hints.append(
+                "6. Keeping goals/frustrations consistent with each persona's stated "
+                "location and role scope (do not transplant distant regional facts "
+                "into local lived concerns)"
+            )
+        else:
+            hints.append("\nTo increase diversity, please:")
+            hints.append("1. Vary demographics more (age ranges, locations, occupations)")
+            hints.append("2. Create contrasting goals and motivations")
+            hints.append("3. Differentiate technology comfort levels and behaviors")
+            hints.append("4. Include personas with opposing frustrations or pain points")
+            hints.append("5. Vary educational backgrounds and experience levels")
+            hints.append(
+                "6. Keep each persona's concerns consistent with their own location "
+                "and role scope when differentiating them"
+            )
+
+        return "\n".join(hints)
+
+
+# Global service instance
+iterative_generation_service = IterativeGenerationService()

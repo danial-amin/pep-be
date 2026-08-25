@@ -1,10 +1,18 @@
 """
 Persona generation and management endpoints.
+
+Implements the PEP paper methodology:
+- Iterative generation with RQE threshold
+- Cohere reranking for improved retrieval
+- Source traceability and validation
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query, Body
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from sqlalchemy import select
+from typing import List, Optional
 from pathlib import Path
+import base64
 
 from app.core.database import get_db
 from app.schemas.persona import (
@@ -14,12 +22,57 @@ from app.schemas.persona import (
     PersonaExpandResponse,
     PersonaImageResponse,
     PersonaResponse,
-    PersonaBasic
+    PersonaBasic,
+    VerificationRequest,
+    PersonaVerificationResponse,
+    PersonaSetVerificationResponse,
+    VerifiedPersonaResponse,
+    EvaluationRequest,
+    PersonaEvaluationResponse,
 )
 from app.services.persona_service import PersonaService
 from app.services.analytics_service import AnalyticsService
+from app.services.iterative_generation_service import iterative_generation_service
+from app.services.persona_verification_service import persona_verification_service
+from app.services.persona_evaluation_service import persona_evaluation_service
 
 router = APIRouter()
+# Loaded via <img src> — cannot send Bearer tokens; mounted without auth in router.py
+public_router = APIRouter()
+
+
+def _persona_data_to_basic(name: str, persona_data: dict) -> PersonaBasic:
+    """Flatten nested persona_data into PersonaBasic (demographics → top-level, background → basic_description)."""
+    if not persona_data or not isinstance(persona_data, dict):
+        return PersonaBasic(name=name or "Unknown")
+    dem = persona_data.get("demographics") or {}
+    if not isinstance(dem, dict):
+        dem = {}
+    # Location can be dict {city, country} in nested format
+    loc = dem.get("location")
+    if isinstance(loc, dict):
+        loc = ", ".join(filter(None, [loc.get("city"), loc.get("country")])) or str(loc)
+    goals = persona_data.get("goals") or []
+    frustrations = persona_data.get("frustrations") or []
+    if isinstance(goals, str):
+        goals = [goals] if goals else []
+    if isinstance(frustrations, str):
+        frustrations = [frustrations] if frustrations else []
+    key_characteristics = list(goals)[:5] + list(frustrations)[:3] if (goals or frustrations) else None
+    return PersonaBasic(
+        name=persona_data.get("name") or name,
+        age=persona_data.get("age") or dem.get("age"),
+        gender=persona_data.get("gender") or dem.get("gender"),
+        location=persona_data.get("location") or loc,
+        occupation=persona_data.get("occupation") or dem.get("occupation"),
+        basic_description=(
+            persona_data.get("basic_description")
+            or persona_data.get("background")
+            or persona_data.get("detailed_description")
+            or ""
+        ),
+        key_characteristics=persona_data.get("key_characteristics") or key_characteristics,
+    )
 
 
 @router.post("/generate-set", response_model=PersonaSetGenerateResponse, status_code=status.HTTP_201_CREATED)
@@ -28,42 +81,65 @@ async def generate_persona_set(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Step 1: Generate initial persona set with basic demographics.
-    
-    Creates a persona set based on processed interview documents.
-    Returns basic personas with demographics.
+    Generate persona set with iterative refinement (PEP paper methodology).
+
+    This endpoint implements the full PEP paper generation pipeline:
+    1. Generate initial persona set using RAG with Cohere reranking
+    2. Calculate RQE (Rao's Quadratic Entropy) diversity score
+    3. If RQE < threshold and auto_iterate=True, regenerate with diversity hints
+    4. Iterate until RQE threshold is met or max_iterations reached
+    5. Return personas with comprehensive metrics
+
+    The response includes:
+    - Generated personas with demographics
+    - RQE score and threshold status
+    - Iteration history showing diversity improvement
     """
     try:
-        persona_set = await PersonaService.generate_persona_set(
+        # Use iterative generation service (PEP paper methodology)
+        persona_set, metrics = await iterative_generation_service.generate_persona_set_iterative(
             session=db,
             num_personas=request.num_personas,
+            rqe_threshold=request.rqe_threshold,
+            max_iterations=request.max_iterations,
+            auto_iterate=request.auto_iterate,
+            cs_threshold=request.cs_threshold,
             context_details=request.context_details,
             interview_topic=request.interview_topic,
             user_study_design=request.user_study_design,
             include_ethical_guardrails=request.include_ethical_guardrails,
             output_format=request.output_format.value,
             document_ids=request.document_ids,
-            project_id=request.project_id
+            project_id=request.project_id,
+            stakeholder_groups=request.stakeholder_groups,
         )
-        
-        # Convert to response format
-        personas_basic = [
-            PersonaBasic(**persona.persona_data)
-            for persona in persona_set.personas
-        ]
-        
+
+        # Convert to response format: flatten nested persona_data for PersonaBasic
+        personas_basic = []
+        for persona in persona_set.personas:
+            personas_basic.append(_persona_data_to_basic(persona.name, persona.persona_data))
+
         return PersonaSetGenerateResponse(
             persona_set_id=persona_set.id,
             personas=personas_basic,
-            status="created"
+            status="created",
+            generation_cycle=metrics["iterations_used"],
+            rqe_score=metrics["rqe_score"],
+            rqe_threshold=metrics["rqe_threshold"],
+            threshold_met=metrics["threshold_met"],
+            iterations_used=metrics["iterations_used"],
+            iteration_history=metrics["iteration_history"]
         )
-    
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating persona set: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating persona set: {str(e)}"
@@ -236,20 +312,32 @@ async def save_persona_set(
 
 @router.get("/sets", response_model=List[PersonaSetResponse])
 async def get_all_persona_sets(
+    project_id: Optional[int] = Query(None, description="If set, return only persona sets affiliated with this project"),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get all saved persona sets.
+    Get saved persona sets.
     
-    Returns all persona sets in the database, including:
+    When project_id is provided, returns only persona sets affiliated to that project.
+    When project_id is omitted, returns all persona sets (global list).
+    
+    Returns:
     - Generated persona sets
     - Loaded default persona sets (from JSON files)
     - Each set appears as a separate, distinct entry with its own ID, name, and personas
     """
-    persona_sets = await PersonaService.get_all_persona_sets(db)
-    # Sort by created_at (newest first) so recently loaded sets appear first
-    persona_sets.sort(key=lambda x: x.created_at if x.created_at else x.id, reverse=True)
-    return [PersonaSetResponse.model_validate(ps) for ps in persona_sets]
+    try:
+        persona_sets = await PersonaService.get_all_persona_sets(db, project_id=project_id)
+        # Sort by created_at (newest first) so recently loaded sets appear first
+        persona_sets.sort(key=lambda x: x.created_at if x.created_at else x.id, reverse=True)
+        return [PersonaSetResponse.model_validate(ps) for ps in persona_sets]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading persona sets: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error loading persona sets: {str(e)}",
+        )
 
 
 @router.get("/sets/{persona_set_id}", response_model=PersonaSetResponse)
@@ -288,6 +376,42 @@ async def get_persona(
         )
     
     return PersonaResponse.model_validate(persona)
+
+
+@public_router.get("/persona/{persona_id}/image")
+async def get_persona_image(
+    persona_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Return persona image as PNG. Uses file from static dir if present, otherwise
+    returns image from DB image_data (base64) so images are retained without filesystem.
+
+    Public on purpose: browsers load this URL in <img> tags without Authorization headers.
+    """
+    from app.models.persona import Persona
+    from app.utils.image_utils import get_image_path
+
+    result = await db.execute(select(Persona).where(Persona.id == persona_id))
+    persona = result.scalar_one_or_none()
+    if not persona:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Persona not found")
+
+    # Prefer file on disk (fast)
+    filepath = get_image_path(persona_id)
+    if filepath.exists():
+        with open(filepath, "rb") as f:
+            return Response(content=f.read(), media_type="image/png")
+
+    # Fallback to base64 stored in DB
+    if persona.image_data:
+        try:
+            data = base64.b64decode(persona.image_data)
+            return Response(content=data, media_type="image/png")
+        except Exception:
+            pass
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No image for this persona")
 
 
 @router.post("/load-default-personas", response_model=PersonaSetResponse)
@@ -394,13 +518,16 @@ async def load_default_personas(
                         db.add(persona_set)
                         await db.flush()
                     
-                    # Create personas
+                    # Create personas (preserve image_url and image_data from export/API-style JSON)
                     for persona_data in personas_data:
                         db_persona_data = convert_persona_to_db_format(persona_data)
+                        raw = persona_data if isinstance(persona_data, dict) else {}
                         persona = Persona(
                             persona_set_id=persona_set.id,
                             name=db_persona_data["name"],
-                            persona_data=db_persona_data
+                            persona_data=db_persona_data,
+                            image_url=raw.get("image_url"),
+                            image_data=raw.get("image_data"),
                         )
                         db.add(persona)
                     
@@ -508,13 +635,16 @@ async def load_default_personas(
             db.add(persona_set)
             await db.flush()
         
-        # Create personas
+        # Create personas (preserve image_url and image_data from export/API-style JSON)
         for persona_data in personas_data:
             db_persona_data = convert_persona_to_db_format(persona_data)
+            raw = persona_data if isinstance(persona_data, dict) else {}
             persona = Persona(
                 persona_set_id=persona_set.id,
                 name=db_persona_data["name"],
-                persona_data=db_persona_data
+                persona_data=db_persona_data,
+                image_url=raw.get("image_url"),
+                image_data=raw.get("image_data"),
             )
             db.add(persona)
         
@@ -567,9 +697,10 @@ async def measure_diversity(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Step 2: Measure diversity of the persona set using RQE (Representation Quality Evaluation).
-    
-    Calculates how diverse the personas are and stores RQE scores.
+    Measure (or re-measure) persona-set diversity using RQE.
+
+    Can be run any time after a set has at least 2 personas. Updates
+    diversity_score and appends an entry to rqe_scores history.
     """
     try:
         metrics = await AnalyticsService.calculate_diversity(db, persona_set_id)
@@ -593,15 +724,16 @@ async def measure_diversity(
 @router.post("/{persona_set_id}/validate")
 async def validate_personas(
     persona_set_id: int,
+    force: bool = Query(default=False, description="Force re-run validation even if cached results exist"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Step 4: Validate personas against actual interview transcripts.
-    
+
     Calculates cosine similarity between personas and real interview data.
     """
     try:
-        validation = await AnalyticsService.validate_personas(db, persona_set_id)
+        validation = await AnalyticsService.validate_personas(db, persona_set_id, force=force)
         return validation
     except ValueError as e:
         raise HTTPException(
@@ -612,6 +744,99 @@ async def validate_personas(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error validating personas: {str(e)}"
+        )
+
+
+@router.post("/{persona_set_id}/validate-attributes")
+async def validate_persona_attributes(
+    persona_set_id: int,
+    cs_threshold: float = Query(default=0.8, ge=0.0, le=1.0, description="Cosine similarity threshold (default 0.8 per PEP paper)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Validate persona attributes at the individual attribute level (PEP paper methodology).
+
+    This endpoint implements the reverse RAG validation from the PEP paper:
+    - Each persona attribute (goals, frustrations, behaviors, etc.) is validated
+    - Attributes with CS >= threshold are considered validated
+    - Attributes with CS < threshold are flagged for expert review
+
+    Per the paper:
+    - CS >= 0.8 = corroborated support from transcript data
+    - CS < 0.8 = flagged for expert review or removal
+
+    Returns validation results with:
+    - Per-attribute similarity scores
+    - Flagged attributes that need review
+    - Source traceability (which chunks support each attribute)
+    """
+    try:
+        validation = await AnalyticsService.validate_persona_set_attributes(
+            db, persona_set_id, cs_threshold
+        )
+        return validation
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error validating persona attributes: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error validating persona attributes: {str(e)}"
+        )
+
+
+@router.post("/{persona_set_id}/evaluate", response_model=PersonaEvaluationResponse)
+async def evaluate_persona_set(
+    persona_set_id: int,
+    request: EvaluationRequest = Body(default_factory=EvaluationRequest),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Run comprehensive evaluation on a persona set (beyond cosine similarity).
+
+    Evaluates:
+    - Groundedness: Claim extraction + entailment check against source
+    - Coverage: Topic overlap between personas and source
+    - Diversity: Demographic and attitudinal spread
+    - Coherence: Internal consistency (goals vs frustrations, etc.)
+    - Realism: Plausibility as real person
+    - Fairness: Stereotype detection
+    """
+    try:
+        report = await persona_evaluation_service.evaluate_persona_set(
+            session=db,
+            persona_set_id=persona_set_id,
+            include_groundedness=request.include_groundedness,
+            include_coverage=request.include_coverage,
+            include_diversity_extended=request.include_diversity_extended,
+            include_coherence=request.include_coherence,
+            include_realism=request.include_realism,
+            include_fairness=request.include_fairness,
+            force=request.force,
+        )
+        return PersonaEvaluationResponse(
+            persona_set_id=report["persona_set_id"],
+            evaluation_timestamp=report["evaluation_timestamp"],
+            summary=report["summary"],
+            per_persona=report["per_persona"],
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error evaluating persona set: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error evaluating persona set: {str(e)}"
         )
 
 
@@ -670,12 +895,12 @@ async def migrate_personas_to_nested(
 ):
     """
     Migrate all personas in the database to the standard nested structure.
-    
+
     This endpoint normalizes all existing personas to use the nested structure
     with a demographics object and arrays for goals/frustrations.
     """
     from app.utils.migrate_personas_to_nested import migrate_all_personas_to_nested
-    
+
     try:
         migrated_count = await migrate_all_personas_to_nested()
         return {
@@ -689,5 +914,178 @@ async def migrate_personas_to_nested(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error migrating personas: {str(e)}"
+        )
+
+
+# ============================================================================
+# Verification Endpoints - Semantic Similarity Verification
+# ============================================================================
+
+@router.post("/persona/{persona_id}/verify", response_model=PersonaVerificationResponse)
+async def verify_persona_similarity(
+    persona_id: int,
+    request: VerificationRequest = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Verify a persona's attributes against source data using semantic similarity.
+
+    This endpoint implements reverse querying of the vector database:
+    1. Each persona attribute is embedded and compared against source chunks
+    2. Direct similarity measures exact semantic match
+    3. Indirect similarity finds relationships through intermediate concepts
+    4. Attributes with combined similarity >= threshold (default 80%) are retained
+    5. Low-similarity attributes can be filtered out
+
+    The verification process:
+    - Queries the vector DB with each persona attribute text
+    - Calculates direct cosine similarity with returned chunks
+    - If direct similarity is below threshold, calculates indirect similarity
+    - Combines scores with weighted approach (70% direct, 30% indirect)
+    - Returns filtered persona data with only verified attributes
+
+    Args:
+        persona_id: ID of the persona to verify
+        request: Verification parameters (threshold, use_indirect, filter)
+
+    Returns:
+        Verification results with original and filtered persona data
+    """
+    if request is None:
+        request = VerificationRequest()
+
+    try:
+        result = await persona_verification_service.verify_persona_similarity(
+            session=db,
+            persona_id=persona_id,
+            similarity_threshold=request.similarity_threshold,
+            use_indirect_similarity=request.use_indirect_similarity,
+            filter_low_similarity=request.filter_low_similarity,
+            project_id=request.project_id,
+            force=request.force
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error verifying persona: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verifying persona: {str(e)}"
+        )
+
+
+@router.post("/{persona_set_id}/verify", response_model=PersonaSetVerificationResponse)
+async def verify_persona_set_similarity(
+    persona_set_id: int,
+    request: VerificationRequest = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Verify all personas in a set against source data using semantic similarity.
+
+    This endpoint verifies each persona in the set and returns aggregate metrics:
+    - Per-persona verification results
+    - Overall verification rate across the set
+    - Average similarity scores
+    - Count of fully vs partially verified personas
+
+    The verification uses the same methodology as single persona verification:
+    - Direct similarity from reverse RAG queries
+    - Indirect similarity through intermediate concepts
+    - 80% threshold by default for retaining attributes
+
+    Args:
+        persona_set_id: ID of the persona set to verify
+        request: Verification parameters
+
+    Returns:
+        Verification results for all personas with aggregate metrics
+    """
+    if request is None:
+        request = VerificationRequest()
+
+    try:
+        result = await persona_verification_service.verify_persona_set(
+            session=db,
+            persona_set_id=persona_set_id,
+            similarity_threshold=request.similarity_threshold,
+            use_indirect_similarity=request.use_indirect_similarity,
+            filter_low_similarity=request.filter_low_similarity,
+            project_id=request.project_id,
+            force=request.force
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error verifying persona set: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verifying persona set: {str(e)}"
+        )
+
+
+@router.get("/persona/{persona_id}/verified", response_model=VerifiedPersonaResponse)
+async def get_verified_persona(
+    persona_id: int,
+    similarity_threshold: float = Query(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity threshold (default 80%)"
+    ),
+    project_id: Optional[int] = Query(default=None, description="Optional project ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get a verified persona with only high-similarity attributes retained.
+
+    This endpoint returns the persona data with low-similarity items filtered out.
+    Use this when you need production-ready persona data that has been validated
+    against the source documents.
+
+    The returned persona contains only attributes that:
+    - Have direct or indirect similarity >= threshold with source data
+    - Are supported by evidence from the vector database
+
+    Args:
+        persona_id: ID of the persona to get
+        similarity_threshold: Minimum similarity for inclusion (default 80%)
+        project_id: Optional project ID for scoping
+
+    Returns:
+        Verified persona data with source references
+    """
+    try:
+        result = await persona_verification_service.get_verified_persona(
+            session=db,
+            persona_id=persona_id,
+            similarity_threshold=similarity_threshold,
+            project_id=project_id
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting verified persona: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting verified persona: {str(e)}"
         )
 

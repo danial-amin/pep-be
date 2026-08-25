@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, FileJson, Bot, LayoutGrid } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
+import { usePersonaViewTimer } from '../hooks/usePersonaViewTimer';
 import html2canvas from 'html2canvas';
 
 export default function PersonaDetailPage() {
@@ -16,6 +17,18 @@ export default function PersonaDetailPage() {
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
   const [downloadingProfile, setDownloadingProfile] = useState(false);
   const profileCardRef = useRef<HTMLDivElement>(null);
+
+  const currentPersonaId =
+    !loading && personaSet?.personas?.[currentIndex]
+      ? personaSet.personas[currentIndex].id
+      : null;
+
+  usePersonaViewTimer({
+    personaSetId: personaSet?.id ?? (setId ? parseInt(setId, 10) : null),
+    personaId: currentPersonaId,
+    viewType: 'persona',
+    enabled: !!currentPersonaId,
+  });
 
   useEffect(() => {
     loadPersonaSet();
@@ -97,15 +110,39 @@ export default function PersonaDetailPage() {
     }
   };
 
-  const handleDownload = () => {
+  const sanitizeFilename = (name: string) =>
+    name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'persona';
+
+  const handleDownloadFullSetJson = async () => {
     if (!personaSet) return;
-    const dataStr = JSON.stringify(personaSet.personas, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    const exportFileDefaultName = `personas_set_${personaSet.id}.json`;
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
+    try {
+      const blob = await personasApi.downloadJson(personaSet.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `persona_set_${personaSet.id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error: any) {
+      alert(`Failed to download: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
+  const handleDownloadCurrentPersonaJson = () => {
+    if (!personaSet) return;
+    const p = personaSet.personas[currentIndex];
+    const blob = new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const label = sanitizeFilename(p.persona_data?.name || p.name || `persona_${p.id}`);
+    a.download = `${label}_${p.id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
   const preloadImages = (element: HTMLElement): Promise<void> => {
@@ -150,38 +187,67 @@ export default function PersonaDetailPage() {
 
   const handleDownloadProfileImage = async () => {
     if (!profileCardRef.current || downloadingProfile) return;
-    
+
     const currentPersona = personaSet?.personas[currentIndex];
     if (!currentPersona) return;
-    
+
+    const sourceEl = profileCardRef.current;
+
     setDownloadingProfile(true);
     try {
-      // Preload all images in the profile card
-      await preloadImages(profileCardRef.current);
-      
-      // Wait a bit more to ensure rendering is complete
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Capture the profile card with improved settings
-      const canvas = await html2canvas(profileCardRef.current, {
-        backgroundColor: '#667eea', // Match the gradient background start color
-        scale: 3, // Higher quality for better image rendering
-        useCORS: true, // Allow cross-origin images
-        allowTaint: true, // Allow tainted canvas for better image rendering
-        logging: false,
-        width: profileCardRef.current.scrollWidth,
-        height: profileCardRef.current.scrollHeight,
-        windowWidth: profileCardRef.current.scrollWidth,
-        windowHeight: profileCardRef.current.scrollHeight,
-        // Better image rendering
-        imageTimeout: 15000, // Wait up to 15 seconds for images
-        removeContainer: false,
-        // Capture all CSS including gradients
-        foreignObjectRendering: false, // Disable for better compatibility
-        // Capture scrollable content
-        scrollX: 0,
-        scrollY: 0,
-      } as any); // Type assertion needed for some html2canvas options
+      await preloadImages(sourceEl);
+      sourceEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // html2canvas can return a blank/grey capture for glassmorphism/backdrop-filter elements.
+      // We therefore capture a cloned copy in a temporary wrapper with the *same page background*,
+      // but we DO NOT restyle the card itself (so it still matches how it's displayed).
+      const captureWidthPx = Math.max(320, Math.ceil(sourceEl.getBoundingClientRect().width));
+      const pageBg =
+        (typeof window !== 'undefined'
+          ? window.getComputedStyle(document.body).backgroundColor
+          : '') || '#f8f7f4';
+
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-10000px';
+      wrapper.style.top = '0';
+      wrapper.style.padding = '24px';
+      wrapper.style.width = `${captureWidthPx + 48}px`;
+      wrapper.style.background = pageBg;
+      wrapper.style.boxSizing = 'border-box';
+
+      const clone = sourceEl.cloneNode(true) as HTMLElement;
+      clone.style.width = `${captureWidthPx}px`;
+      clone.style.maxWidth = 'none';
+      clone.style.boxSizing = 'border-box';
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await html2canvas(wrapper, {
+          backgroundColor: pageBg,
+          scale: Math.min(3, Math.max(2, window.devicePixelRatio || 2)),
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          imageTimeout: 20000,
+          removeContainer: true,
+          foreignObjectRendering: false,
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (_doc: Document, clonedDoc: Document) => {
+            clonedDoc.querySelectorAll('.persona-export-hide').forEach((el: Element) => {
+              (el as HTMLElement).style.display = 'none';
+            });
+          },
+        } as any);
+      } finally {
+        if (wrapper.parentNode) {
+          wrapper.parentNode.removeChild(wrapper);
+        }
+      }
       
       // Convert to blob and download
       canvas.toBlob((blob) => {
@@ -194,7 +260,9 @@ export default function PersonaDetailPage() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        const personaName = currentPersona.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const personaName = sanitizeFilename(
+          currentPersona.persona_data?.name || currentPersona.name || `persona_${currentPersona.id}`
+        );
         link.download = `${personaName}_profile.png`;
         document.body.appendChild(link);
         link.click();
@@ -211,7 +279,7 @@ export default function PersonaDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white/80">Loading persona details...</div>
+        <div className="text-stone-600">Loading persona details...</div>
       </div>
     );
   }
@@ -219,13 +287,36 @@ export default function PersonaDetailPage() {
   if (!personaSet || personaSet.personas.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white/80">No personas found</div>
+        <div className="text-stone-600">No personas found</div>
       </div>
     );
   }
 
   const currentPersona = personaSet.personas[currentIndex];
   const personaData = currentPersona.persona_data || {};
+
+  // Helper function to safely convert any value to string for rendering
+  const safeString = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) {
+      return value.map(item => safeString(item)).join(', ');
+    }
+    if (typeof value === 'object') {
+      // Try to extract meaningful text fields first
+      if ('text' in value && typeof value.text === 'string') return value.text;
+      if ('description' in value && typeof value.description === 'string') return value.description;
+      if ('content' in value && typeof value.content === 'string') return value.content;
+      // Otherwise stringify
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value);
+  };
 
   // Helper function to get field value from nested structure
   const getField = (fieldName: string, fallback?: string) => {
@@ -247,28 +338,39 @@ export default function PersonaDetailPage() {
       <div className="mb-6">
         <div className="flex items-center space-x-2 mb-3">
           {icon}
-          <h5 className="text-sm font-semibold text-white uppercase tracking-wide">{title}</h5>
+          <h5 className="text-sm font-semibold text-stone-900 uppercase tracking-wide">{title}</h5>
         </div>
         <div className="ml-7 space-y-2">
           {isArray && Array.isArray(data) ? (
-            <ul className="list-disc list-inside space-y-1 text-sm text-white/90">
+            <ul className="list-disc list-inside space-y-1 text-sm text-stone-700">
               {data.map((item: any, idx: number) => (
                 <li key={idx}>{typeof item === 'string' ? item : JSON.stringify(item)}</li>
               ))}
             </ul>
-          ) : typeof data === 'object' && data !== null ? (
+          ) : typeof data === 'object' && data !== null && !Array.isArray(data) ? (
             <div className="space-y-2">
               {Object.entries(data).map(([key, value]) => (
-                <div key={key} className="flex">
-                  <span className="text-white/70 font-medium min-w-[120px] capitalize">{key.replace(/_/g, ' ')}:</span>
-                  <span className="text-white/90 flex-1">
-                    {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                <div key={key} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                  <span className="shrink-0 font-medium capitalize text-stone-500 sm:min-w-[8.5rem]">
+                    {key.replace(/_/g, ' ')}:
+                  </span>
+                  <span className="min-w-0 flex-1 break-words text-stone-700">
+                    {(() => {
+                      if (value === null || value === undefined) return String(value || '');
+                      if (typeof value === 'object') {
+                        if (Array.isArray(value)) {
+                          return value.map(String).join(', ');
+                        }
+                        return JSON.stringify(value, null, 2);
+                      }
+                      return String(value);
+                    })()}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-white/90">{String(data)}</p>
+            <p className="text-sm text-stone-700">{String(data)}</p>
           )}
         </div>
       </div>
@@ -278,49 +380,81 @@ export default function PersonaDetailPage() {
   return (
     <div className="min-h-screen px-4 py-6">
       {/* Header with Navigation */}
-      <div className="glass-card rounded-2xl p-4 mb-6 pastel-purple">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+      <div className="glass-card rounded-2xl p-4 mb-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <button
+              type="button"
               onClick={() => navigate('/personas')}
-              className="p-2 rounded-lg hover:bg-white/20 transition-colors"
+              className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-stone-100"
             >
-              <X className="h-5 w-5 text-white" />
+              <X className="h-5 w-5 text-stone-900" />
             </button>
-            <div>
-              <h1 className="text-xl font-bold text-white">{personaSet.name}</h1>
-              <p className="text-sm text-white/70">
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold text-stone-900 sm:text-xl">{personaSet.name}</h1>
+              <p className="text-sm text-stone-500">
                 Persona {currentIndex + 1} of {personaSet.personas.length}
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-stretch justify-start gap-2 sm:justify-end">
             <button
-              onClick={handleDownloadProfileImage}
-              disabled={downloadingProfile}
-              className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              onClick={() => navigate(`/personas/${setId}/profiles`)}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-sm text-stone-900 transition-colors hover:bg-stone-200 sm:flex-initial sm:px-4"
             >
-              <ImageIcon className="h-4 w-4" />
-              <span>{downloadingProfile ? 'Generating...' : 'Download Profile Image'}</span>
+              <LayoutGrid className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">All profiles</span>
             </button>
             <button
-              onClick={handleDownload}
-              className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors flex items-center space-x-2"
+              type="button"
+              onClick={() => {
+                const projectQuery = personaSet.project_id ? `?project=${personaSet.project_id}` : '';
+                navigate(`/persona-chat/${currentPersona.id}${projectQuery}`);
+              }}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-900 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-stone-800 sm:flex-initial sm:px-4"
             >
-              <Download className="h-4 w-4" />
-              <span>Download JSON</span>
+              <Bot className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">Chat with persona</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadProfileImage}
+              disabled={downloadingProfile}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-left text-sm text-stone-900 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-initial sm:px-4"
+            >
+              <ImageIcon className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">
+                {downloadingProfile ? 'Saving…' : 'Download profile as image'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadCurrentPersonaJson}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-sm text-stone-900 transition-colors hover:bg-stone-100 sm:flex-initial sm:px-4"
+            >
+              <FileJson className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">This persona (JSON)</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadFullSetJson}
+              className="inline-flex flex-1 basis-full items-center justify-center gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-sm text-stone-900 transition-colors hover:bg-stone-100 sm:basis-auto sm:flex-initial sm:px-4"
+            >
+              <Download className="h-4 w-4 flex-shrink-0" />
+              <span className="leading-snug">Full set (JSON)</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Persona Navigation */}
-      <div className="glass-card rounded-2xl p-4 mb-6 pastel-blue">
+      <div className="glass-card rounded-2xl p-4 mb-6">
         <div className="flex items-center justify-between">
           <button
             onClick={handlePrevious}
             disabled={currentIndex === 0}
-            className="flex items-center space-x-2 px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronLeft className="h-5 w-5" />
             <span>Previous</span>
@@ -338,19 +472,19 @@ export default function PersonaDetailPage() {
                 className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
                   index === currentIndex
                     ? 'border-white scale-110'
-                    : 'border-white/30 hover:border-white/50'
+                    : 'border-stone-200 hover:border-stone-300'
                 }`}
               >
-                {persona.image_url && !imageErrors.has(persona.id) ? (
+                {(persona.image_url || persona.id) && !imageErrors.has(persona.id) ? (
                   <img
-                    src={getPersonaImageUrl(persona.image_url) || ''}
+                    src={getPersonaImageUrl(persona.image_url, persona.id) || ''}
                     alt={persona.name}
                     className="w-full h-full object-cover"
                     onError={() => setImageErrors(prev => new Set(prev).add(persona.id))}
                   />
                 ) : (
-                  <div className="w-full h-full bg-white/10 flex items-center justify-center">
-                    <span className="text-white/40 text-lg font-bold">
+                  <div className="w-full h-full bg-stone-50 flex items-center justify-center">
+                    <span className="text-stone-300 text-lg font-bold">
                       {(persona.persona_data?.name || persona.name).charAt(0).toUpperCase()}
                     </span>
                   </div>
@@ -362,7 +496,7 @@ export default function PersonaDetailPage() {
           <button
             onClick={handleNext}
             disabled={currentIndex === personaSet.personas.length - 1}
-            className="flex items-center space-x-2 px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-stone-100 text-stone-900 rounded-lg hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <span>Next</span>
             <ChevronRight className="h-5 w-5" />
@@ -371,141 +505,185 @@ export default function PersonaDetailPage() {
       </div>
 
       {/* Expanded Persona Card */}
-      <div ref={profileCardRef} className="glass-card rounded-2xl p-6 border border-white/20 pastel-blue max-w-7xl mx-auto">
-        {/* Header with Image, Demographics, Quote and Overview */}
-        <div className="flex gap-6 mb-4 pb-4 border-b border-white/20">
-          {/* Left: Image and Demographics */}
-          <div className="flex gap-4">
+      <div
+        ref={profileCardRef}
+        data-persona-profile-card="true"
+        className="glass-card rounded-2xl p-6 border border-stone-200 max-w-7xl mx-auto"
+      >
+        {/* Header: identity, then full-width quote/overview */}
+        <div className="mb-4 space-y-4 border-b border-stone-200 pb-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             {/* Persona Image */}
             <div className="flex-shrink-0">
-              {currentPersona.image_url && !imageErrors.has(currentPersona.id) ? (
+              {(currentPersona.image_url || currentPersona.id) && !imageErrors.has(currentPersona.id) ? (
                 <img
-                  src={getPersonaImageUrl(currentPersona.image_url) || ''}
+                  src={getPersonaImageUrl(currentPersona.image_url, currentPersona.id) || ''}
                   alt={currentPersona.name}
-                  className="w-32 h-32 object-cover rounded-xl border-4 border-white/30 shadow-lg"
+                  className="w-32 h-32 object-cover rounded-xl border-4 border-stone-200 shadow-lg"
                   onError={() => setImageErrors(prev => new Set(prev).add(currentPersona.id))}
                 />
               ) : (
-                <div className="w-32 h-32 rounded-xl border-4 border-white/30 bg-white/10 flex items-center justify-center relative">
-                  <span className="text-white/40 text-4xl font-bold">
+                <div className="w-32 h-32 rounded-xl border-4 border-stone-200 bg-stone-50 flex items-center justify-center relative">
+                  <span className="text-stone-300 text-4xl font-bold">
                     {(personaData.name || currentPersona.name).charAt(0).toUpperCase()}
                   </span>
                   {generatingImages.includes(currentPersona.id) ? (
                     <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
-                      <div className="text-white text-xs">Generating...</div>
+                      <div className="text-stone-900 text-xs">Generating...</div>
                     </div>
                   ) : (
                     <button
+                      type="button"
                       onClick={() => handleGenerateImage(currentPersona.id)}
-                      className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                      className="persona-export-hide absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 transition-opacity hover:opacity-100"
                     >
-                      <span className="text-white text-xs">Generate</span>
+                      <span className="text-xs text-stone-900">Generate</span>
                     </button>
                   )}
                 </div>
               )}
             </div>
             
-            {/* Demographics - Four Rows */}
-            <div className="flex flex-col justify-center space-y-2 min-w-[200px]">
-              <h4 className="text-2xl font-bold text-white mb-2">{personaData.name || currentPersona.name}</h4>
-              {(getField('age')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Age:</strong> {getField('age')}</span>
-                </div>
-              )}
-              {(getField('location') || getField('nationality')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <MapPin className="h-4 w-4 text-white/70" />
-                  <span className="truncate">
-                    <strong>Location:</strong> {
-                      (() => {
-                        const location = getField('location');
-                        const nationality = getField('nationality');
-                        if (typeof location === 'string') {
-                          return location;
-                        } else if (location && typeof location === 'object' && 'city' in location && 'country' in location) {
-                          return `${location.city}, ${location.country}`;
-                        } else if (nationality) {
-                          return nationality;
-                        }
-                        return location ? JSON.stringify(location) : '';
-                      })()
-                    }
-                  </span>
-                </div>
-              )}
-              {(getField('occupation')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <Briefcase className="h-4 w-4 text-white/70" />
-                  <span className="truncate"><strong>Occupation:</strong> {getField('occupation')}</span>
-                </div>
-              )}
-              {(getField('gender')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Gender:</strong> {getField('gender')}</span>
-                </div>
-              )}
-              {(getField('nationality') && !getField('location')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <MapPin className="h-4 w-4 text-white/70" />
-                  <span><strong>Nationality:</strong> {getField('nationality')}</span>
-                </div>
-              )}
-              {(getField('education_level')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Education:</strong> {getField('education_level')}</span>
-                </div>
-              )}
-              {(getField('income_bracket')) && (
-                <div className="flex items-center space-x-2 text-sm text-white/90">
-                  <User className="h-4 w-4 text-white/70" />
-                  <span><strong>Income:</strong> {getField('income_bracket')}</span>
-                </div>
-              )}
+            {/* Demographics */}
+            <div className="min-w-0 flex-1 space-y-2">
+              <h4 className="mb-2 break-words text-2xl font-bold text-stone-900">
+                {personaData.name || currentPersona.name}
+              </h4>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {(getField('age')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700">
+                    <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words"><strong>Age:</strong> {String(getField('age') || '')}</span>
+                  </div>
+                )}
+                {(getField('gender')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700">
+                    <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words"><strong>Gender:</strong> {String(getField('gender') || '')}</span>
+                  </div>
+                )}
+                {(getField('occupation')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+                    <Briefcase className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="persona-export-text min-w-0 break-words">
+                      <strong>Occupation:</strong> {String(getField('occupation') || '')}
+                    </span>
+                  </div>
+                )}
+                {(getField('location') || getField('nationality')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+                    <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="persona-export-text min-w-0 break-words">
+                      <strong>Location:</strong>{' '}
+                      {
+                        (() => {
+                          const location = getField('location');
+                          const nationality = getField('nationality');
+                          if (typeof location === 'string') {
+                            return location;
+                          } else if (location && typeof location === 'object') {
+                            const city = location.city != null ? String(location.city).trim() : '';
+                            const country = location.country != null ? String(location.country).trim() : '';
+                            if (city && country) {
+                              if (city.toLowerCase().includes(country.toLowerCase())) return city;
+                              return `${city}, ${country}`;
+                            }
+                            if (city) return city;
+                            if (country) return country;
+                          } else if (nationality) {
+                            return nationality;
+                          }
+                          return location ? JSON.stringify(location) : '';
+                        })()
+                      }
+                    </span>
+                  </div>
+                )}
+                {(getField('nationality') && !getField('location')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700">
+                    <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words"><strong>Nationality:</strong> {String(getField('nationality') || '')}</span>
+                  </div>
+                )}
+                {(getField('education') || getField('education_level')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+                    <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words">
+                      <strong>Education:</strong>{' '}
+                      {String(getField('education') || getField('education_level') || '')}
+                    </span>
+                  </div>
+                )}
+                {(getField('income_bracket')) && (
+                  <div className="flex items-start gap-2 text-sm text-stone-700">
+                    <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-500" />
+                    <span className="min-w-0 break-words"><strong>Income:</strong> {String(getField('income_bracket') || '')}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Right: Quote and Overview */}
-          <div className="flex-1 space-y-3">
+          {/* Quote and Overview — always below identity so long demo fields cannot displace them */}
+          <div className="min-w-0 space-y-3">
             {(personaData.quote || personaData.quotes) && (
-              <div className="p-3 bg-white/10 rounded-lg border-l-4 border-purple-400">
+              <div className="p-3 bg-stone-50 rounded-lg border-l-4 border-purple-400">
                 <div className="flex items-start space-x-2">
-                  <Quote className="h-4 w-4 text-purple-300 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-white/90 italic leading-relaxed">
+                  <Quote className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0 text-sm italic leading-relaxed text-stone-700 break-words">
                     {Array.isArray(personaData.quotes) ? (
                       <ul className="list-disc list-inside space-y-1">
-                        {personaData.quotes.map((q: string, idx: number) => (
-                          <li key={idx}>"{q}"</li>
+                        {personaData.quotes.map((q: any, idx: number) => (
+                          <li key={idx}>"{typeof q === 'string' ? q : JSON.stringify(q)}"</li>
                         ))}
                       </ul>
                     ) : (
-                      <p>"{personaData.quote}"</p>
+                      <p>"{typeof personaData.quote === 'string' ? personaData.quote : (typeof personaData.quote === 'object' ? JSON.stringify(personaData.quote) : String(personaData.quote || ''))}"</p>
                     )}
                   </div>
                 </div>
               </div>
             )}
             {(personaData.basic_description || personaData.tagline || personaData.role) && (
-              <div>
-                <h5 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Overview</h5>
-                <p className="text-sm text-white/90 leading-relaxed">{personaData.basic_description || personaData.tagline || personaData.role}</p>
+              <div className="min-w-0">
+                <h5 className="text-xs font-semibold text-stone-900 uppercase tracking-wide mb-2">Overview</h5>
+                <p className="text-sm leading-relaxed text-stone-700 break-words">
+                  {(() => {
+                    const getStringValue = (value: any): string | null => {
+                      if (!value) return null;
+                      if (typeof value === 'string') return value;
+                      if (typeof value === 'object') {
+                        if (Array.isArray(value)) return value.map(String).join(', ');
+                        if ('text' in value || 'description' in value || 'content' in value) {
+                          return String(value.text || value.description || value.content);
+                        }
+                        return JSON.stringify(value);
+                      }
+                      return String(value);
+                    };
+                    return getStringValue(personaData.basic_description) || 
+                           getStringValue(personaData.tagline) || 
+                           getStringValue(personaData.role) || '';
+                  })()}
+                </p>
               </div>
             )}
           </div>
         </div>
 
         {/* Details Section - 2x2 Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-h-[calc(100vh-380px)] overflow-y-auto pr-2">
+        {/* NOTE: No internal scrolling here; keep full profile visible + exportable */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Top Left: Background */}
           <div>
             {renderSection(
               'Background',
-              <User className="h-3 w-3 text-white/70" />,
-              personaData.background || personaData.other_information
+              <User className="h-3 w-3 text-stone-500" />,
+              (() => {
+                const bg = personaData.background || personaData.other_information;
+                // If it's an object, renderSection will handle it, but ensure it's not null
+                return bg;
+              })()
             )}
           </div>
 
@@ -514,52 +692,66 @@ export default function PersonaDetailPage() {
             {personaData.technology_profile && (
               <div className="mb-4">
                 <div className="flex items-center space-x-1 mb-2">
-                  <Smartphone className="h-3 w-3 text-white/70" />
-                  <h5 className="text-xs font-semibold text-white uppercase tracking-wide">Technology Profile</h5>
+                  <Smartphone className="h-3 w-3 text-stone-500" />
+                  <h5 className="text-xs font-semibold text-stone-900 uppercase tracking-wide">Technology Profile</h5>
                 </div>
                 <div className="ml-4 space-y-1.5">
                   {personaData.technology_profile.primary_devices && (
                     <div>
-                      <span className="text-xs text-white/70 font-medium">Devices:</span>
+                      <span className="text-xs text-stone-500 font-medium">Devices:</span>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {personaData.technology_profile.primary_devices.map((device: string, idx: number) => (
-                          <span key={idx} className="px-1.5 py-0.5 bg-white/20 rounded text-xs text-white/90">{device}</span>
+                        {personaData.technology_profile.primary_devices.map((device: any, idx: number) => (
+                          <span key={idx} className="px-1.5 py-0.5 bg-stone-100 rounded text-xs text-stone-700">
+                            {typeof device === 'string' ? device : (typeof device === 'object' ? JSON.stringify(device) : String(device))}
+                          </span>
                         ))}
                       </div>
                     </div>
                   )}
                   {personaData.technology_profile.comfort_level && (
                     <div className="text-xs">
-                      <span className="text-white/70 font-medium">Level:</span>
-                      <span className="ml-1 text-white/90">{personaData.technology_profile.comfort_level}</span>
+                      <span className="text-stone-500 font-medium">Level:</span>
+                      <span className="ml-1 text-stone-700">
+                        {typeof personaData.technology_profile.comfort_level === 'string' 
+                          ? personaData.technology_profile.comfort_level 
+                          : (typeof personaData.technology_profile.comfort_level === 'object' 
+                            ? JSON.stringify(personaData.technology_profile.comfort_level) 
+                            : String(personaData.technology_profile.comfort_level))}
+                      </span>
                     </div>
                   )}
                   {personaData.technology_profile.software_used && (
                     <div>
-                      <span className="text-xs text-white/70 font-medium">Software:</span>
+                      <span className="text-xs text-stone-500 font-medium">Software:</span>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {personaData.technology_profile.software_used.map((software: string, idx: number) => (
-                          <span key={idx} className="px-1.5 py-0.5 bg-white/20 rounded text-xs text-white/90">{software}</span>
+                        {personaData.technology_profile.software_used.map((software: any, idx: number) => (
+                          <span key={idx} className="px-1.5 py-0.5 bg-stone-100 rounded text-xs text-stone-700">
+                            {typeof software === 'string' ? software : (typeof software === 'object' ? JSON.stringify(software) : String(software))}
+                          </span>
                         ))}
                       </div>
                     </div>
                   )}
                   {personaData.technology_profile.interaction_preferences && (
                     <div>
-                      <span className="text-xs text-white/70 font-medium">Preferences:</span>
-                      <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-white/90">
-                        {personaData.technology_profile.interaction_preferences.map((pref: string, idx: number) => (
-                          <li key={idx} className="leading-tight">{pref}</li>
+                      <span className="text-xs text-stone-500 font-medium">Communication Preferences:</span>
+                      <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-stone-700">
+                        {personaData.technology_profile.interaction_preferences.map((pref: any, idx: number) => (
+                          <li key={idx} className="leading-tight">
+                            {typeof pref === 'string' ? pref : (typeof pref === 'object' ? JSON.stringify(pref) : String(pref))}
+                          </li>
                         ))}
                       </ul>
                     </div>
                   )}
                   {personaData.technology_profile.accessibility_needs && personaData.technology_profile.accessibility_needs.length > 0 && (
                     <div>
-                      <span className="text-xs text-white/70 font-medium">Accessibility:</span>
-                      <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-white/90">
-                        {personaData.technology_profile.accessibility_needs.map((need: string, idx: number) => (
-                          <li key={idx} className="leading-tight">{need}</li>
+                      <span className="text-xs text-stone-500 font-medium">Accessibility:</span>
+                      <ul className="list-disc list-inside space-y-0.5 mt-0.5 text-xs text-stone-700">
+                        {personaData.technology_profile.accessibility_needs.map((need: any, idx: number) => (
+                          <li key={idx} className="leading-tight">
+                            {typeof need === 'string' ? need : (typeof need === 'object' ? JSON.stringify(need) : String(need))}
+                          </li>
                         ))}
                       </ul>
                     </div>
@@ -573,7 +765,7 @@ export default function PersonaDetailPage() {
           <div>
             {renderSection(
               'Goals',
-              <Target className="h-3 w-3 text-white/70" />,
+              <Target className="h-3 w-3 text-stone-500" />,
               // All personas now use arrays for goals
               Array.isArray(personaData.goals) ? personaData.goals : null,
               true
@@ -584,7 +776,7 @@ export default function PersonaDetailPage() {
           <div>
             {renderSection(
               personaData.frustrations && personaData.frustrations.length > 0 ? 'Frustrations' : 'Motivations',
-              <AlertCircle className="h-3 w-3 text-white/70" />,
+              <AlertCircle className="h-3 w-3 text-stone-500" />,
               // All personas now use arrays
               Array.isArray(personaData.frustrations) && personaData.frustrations.length > 0
                 ? personaData.frustrations

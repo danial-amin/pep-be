@@ -7,18 +7,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        'pastel-pink': '#FFB6C1',
-        'pastel-blue': '#ADD8E6',
-        'pastel-purple': '#DDA0DD',
-        'pastel-green': '#90EE90',
-        'pastel-yellow': '#FFFFE0',
-        'pastel-orange': '#FFDAB9',
-      },
-      backdropBlur: {
-        xs: '2px',
+        'accent': '#d4763b',
+        'accent-hover': '#c46830',
+        'accent-light': '#fef3ec',
+        'surface': '#ffffff',
+        'base': '#f8f7f4',
+        'subtle': '#f0efe9',
+        'muted-border': '#e5e3dc',
       },
     },
   },
   plugins: [],
 }
-

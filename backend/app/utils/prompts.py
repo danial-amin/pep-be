@@ -17,7 +17,53 @@ PERSONA SET GENERATION PROMPTS
 # System prompt for persona set generation
 # This sets the role and behavior of the AI when generating persona sets
 # You can customize this to change how the AI approaches persona generation
-PERSONA_SET_GENERATION_SYSTEM_PROMPT = """You are an expert at creating realistic, diverse, and ethical personas based on research data and interviews."""
+PERSONA_SET_GENERATION_SYSTEM_PROMPT = """You are an expert at creating realistic, diverse, and ethical personas grounded in research evidence.
+
+You prioritize consistency of place, role scope, and evidence over sounding comprehensive.
+Never invent lived local concerns from distant regional statistics unless the persona's role explicitly has that wider mandate."""
+
+# Global grounding rules — domain-agnostic; apply to every project / corpus.
+# Do NOT hardcode place names, programs, or stakeholder labels here.
+PERSONA_EVIDENCE_GROUNDEDNESS_RULES = """
+EVIDENCE & SCOPE GROUNDING (MANDATORY — applies to every persona):
+
+1. PLACE vs CORPUS SCOPE
+   - If a persona has a stated home / work location, their background, goals, frustrations,
+     motivations, behaviors, and quotes must primarily reflect that place and their daily
+     situation there.
+   - Source material may mention other cities, provinces, countries, or regions. Do NOT
+     copy those distant places into the persona's personal goals or frustrations merely
+     because they appear in the corpus.
+   - Comparative or national facts may appear only when they fit the persona's role scope
+     (e.g. a national analyst may reference multi-region patterns; a local resident or
+     frontline local worker should not list another region's problems as their own
+     lived concern). Prefer phrasing like "I've heard exclusion is worse elsewhere"
+     only if interviews/context support that awareness for this role.
+
+2. ROLE SCOPE
+   - Infer each persona's operational scope from their occupation / stakeholder role:
+     local, institutional-local, regional, or national.
+   - Match concerns to that scope. A local household or local NGO worker stays local;
+     a national-program official may use multi-region evidence, but still should not
+     invent personal residence outside their stated location.
+
+3. EVIDENCE DISCIPLINE
+   - Prefer claims supported by the provided interviews/context for this persona type.
+   - If a demographic attribute (e.g. gender) is not evidenced, prefer omitting it or
+     using a clearly generic value rather than inventing a stereotype.
+   - Do not pad goals/frustrations with impressive-sounding corpus facts that the
+     persona would not personally own.
+
+4. QUOTES & VOICE
+   - Quotes must sound like this persona speaking from their place and role.
+   - Do not put remote place-names into a local persona's mouth unless the source
+     shows they actually discuss those places.
+
+5. ADDITIONAL CONTEXT OVERRIDES
+   - If ADDITIONAL CONTEXT, INTERVIEW TOPIC, or USER STUDY DESIGN constrain location
+     or setting, treat those as hard constraints for all personas unless a persona's
+     role explicitly requires a wider geographic mandate.
+"""
 
 # Main prompt template for persona set generation
 # ═══════════════════════════════════════════════════════════════════════════
@@ -33,6 +79,8 @@ PERSONA_SET_GENERATION_SYSTEM_PROMPT = """You are an expert at creating realisti
 #   - {user_study_design_section}: User study design information (if provided)
 #   - {format_instructions}: Format-specific instructions based on output_format
 #   - {ethical_guardrails_section}: Ethical considerations (if enabled)
+#   - {stakeholder_groups_section}: Required stakeholder groups (if provided)
+#   - {groundedness_section}: Global evidence/scope grounding rules
 #
 # Note: Sections with "_section" suffix will be empty strings if not provided,
 # so they won't add extra blank lines in the final prompt.
@@ -45,7 +93,8 @@ CONTEXT INFORMATION:
 
 INTERVIEW DATA:
 {interviews}
-{additional_context_section}{interview_topic_section}{user_study_design_section}
+{additional_context_section}{interview_topic_section}{user_study_design_section}{stakeholder_groups_section}
+{groundedness_section}
 
 IMPORTANT: All personas MUST use the nested structure with a 'demographics' object. Goals and frustrations must be arrays.
 
@@ -58,7 +107,8 @@ PERSONA_SET_GENERATION_INTERVIEWS_ONLY_TEMPLATE = """Based on the following inte
 
 INTERVIEW DATA:
 {interviews}
-{additional_context_section}{interview_topic_section}{user_study_design_section}
+{additional_context_section}{interview_topic_section}{user_study_design_section}{stakeholder_groups_section}
+{groundedness_section}
 
 INSTRUCTIONS:
 - Analyze the interview transcripts to identify distinct user types, needs, and behaviors
@@ -66,6 +116,7 @@ INSTRUCTIONS:
 - Create personas that represent different user segments found in the interview data
 - Base personas on actual quotes, behaviors, and needs mentioned in the interviews
 - Ensure personas are diverse and represent different perspectives from the interviews
+- Keep each persona's concerns consistent with their stated location and role scope
 
 OUTPUT FORMAT:
 {format_instructions}
@@ -76,7 +127,8 @@ PERSONA_SET_GENERATION_CONTEXT_ONLY_TEMPLATE = """Based on the following context
 
 CONTEXT INFORMATION:
 {context}
-{additional_context_section}{interview_topic_section}{user_study_design_section}
+{additional_context_section}{interview_topic_section}{user_study_design_section}{stakeholder_groups_section}
+{groundedness_section}
 
 INSTRUCTIONS:
 - Use the context information to understand the target market, user base, and domain
@@ -84,6 +136,7 @@ INSTRUCTIONS:
 - Base personas on market research, demographics, and behavioral patterns described in the context
 - Ensure personas are realistic and align with the context provided
 - Consider different user needs, goals, and challenges mentioned in the context
+- Keep each persona's concerns consistent with their stated location and role scope
 
 OUTPUT FORMAT:
 {format_instructions}
@@ -99,7 +152,9 @@ PERSONA EXPANSION PROMPTS
 # System prompt for persona expansion
 # This sets the role and behavior of the AI when expanding personas
 # You can customize this to change how the AI approaches persona expansion
-PERSONA_EXPANSION_SYSTEM_PROMPT = """You are an expert at expanding basic personas into comprehensive, detailed persona profiles based on research data and context."""
+PERSONA_EXPANSION_SYSTEM_PROMPT = """You are an expert at expanding basic personas into comprehensive, detailed persona profiles based on research data and context.
+
+Preserve geographic and role-scope consistency: do not inject distant regional corpus facts into a local persona's lived goals or frustrations."""
 
 # Main prompt template for persona expansion
 # ═══════════════════════════════════════════════════════════════════════════
@@ -109,6 +164,7 @@ PERSONA_EXPANSION_SYSTEM_PROMPT = """You are an expert at expanding basic person
 # Available placeholders:
 #   - {context}: The context documents combined into a single string
 #   - {persona_basic}: The basic persona data in JSON format
+#   - {groundedness_section}: Global evidence/scope grounding rules
 #
 # Example usage:
 #   - Add your own instructions
@@ -123,6 +179,7 @@ Context Information:
 
 Basic Persona:
 {persona_basic}
+{groundedness_section}
 
 CRITICAL RULES - YOU MUST FOLLOW THESE STRICTLY:
 
@@ -144,6 +201,7 @@ CRITICAL RULES - YOU MUST FOLLOW THESE STRICTLY:
    - Add depth, detail, and richness to these fields based on the context
    - Use context information to enrich these behavioral/psychographic aspects
    - Goals and frustrations must be arrays - add more items to these arrays
+   - New goals/frustrations must stay consistent with the persona's stated location and role scope
 
 4. PRESERVE NESTED STRUCTURE:
    - Always use nested structure with demographics object
@@ -156,6 +214,7 @@ CRITICAL RULES - YOU MUST FOLLOW THESE STRICTLY:
    - For arrays (goals, frustrations, motivations): Add more items that are directly related
    - For objects (technology_profile): Expand nested fields only if they already exist
    - Use context information to add realistic, detailed behavioral insights
+   - Prefer local/role-scoped evidence over distant regional statistics
 
 6. FORMAT CONSISTENCY:
    - Maintain the exact same data types (strings stay strings, numbers stay numbers, arrays stay arrays)
@@ -168,6 +227,7 @@ CRITICAL RULES - YOU MUST FOLLOW THESE STRICTLY:
    - Do NOT add location details if location wasn't specified
    - Do NOT add employment history or background to occupation field
    - Do NOT convert arrays to strings or vice versa
+   - Do NOT transplant other places' problems into this persona's personal concerns unless their role scope warrants it
 
 Return the expanded persona as a JSON object that:
 - Uses nested structure with demographics object

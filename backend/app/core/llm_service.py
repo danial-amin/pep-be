@@ -4,6 +4,7 @@ LLM service for processing documents and generating personas.
 from openai import AsyncOpenAI
 from langchain_openai import OpenAIEmbeddings
 from app.core.config import settings
+from app.core.openai_compat import chat_completion_kwargs
 from app.utils.token_utils import chunk_text_by_tokens, estimate_tokens
 from app.utils.prompts import (
     PERSONA_SET_GENERATION_SYSTEM_PROMPT,
@@ -11,7 +12,8 @@ from app.utils.prompts import (
     PERSONA_SET_GENERATION_INTERVIEWS_ONLY_TEMPLATE,
     PERSONA_SET_GENERATION_CONTEXT_ONLY_TEMPLATE,
     PERSONA_EXPANSION_SYSTEM_PROMPT,
-    PERSONA_EXPANSION_PROMPT_TEMPLATE
+    PERSONA_EXPANSION_PROMPT_TEMPLATE,
+    PERSONA_EVIDENCE_GROUNDEDNESS_RULES,
 )
 from typing import List, Dict, Any, Optional
 import json
@@ -27,18 +29,41 @@ class LLMService:
     
     def __init__(self):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        embedding_model = settings.OPENAI_EMBEDDING_MODEL
+        
+        # Standardize on 1536 dimensions for consistency across all embeddings
+        # If 3-large is specified, use 3-small instead to maintain 1536 dimensions
+        if "3-large" in embedding_model.lower():
+            logger.warning(
+                f"text-embedding-3-large produces 3072 dimensions. "
+                f"Standardizing on text-embedding-3-small (1536 dimensions) for consistency. "
+                f"Set OPENAI_EMBEDDING_MODEL='text-embedding-3-small' to avoid this warning."
+            )
+            embedding_model = "text-embedding-3-small"
+        
         self.embeddings = OpenAIEmbeddings(
-            model=settings.OPENAI_EMBEDDING_MODEL,
+            model=embedding_model,
             openai_api_key=settings.OPENAI_API_KEY
         )
+        logger.info(f"Using embedding model: {embedding_model} (standardized to 1536 dimensions)")
     
     async def create_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Create embeddings for texts."""
-        return await self.embeddings.aembed_documents(texts)
+        try:
+            embeddings = await self.embeddings.aembed_documents(texts)
+            return embeddings
+        except Exception as e:
+            logger.error(f"Error creating embeddings: {e}", exc_info=True)
+            raise
     
     async def create_query_embedding(self, text: str) -> List[float]:
         """Create embedding for a single query text."""
-        return await self.embeddings.aembed_query(text)
+        try:
+            embedding = await self.embeddings.aembed_query(text)
+            return embedding
+        except Exception as e:
+            logger.error(f"Error creating query embedding: {e}", exc_info=True)
+            raise
     
     async def process_document(self, document_text: str, document_type: str) -> Dict[str, Any]:
         """
@@ -116,32 +141,36 @@ Return as JSON format."""
         
         max_retries = 3
         retry_delay = 60  # Wait 60 seconds on rate limit
-        
+
         for attempt in range(max_retries):
             try:
                 response = await self.client.chat.completions.create(
-                    model=settings.OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You are an expert at analyzing documents and extracting relevant information for persona generation."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.3
+                    **chat_completion_kwargs(
+                        messages=[
+                            {"role": "system", "content": "You are an expert at analyzing documents and extracting relevant information for persona generation."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.3,
+                    )
                 )
                 
-                return json.loads(response.choices[0].message.content)
+                result = json.loads(response.choices[0].message.content)
+                return result
             
             except RateLimitError as e:
+                error_msg = f"Rate limit hit on chunk {chunk_index}, attempt {attempt + 1}/{max_retries}"
                 if attempt < max_retries - 1:
-                    logger.warning(f"Rate limit hit on chunk {chunk_index}, waiting {retry_delay} seconds before retry {attempt + 1}/{max_retries}")
+                    logger.warning(f"{error_msg}, waiting {retry_delay} seconds before retry")
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff
                 else:
                     logger.error(f"Rate limit error after {max_retries} attempts on chunk {chunk_index}")
                     raise Exception(f"Rate limit exceeded after {max_retries} retries. Please try again later.")
-            
+
             except APIError as e:
-                logger.error(f"API error processing chunk {chunk_index}: {e}")
+                error_msg = f"API error processing chunk {chunk_index}: {e}"
+                logger.error(error_msg)
                 raise
     
     def _combine_chunk_results(
@@ -238,19 +267,21 @@ User Prompt:
 {user_prompt}
 
 Provide a comprehensive and accurate response based on the context provided."""
-        
+
         try:
             response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that provides accurate information based on the provided context."},
-                    {"role": "user", "content": full_prompt}
-                ],
-                max_tokens=max_tokens,
-                temperature=0.7
+                **chat_completion_kwargs(
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that provides accurate information based on the provided context."},
+                        {"role": "user", "content": full_prompt}
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0.7,
+                )
             )
             
-            return response.choices[0].message.content
+            result = response.choices[0].message.content
+            return result
         except RateLimitError as e:
             logger.error(f"Rate limit error completing prompt: {e}")
             raise Exception("Rate limit exceeded. Please try again in a moment.")
@@ -269,7 +300,9 @@ Provide a comprehensive and accurate response based on the context provided."""
         include_ethical_guardrails: bool = True,
         output_format: str = "json",
         has_interviews: bool = True,
-        has_context: bool = True
+        has_context: bool = True,
+        project_id: Optional[int] = None,
+        stakeholder_groups: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Generate initial persona set with advanced configuration options.
@@ -285,7 +318,21 @@ Provide a comprehensive and accurate response based on the context provided."""
             output_format: Format for persona output (json, profile, chat, etc.)
             has_interviews: Whether interview documents are available
             has_context: Whether context documents are available
+            stakeholder_groups: Optional ordered stakeholder IDs; one persona per group
         """
+        # Ensure no None in document lists (vector DB or fallback can return None and break join())
+        def _safe_doc_list(lst: Optional[List[str]]) -> List[str]:
+            if not lst:
+                return []
+            return [x if isinstance(x, str) else str(x) for x in lst if x is not None]
+
+        context_documents = _safe_doc_list(context_documents)
+        interview_documents = _safe_doc_list(interview_documents)
+
+        groups = [g.strip() for g in (stakeholder_groups or []) if g and str(g).strip()]
+        if groups:
+            num_personas = len(groups)
+
         # Determine which prompt template to use based on available data
         if has_interviews and has_context:
             # Both interviews and context available - use standard template
@@ -349,9 +396,40 @@ Provide a comprehensive and accurate response based on the context provided."""
         user_study_design_section = ""
         if user_study_design:
             user_study_design_section = f"\n\nUSER STUDY DESIGN:\n{user_study_design}"
+
+        stakeholder_groups_section = ""
+        if groups:
+            def _label(g: str) -> str:
+                return g.replace("_", " ").strip().title()
+
+            lines = "\n".join(
+                f"{i}. ID `{g}` — {_label(g)}" for i, g in enumerate(groups, start=1)
+            )
+            stakeholder_groups_section = f"""
+
+REQUIRED STAKEHOLDER GROUPS (STRICT):
+Generate EXACTLY {len(groups)} personas — one for EACH group below, in this order.
+Do NOT invent extra personas. Do NOT merge groups. Do NOT skip a group.
+Each persona MUST include:
+- "stakeholder_group": the exact ID string from the list
+- "tagline": a short role description matching that stakeholder
+
+Groups:
+{lines}
+
+Ground each persona primarily in evidence tagged for that stakeholder group.
+Respect place and role-scope grounding: local roles stay locally concerned;
+only roles with a wider mandate may own multi-region corpus facts as their
+own priorities.
+"""
         
         # Get format instructions
         format_instructions = self._get_format_instructions(output_format, num_personas)
+        if groups and output_format == "json":
+            format_instructions += (
+                "\nEach persona object MUST include \"stakeholder_group\" set to the "
+                "exact group ID it represents."
+            )
         
         # Build ethical guardrails section
         ethical_guardrails_section = ""
@@ -364,6 +442,8 @@ Please ensure personas are:
 - Realistic and based on actual data patterns
 - Respectful and ethical in representation
 - Balanced in representation across different user segments"""
+
+        groundedness_section = PERSONA_EVIDENCE_GROUNDEDNESS_RULES
         
         # Use appropriate prompt template based on available data
         prompt = prompt_template.format(
@@ -373,6 +453,8 @@ Please ensure personas are:
             additional_context_section=additional_context_section,
             interview_topic_section=interview_topic_section,
             user_study_design_section=user_study_design_section,
+            stakeholder_groups_section=stakeholder_groups_section,
+            groundedness_section=groundedness_section,
             format_instructions=format_instructions,
             ethical_guardrails_section=ethical_guardrails_section
         )
@@ -380,30 +462,35 @@ Please ensure personas are:
         try:
             # Determine response format based on output_format
             response_format = {"type": "json_object"} if output_format == "json" else None
-            
-            response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
+
+            create_kwargs = chat_completion_kwargs(
                 messages=[
                     {"role": "system", "content": PERSONA_SET_GENERATION_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt}
                 ],
-                response_format=response_format,
-                temperature=0.8
+                temperature=0.8,
             )
+            if response_format:
+                create_kwargs["response_format"] = response_format
+
+            response = await self.client.chat.completions.create(**create_kwargs)
             
             # Parse response based on format
             if output_format == "json":
-                return json.loads(response.choices[0].message.content)
+                result = json.loads(response.choices[0].message.content)
             else:
                 # For non-JSON formats, return content in "personas" field for consistency
-                # The content will be the formatted text from LLM
-                return {
+                result = {
                     "personas": response.choices[0].message.content,
                     "format": output_format,
                     "description": f"Personas generated in {output_format} format"
                 }
+
+            return result
+            
         except Exception as e:
-            logger.error(f"Error generating persona set: {e}")
+            error_msg = str(e)
+            logger.error(f"Error generating persona set: {e}", exc_info=True)
             raise
     
     def _get_format_instructions(self, output_format: str, num_personas: int) -> str:
@@ -510,47 +597,53 @@ Format as personas that can be used in interactive scenarios or simulations."""
         
         return format_guides.get(output_format.lower(), format_guides["json"])
     
-    async def expand_persona(self, persona_basic: Dict[str, Any], context_documents: List[str]) -> Dict[str, Any]:
+    async def expand_persona(self, persona_basic: Dict[str, Any], context_documents: List[str], project_id: Optional[int] = None) -> Dict[str, Any]:
         """Expand a basic persona into a full-fledged persona."""
-        # Combine context and check size
-        context = "\n\n".join(context_documents)
-        persona_str = json.dumps(persona_basic, indent=2)
-        
-        full_text = f"Context Information:\n{context}\n\nBasic Persona:\n{persona_str}"
-        estimated_tokens = estimate_tokens(full_text)
-        
-        # If too large, summarize context first
-        if estimated_tokens > settings.MAX_TOKENS_PER_CHUNK:
-            logger.info(f"Input too large ({estimated_tokens} tokens), summarizing context")
-            summarized_contexts = []
-            for doc in context_documents:
-                if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
-                    summary = await self._summarize_text(doc)
-                    summarized_contexts.append(summary)
-                else:
-                    summarized_contexts.append(doc)
-            context = "\n\n".join(summarized_contexts)
-        
-        # Use customizable prompt template
-        prompt = PERSONA_EXPANSION_PROMPT_TEMPLATE.format(
-            context=context,
-            persona_basic=persona_str
-        )
-        
         try:
+            # Combine context and check size (filter None/invalid entries; documents.content can be NULL)
+            context_documents = [d for d in context_documents if d is not None and isinstance(d, str)]
+            context = "\n\n".join(context_documents) if context_documents else ""
+            persona_str = json.dumps(persona_basic, indent=2)
+            
+            full_text = f"Context Information:\n{context}\n\nBasic Persona:\n{persona_str}"
+            estimated_tokens = estimate_tokens(full_text)
+            
+            # If too large, summarize context first
+            if estimated_tokens > settings.MAX_TOKENS_PER_CHUNK:
+                logger.info(f"Input too large ({estimated_tokens} tokens), summarizing context")
+                summarized_contexts = []
+                for doc in context_documents:
+                    if estimate_tokens(doc) > settings.MAX_TOKENS_PER_CHUNK:
+                        summary = await self._summarize_text(doc)
+                        summarized_contexts.append(summary)
+                    else:
+                        summarized_contexts.append(doc)
+                context = "\n\n".join(summarized_contexts)
+            
+            # Use customizable prompt template
+            prompt = PERSONA_EXPANSION_PROMPT_TEMPLATE.format(
+                context=context,
+                persona_basic=persona_str,
+                groundedness_section=PERSONA_EVIDENCE_GROUNDEDNESS_RULES,
+            )
+
             response = await self.client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": PERSONA_EXPANSION_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.7
+                **chat_completion_kwargs(
+                    messages=[
+                        {"role": "system", "content": PERSONA_EXPANSION_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.7,
+                )
             )
             
-            return json.loads(response.choices[0].message.content)
+            result = json.loads(response.choices[0].message.content)
+            return result
+
         except Exception as e:
-            logger.error(f"Error expanding persona: {e}")
+            error_msg = str(e)
+            logger.error(f"Error expanding persona: {e}", exc_info=True)
             raise
     
     async def generate_persona_image_prompt(self, persona: Dict[str, Any]) -> str:
@@ -568,27 +661,50 @@ Generate a descriptive prompt that captures:
 Return only the image prompt text, no JSON."""
         
         response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You create detailed image generation prompts."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.8
+            **chat_completion_kwargs(
+                messages=[
+                    {"role": "system", "content": "You create detailed image generation prompts."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.8,
+            )
         )
         
         return response.choices[0].message.content
     
-    async def generate_image(self, prompt: str, size: str = "1024x1024") -> str:
-        """Generate an image using DALL-E."""
+    async def generate_image(
+        self,
+        prompt: str,
+        size: Optional[str] = None,
+        quality: Optional[str] = None,
+    ) -> str:
+        """
+        Generate an image with the configured GPT Image model.
+
+        Returns base64-encoded image data (GPT Image models no longer return URLs;
+        DALL·E was retired May 2026).
+        """
         response = await self.client.images.generate(
-            model="dall-e-3",
+            model=settings.OPENAI_IMAGE_MODEL,
             prompt=prompt,
-            size=size,
-            quality="standard",
+            size=size or settings.OPENAI_IMAGE_SIZE,
+            quality=quality or settings.OPENAI_IMAGE_QUALITY,
             n=1,
         )
-        
-        return response.data[0].url
+
+        if not response.data:
+            raise ValueError("Image generation returned no data")
+
+        b64 = getattr(response.data[0], "b64_json", None)
+        if b64:
+            return b64
+
+        # Fallback if a URL is ever returned (older SDKs / models)
+        url = getattr(response.data[0], "url", None)
+        if url:
+            return url
+
+        raise ValueError("Image generation returned neither b64_json nor url")
     
     async def _summarize_text(self, text: str) -> str:
         """Summarize a large text to reduce token usage."""
@@ -616,13 +732,14 @@ Provide a concise summary."""
 Provide a concise summary."""
                 
                 response = await self.client.chat.completions.create(
-                    model=settings.OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You are an expert at summarizing documents."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.3,
-                    max_tokens=1000
+                    **chat_completion_kwargs(
+                        messages=[
+                            {"role": "system", "content": "You are an expert at summarizing documents."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.3,
+                        max_tokens=1000,
+                    )
                 )
                 summaries.append(response.choices[0].message.content)
                 
@@ -635,13 +752,14 @@ Provide a concise summary."""
             return combined
         
         response = await self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert at summarizing documents."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=2000
+            **chat_completion_kwargs(
+                messages=[
+                    {"role": "system", "content": "You are an expert at summarizing documents."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2000,
+            )
         )
         
         return response.choices[0].message.content
