@@ -527,6 +527,7 @@ async def load_default_personas(
                             name=db_persona_data["name"],
                             persona_data=db_persona_data,
                             image_url=raw.get("image_url"),
+                            image_prompt=raw.get("image_prompt") or db_persona_data.get("image_prompt"),
                             image_data=raw.get("image_data"),
                         )
                         db.add(persona)
@@ -644,6 +645,7 @@ async def load_default_personas(
                 name=db_persona_data["name"],
                 persona_data=db_persona_data,
                 image_url=raw.get("image_url"),
+                image_prompt=raw.get("image_prompt") or db_persona_data.get("image_prompt"),
                 image_data=raw.get("image_data"),
             )
             db.add(persona)
