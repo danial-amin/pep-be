@@ -648,7 +648,24 @@ Format as personas that can be used in interactive scenarios or simulations."""
     
     async def generate_persona_image_prompt(self, persona: Dict[str, Any]) -> str:
         """Generate an image prompt for a persona."""
-        prompt = f"""Create a detailed image generation prompt for this persona:
+        from app.utils.persona_normalizer import demographics_not_applicable
+
+        if demographics_not_applicable(persona):
+            stored = persona.get("image_prompt")
+            if isinstance(stored, str) and stored.strip():
+                return stored.strip()
+            prompt = f"""Create a detailed image generation prompt for this persona:
+
+{json.dumps(persona, indent=2)}
+
+This persona is the agent who writes the posts. Demographic fields are Agent.
+Show one anonymous human-like author at work. Do not specify age, gender, ethnicity, nationality, or gendered clothing.
+Do not use flags, skin, or dress as identity.
+The person is the author. Depict what they are posting around them, not a demographic portrait.
+
+Return only the image prompt text, no JSON."""
+        else:
+            prompt = f"""Create a detailed image generation prompt for this persona:
 
 {json.dumps(persona, indent=2)}
 

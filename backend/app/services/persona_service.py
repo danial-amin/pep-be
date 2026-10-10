@@ -472,8 +472,16 @@ class PersonaService:
         if not persona:
             raise ValueError(f"Persona with ID {persona_id} not found")
         
-        # Generate image prompt
-        image_prompt = await llm_service.generate_persona_image_prompt(persona.persona_data)
+        # Reuse a stored prompt for agent-based personas. Do not ask the model to invent a body.
+        from app.utils.persona_normalizer import demographics_not_applicable
+
+        persona_data = dict(persona.persona_data or {})
+        if persona.image_prompt and not persona_data.get("image_prompt"):
+            persona_data["image_prompt"] = persona.image_prompt
+        if demographics_not_applicable(persona_data) and persona_data.get("image_prompt"):
+            image_prompt = str(persona_data["image_prompt"]).strip()
+        else:
+            image_prompt = await llm_service.generate_persona_image_prompt(persona_data)
         
         # GPT Image returns base64; legacy models may still return a URL
         image_result = await llm_service.generate_image(image_prompt)

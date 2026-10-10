@@ -221,6 +221,17 @@ def normalize_persona_to_nested(persona_data: Dict[str, Any]) -> Dict[str, Any]:
     # Other information
     if "other_information" in persona_data:
         normalized["other_information"] = persona_data["other_information"]
+
+    # Exploratory cluster personas leave these empty on purpose.
+    # Preserve them so a later load does not invent an objective or a segment.
+    if "objective" in persona_data:
+        normalized["objective"] = persona_data["objective"]
+    if "segment_name" in persona_data:
+        normalized["segment_name"] = persona_data["segment_name"]
+    if "k_selected" in persona_data:
+        normalized["k_selected"] = persona_data["k_selected"]
+    if persona_data.get("image_prompt"):
+        normalized["image_prompt"] = persona_data["image_prompt"]
     
     # Social media usage
     if "social_media_usage" in persona_data:
@@ -229,6 +240,36 @@ def normalize_persona_to_nested(persona_data: Dict[str, Any]) -> Dict[str, Any]:
         normalized["demographics"]["social_media_usage"] = persona_data["social_media_usage"]
     
     return normalized
+
+
+_DEMOGRAPHIC_FIELDS = (
+    "age",
+    "gender",
+    "location",
+    "occupation",
+    "education",
+    "education_level",
+    "nationality",
+    "income_bracket",
+    "relationship_status",
+)
+
+
+def demographics_not_applicable(persona_data: Optional[Dict[str, Any]]) -> bool:
+    """True when demographic fields name an agent, or are explicitly not applicable.
+
+    Either case is a non-human subject, so image generation must not invent a body.
+    """
+    if not isinstance(persona_data, dict):
+        return False
+    demo = persona_data.get("demographics")
+    if not isinstance(demo, dict) or not demo:
+        return False
+    markers = {"not applicable", "n/a", "na", "none", "", "agent"}
+    present = [field for field in _DEMOGRAPHIC_FIELDS if field in demo and demo[field] is not None]
+    if not present:
+        return False
+    return all(str(demo[field]).strip().lower() in markers for field in present)
 
 
 def normalize_persona_set(personas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
