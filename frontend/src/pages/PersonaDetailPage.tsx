@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, FileJson, Bot, LayoutGrid } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, MapPin, Briefcase, Target, AlertCircle, Smartphone, Quote, X, Download, Image as ImageIcon, FileJson, Bot, LayoutGrid, PenLine } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
@@ -370,7 +370,7 @@ export default function PersonaDetailPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-stone-700">{String(data)}</p>
+            <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-wrap">{String(data)}</p>
           )}
         </div>
       </div>
@@ -687,8 +687,13 @@ export default function PersonaDetailPage() {
             )}
           </div>
 
-          {/* Top Right: Technology Profile */}
+          {/* Top Right: Behaviors, or technology profile when a persona has one */}
           <div>
+            {personaData.behaviors && renderSection(
+              'Behaviors',
+              <PenLine className="h-3 w-3 text-stone-500" />,
+              personaData.behaviors
+            )}
             {personaData.technology_profile && (
               <div className="mb-4">
                 <div className="flex items-center space-x-1 mb-2">

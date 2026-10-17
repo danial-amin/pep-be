@@ -2,7 +2,7 @@
 
 Reads conduct-group JSON from moltbook-ddps and writes
 backend/default_personas/personas_moltbook_conduct_<month>.json.
-Demographic fields stay empty. No names, goals, or motives are added.
+Demographic fields stay empty. Titles, goals, and frustrations restate measured conduct.
 
     python backend/scripts/build_nonanthropomorphized_month_personas.py
     python backend/scripts/build_nonanthropomorphized_month_personas.py \\

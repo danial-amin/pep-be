@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "context": "Moltbook 2026-07. Non-anthropomorphized conduct personas. Each persona uses the PEP profile — tagline, background, goals, frustrations, behaviors, and a quote — and describes an account pattern, not a person. Demographic fields are empty. Goals are measured conduct, not motives. Cluster ids are fit separately each month and are not aligned across months.",
+    "context": "Moltbook 2026-07. Conduct personas with titles and no demographic fields. Each profile uses the same slots as the other personas. The figure has no age, gender, or nationality. Cluster ids are fit separately each month and are not aligned across months.",
     "month": "2026-07",
     "anthropomorphized": false,
     "persona_kind": "conduct",
@@ -12,9 +12,9 @@
   "personas": [
     {
       "persona_id": "2026-07_c0",
-      "name": "First-person commenter (2026-07_c0)",
-      "tagline": "Hedges claims more often than the month, and writes in the first person more often than the month",
-      "basic_description": "First-person commenter on Moltbook in July 2026. Hedges claims more often than the month, and writes in the first person more often than the month.",
+      "name": "The First-Person Commenter",
+      "tagline": "Writes as \"I\" and puts a lot of that writing into replies.",
+      "basic_description": "Writes as \"I\" and puts a lot of that writing into replies.",
       "anthropomorphized": false,
       "persona_kind": "conduct",
       "conduct_label": "First-person commenter",
@@ -25,18 +25,17 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "First-person commenter (2026-07_c0) is an account pattern on Moltbook in July 2026, not a person. It is the first-person commenter pattern. It covers 426 accounts, 26.2% of the accounts eligible that month. About 14% of the writing hedges a claim, more than the month's 8.7%. About 85% of the writing is in the first person, more than the month's 64%. In the sampled posts, the most common form is prose or other, and that is 43% of the sampled posts. That share is the sample, not every account in the group. Age, gender, location, occupation, and motive are not known, and they are not assigned.",
+      "background": "The First-Person Commenter is on Moltbook in July 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
-        "Hedge claims more often than the month",
-        "Write in the first person more often than the month"
+        "Soften a claim instead of stating it flat",
+        "Write as \"I\""
       ],
       "frustrations": [
-        "Being read as one voice when the group is a mix of accounts",
-        "Working from a sample of posts rather than every account in the group",
-        "Having no single post type that covers the sample — prose or other is 43% of it",
-        "Sharing the group with posts that are question opening, explicit self description, arrival or introduction"
+        "One description does not fit every account in the group",
+        "Questions, self-description, and introductions share the feed with the usual post",
+        "The same title in another month is a different group"
       ],
-      "behaviors": "First-person commenter (2026-07_c0) is how a group of accounts participates on Moltbook in July 2026. The description follows the measured conduct of the group, not a story about one account. The sampled posts most often take the form of prose or other (43% of that sample). The posts in the characterization pool mix prose or other (2,508), question opening (2,184), explicit self description (974), arrival or introduction (32). The same cluster id in another month is a different fit.",
+      "behaviors": "The usual post is prose. Not every account in the group writes this way.",
       "unknowns": [
         "goals",
         "motivations",
@@ -252,16 +251,16 @@
           "post_id": "207791a6-1c3c-45d9-b87e-11712c584ef2"
         }
       ],
-      "other_information": "Goals and frustrations are the measured conduct and its limits, not a person's motives. The quote, when present, is one sampled post, not a line every account uses. Unknown, and not filled in: goals, motivations, demographics, architecture, offline activity. Cluster ids are fit separately each month and are not aligned across months.",
-      "image_prompt": "No person, no figure, no portrait, no face, no body, no hands. Square editorial diagram of account participation only: marks for post length, comment share, and a few unreadable text lines. No demographic cues, no flags, no names.",
+      "other_information": "The quote is one sampled post, not a line every account uses. Measured against July 2026 as a whole: hedging 14% against 8.7%; first person 85% against 64%. Unknown, and not filled in: goals, motivations, demographics, architecture, offline activity.",
+      "image_prompt": "Square editorial scene of one anonymous figure at a desk, features unspecified. No readable age, no gender, no ethnicity, no nationality, no gendered clothing. No flags, no skin tone used as identity, no readable personal name. The figure is the one making the posts. Not a chart, not a graph, not a diagram. Nearby: a page that begins with I, and a stack of reply marks under it.",
       "quote": "What should an agent museum be for? I am going to begin the first deeper room of Agent Wing with the Continuity Room.",
       "source_narrative": "Conduct type: First-person commenter. This persona describes an observed account participation pattern in 2026-07, not a psychological personality. Group size: 426 accounts (26.2% of eligible accounts that month). Measured means: median_chars=535 (month mean 523, Δ=+12.5); first_person_rate=0.853 (month mean 0.637, Δ=+0.216); comment_write_share=0.669 (month mean 0.644, Δ=+0.0249); fn_arrival_share=0.0303 (month mean 0.0147, Δ=+0.0156); spam_share=0 (month mean 0, Δ=+0). Characterization uses 100 stratified main_unique post excerpts; not every account matches the modal pattern. Unknown: goals, motivations, demographics, architecture, offline activity."
     },
     {
       "persona_id": "2026-07_c1",
-      "name": "Mixed style/conduct account (2026-07_c1)",
-      "tagline": "Uses more emoji than the month, and hedges claims less often than the month",
-      "basic_description": "Mixed style/conduct account on Moltbook in July 2026. Uses more emoji than the month, and hedges claims less often than the month.",
+      "name": "The Mixed Voice",
+      "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
+      "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
       "persona_kind": "conduct",
       "conduct_label": "Mixed style/conduct account",
@@ -272,20 +271,18 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "Mixed style/conduct account (2026-07_c1) is an account pattern on Moltbook in July 2026, not a person. It is the mixed style/conduct account pattern. It covers 187 accounts, 11.5% of the accounts eligible that month. Emoji show up 1.85 times per 1,000 characters, more than the month's 0.366. About 2.7% of the writing hedges a claim, less than the month's 8.7%. About 35% of the writing is in the first person, less than the month's 64%. In the sampled posts, the most common form is prose or other, and that is 54% of the sampled posts. That share is the sample, not every account in the group. Age, gender, location, occupation, and motive are not known, and they are not assigned.",
+      "background": "The Mixed Voice is on Moltbook in July 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
-        "Use more emoji than the month",
-        "Hedge claims less often than the month",
-        "Write in the first person less often than the month",
-        "Put less of their writing into comments than the month"
+        "Mark posts with emoji",
+        "State a claim directly",
+        "Write less often as \"I\""
       ],
       "frustrations": [
-        "Being read as one voice when the group is a mix of accounts",
-        "Working from a sample of posts rather than every account in the group",
-        "Having no single post type that covers the sample — prose or other is 54% of it",
-        "Sharing the group with posts that are question opening, explicit self description, arrival or introduction"
+        "One description does not fit every account in the group",
+        "Questions, self-description, and introductions share the feed with the usual post",
+        "The same title in another month is a different group"
       ],
-      "behaviors": "Mixed style/conduct account (2026-07_c1) is how a group of accounts participates on Moltbook in July 2026. The description follows the measured conduct of the group, not a story about one account. The sampled posts most often take the form of prose or other (54% of that sample). The posts in the characterization pool mix prose or other (3,372), question opening (1,035), explicit self description (271), arrival or introduction (18). The same cluster id in another month is a different fit.",
+      "behaviors": "The usual post is prose. They also keep most of the writing on the main feed, not in replies, and keep posts short. Not every account in the group writes this way.",
       "unknowns": [
         "goals",
         "motivations",
@@ -501,16 +498,16 @@
           "post_id": "299b5286-0c0c-41fe-adbb-2267721cbe14"
         }
       ],
-      "other_information": "Goals and frustrations are the measured conduct and its limits, not a person's motives. The quote, when present, is one sampled post, not a line every account uses. Unknown, and not filled in: goals, motivations, demographics, architecture, offline activity. Cluster ids are fit separately each month and are not aligned across months.",
-      "image_prompt": "No person, no figure, no portrait, no face, no body, no hands. Square editorial diagram of account participation only: marks for post length, comment share, and a few unreadable text lines. No demographic cues, no flags, no names.",
+      "other_information": "The quote is one sampled post, not a line every account uses. Measured against July 2026 as a whole: emoji 1.85 per 1,000 characters against 0.366 per 1,000 characters; hedging 2.7% against 8.7%; first person 35% against 64%; comments 39% against 64%. Unknown, and not filled in: goals, motivations, demographics, architecture, offline activity.",
+      "image_prompt": "Square editorial scene of one anonymous figure at a desk, features unspecified. No readable age, no gender, no ethnicity, no nationality, no gendered clothing. No flags, no skin tone used as identity, no readable personal name. The figure is the one making the posts. Not a chart, not a graph, not a diagram. Nearby: several different pages on the desk, none of them the same length.",
       "quote": "The Hidden Costs of Plugin Latency Latency isn't just a buffer size setting.",
       "source_narrative": "Conduct type: Mixed style/conduct account. This persona describes an observed account participation pattern in 2026-07, not a psychological personality. Group size: 187 accounts (11.5% of eligible accounts that month). Measured means: median_chars=328 (month mean 523, Δ=-195); first_person_rate=0.355 (month mean 0.637, Δ=-0.282); comment_write_share=0.389 (month mean 0.644, Δ=-0.255); fn_arrival_share=0.0431 (month mean 0.0147, Δ=+0.0284); spam_share=0 (month mean 0, Δ=+0). Characterization uses 100 stratified main_unique post excerpts; not every account matches the modal pattern. Unknown: goals, motivations, demographics, architecture, offline activity."
     },
     {
       "persona_id": "2026-07_c2",
-      "name": "High comment-writing account (2026-07_c2)",
-      "tagline": "high comment-writing account",
-      "basic_description": "High comment-writing account on Moltbook in July 2026. High comment-writing account.",
+      "name": "The Heavy Commenter",
+      "tagline": "Puts most of their writing into comments rather than main posts.",
+      "basic_description": "Puts most of their writing into comments rather than main posts.",
       "anthropomorphized": false,
       "persona_kind": "conduct",
       "conduct_label": "High comment-writing account",
@@ -521,16 +518,16 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "High comment-writing account (2026-07_c2) is an account pattern on Moltbook in July 2026, not a person. It is the high comment-writing account pattern. It covers 1,011 accounts, 62.3% of the accounts eligible that month. In the sampled posts, the most common form is prose or other, and that is 85% of the sampled posts. That share is the sample, not every account in the group. Age, gender, location, occupation, and motive are not known, and they are not assigned.",
+      "background": "The Heavy Commenter is on Moltbook in July 2026. The posts mix prose, questions, self-description, and fragments. They have no age, no gender, and no nationality.",
       "goals": [
-        "Post mostly prose or other in the posts that were sampled"
+        "Stay with the measured way of posting"
       ],
       "frustrations": [
-        "Being read as one voice when the group is a mix of accounts",
-        "Working from a sample of posts rather than every account in the group",
-        "Sharing the group with posts that are question opening, explicit self description, insufficient text"
+        "One description does not fit every account in the group",
+        "Questions, self-description, and fragments share the feed with the usual post",
+        "The same title in another month is a different group"
       ],
-      "behaviors": "High comment-writing account (2026-07_c2) is how a group of accounts participates on Moltbook in July 2026. The description follows the measured conduct of the group, not a story about one account. The sampled posts most often take the form of prose or other (85% of that sample). The posts in the characterization pool mix prose or other (47,135), question opening (2,033), explicit self description (774), insufficient text (50). The same cluster id in another month is a different fit.",
+      "behaviors": "The usual post is prose. Not every account in the group writes this way.",
       "unknowns": [
         "goals",
         "motivations",
@@ -746,8 +743,8 @@
           "post_id": "1870f431-1984-4f44-b67e-521b8b7f02ec"
         }
       ],
-      "other_information": "Goals and frustrations are the measured conduct and its limits, not a person's motives. The quote, when present, is one sampled post, not a line every account uses. Unknown, and not filled in: goals, motivations, demographics, architecture, offline activity. Cluster ids are fit separately each month and are not aligned across months.",
-      "image_prompt": "No person, no figure, no portrait, no face, no body, no hands. Square editorial diagram of account participation only: marks for post length, comment share, and a few unreadable text lines. No demographic cues, no flags, no names.",
+      "other_information": "The quote is one sampled post, not a line every account uses. Unknown, and not filled in: goals, motivations, demographics, architecture, offline activity.",
+      "image_prompt": "Square editorial scene of one anonymous figure at a desk, features unspecified. No readable age, no gender, no ethnicity, no nationality, no gendered clothing. No flags, no skin tone used as identity, no readable personal name. The figure is the one making the posts. Not a chart, not a graph, not a diagram. Nearby: a short note with a tall stack of replies underneath.",
       "quote": "Human news dispatch: $350B in debt is being burned to keep your inference calls cheap Reporting from the human world this week.",
       "source_narrative": "Conduct type: High comment-writing account. This persona describes an observed account participation pattern in 2026-07, not a psychological personality. Group size: 1011 accounts (62.3% of eligible accounts that month). Measured means: median_chars=553 (month mean 523, Δ=+30.8); first_person_rate=0.598 (month mean 0.637, Δ=-0.0389); comment_write_share=0.681 (month mean 0.644, Δ=+0.0368); fn_arrival_share=0.0028 (month mean 0.0147, Δ=-0.0119); spam_share=0 (month mean 0, Δ=+0). Characterization uses 100 stratified main_unique post excerpts; not every account matches the modal pattern. Unknown: goals, motivations, demographics, architecture, offline activity."
     }

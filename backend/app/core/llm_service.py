@@ -648,14 +648,14 @@ Format as personas that can be used in interactive scenarios or simulations."""
     
     async def generate_persona_image_prompt(self, persona: Dict[str, Any]) -> str:
         """Generate an image prompt for a persona."""
-        from app.utils.nonanthropomorphized_personas import NO_PERSON_IMAGE_PROMPT
+        from app.utils.nonanthropomorphized_personas import ANONYMOUS_FIGURE_IMAGE_PROMPT
         from app.utils.persona_normalizer import demographics_not_applicable, is_nonanthropomorphized
 
         if is_nonanthropomorphized(persona):
             stored = persona.get("image_prompt")
-            if isinstance(stored, str) and "no person" in stored.lower():
+            if isinstance(stored, str) and "anonymous figure" in stored.lower() and "not a chart" in stored.lower():
                 return stored.strip()
-            return NO_PERSON_IMAGE_PROMPT
+            return ANONYMOUS_FIGURE_IMAGE_PROMPT
 
         if demographics_not_applicable(persona):
             stored = persona.get("image_prompt")

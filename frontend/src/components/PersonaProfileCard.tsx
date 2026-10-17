@@ -7,6 +7,7 @@ import {
   AlertCircle,
   Smartphone,
   Quote,
+  PenLine,
 } from 'lucide-react';
 import { Persona } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
@@ -378,6 +379,14 @@ export default function PersonaProfileCard({
               )}
             </div>
           </div>
+        )}
+
+        {personaData.behaviors && (
+          <Section
+            title="Behaviors"
+            icon={<PenLine className="h-3 w-3 text-stone-500" />}
+            data={personaData.behaviors}
+          />
         )}
 
         <Section
