@@ -232,13 +232,42 @@ def normalize_persona_to_nested(persona_data: Dict[str, Any]) -> Dict[str, Any]:
         normalized["k_selected"] = persona_data["k_selected"]
     if persona_data.get("image_prompt"):
         normalized["image_prompt"] = persona_data["image_prompt"]
-    
+    if persona_data.get("basic_description"):
+        normalized["basic_description"] = persona_data["basic_description"]
+
+    # Conduct personas carry measured account patterns. Keep those fields.
+    for key in (
+        "anthropomorphized",
+        "persona_kind",
+        "conduct_label",
+        "unit",
+        "group_id",
+        "month",
+        "measured_attributes",
+        "rules",
+        "observed_excerpts",
+        "unknowns",
+        "narrative_template",
+    ):
+        if key in persona_data:
+            normalized[key] = persona_data[key]
+
+    if is_nonanthropomorphized(persona_data):
+        normalized["anthropomorphized"] = False
+        normalized["demographics"] = {}
+        normalized["goals"] = []
+        normalized["frustrations"] = []
+        normalized.pop("motivations", None)
+        normalized.pop("quote", None)
+        normalized.pop("quotes", None)
+        return normalized
+
     # Social media usage
     if "social_media_usage" in persona_data:
         if "demographics" not in normalized:
             normalized["demographics"] = {}
         normalized["demographics"]["social_media_usage"] = persona_data["social_media_usage"]
-    
+
     return normalized
 
 
@@ -255,13 +284,28 @@ _DEMOGRAPHIC_FIELDS = (
 )
 
 
+def is_nonanthropomorphized(persona_data: Optional[Dict[str, Any]]) -> bool:
+    """True when this persona is an observed pattern and must not be given a person.
+
+    Demographic fields stay empty. Goals, motives, and a first-person voice are not filled in.
+    """
+    if not isinstance(persona_data, dict):
+        return False
+    if persona_data.get("anthropomorphized") is False:
+        return True
+    kind = str(persona_data.get("persona_kind") or "").strip().lower().replace("-", "_")
+    return kind in {"conduct", "non_anthropomorphized"}
+
+
 def demographics_not_applicable(persona_data: Optional[Dict[str, Any]]) -> bool:
-    """True when demographic fields name an agent, or are explicitly not applicable.
+    """True when demographic fields name an agent, are empty on purpose, or are not applicable.
 
     Either case is a non-human subject, so image generation must not invent a body.
     """
     if not isinstance(persona_data, dict):
         return False
+    if is_nonanthropomorphized(persona_data):
+        return True
     demo = persona_data.get("demographics")
     if not isinstance(demo, dict) or not demo:
         return False

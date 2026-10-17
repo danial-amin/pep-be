@@ -11,7 +11,7 @@ from app.models.document import Document, DocumentType
 from app.core.llm_service import llm_service
 from app.core.vector_db import vector_db
 from app.schemas.persona import PersonaBasic
-from app.utils.persona_normalizer import normalize_persona_to_nested
+from app.utils.persona_normalizer import is_nonanthropomorphized, normalize_persona_to_nested
 import logging
 
 logger = logging.getLogger(__name__)
@@ -242,7 +242,14 @@ class PersonaService:
         
         if not persona:
             raise ValueError(f"Persona with ID {persona_id} not found")
-        
+
+        if is_nonanthropomorphized(persona.persona_data):
+            logger.info(
+                "Skipping expansion for persona %s; it is a non-anthropomorphized conduct pattern",
+                persona_id,
+            )
+            return persona
+
         # Build a query based on persona characteristics for better retrieval
         persona_name = persona.persona_data.get("name", "")
         persona_occupation = persona.persona_data.get("occupation", "")

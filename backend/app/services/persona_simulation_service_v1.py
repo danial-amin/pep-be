@@ -56,6 +56,18 @@ class PersonaSimulationService:
         """
         persona_data = persona.persona_data or {}
 
+        from app.utils.nonanthropomorphized_personas import conduct_persona_instructions
+        from app.utils.persona_normalizer import is_nonanthropomorphized
+
+        if is_nonanthropomorphized(persona_data):
+            system_prompt = conduct_persona_instructions(persona_data)
+            if facilitator_must_address:
+                system_prompt += (
+                    f'\n\nThe facilitator has said: "{facilitator_must_address}"\n'
+                    "Address that from the measured pattern. Do not invent a personal stake."
+                )
+            return system_prompt
+
         # Extract key persona attributes
         name = persona_data.get("name", persona.name)
         demographics = persona_data.get("demographics", {})
