@@ -47,6 +47,47 @@ def test_visible_profile_stays_short():
     assert all("%" not in goal for goal in goals)
 
 
+def test_repeated_conduct_labels_get_different_titles():
+    from app.utils.nonanthropomorphized_personas import _titles_for_records
+
+    def record(group_id, protocol, comments):
+        baseline = {
+            "median_chars": 800,
+            "first_person_rate": 0.7,
+            "fn_arrival_share": 0.1,
+            "emoji_per_1k": 2,
+            "hedge_rate": 0.15,
+            "comment_write_share": 0.4,
+            "spam_share": 0.05,
+            "protocol_share": 0.02,
+        }
+        values = dict(baseline)
+        values["protocol_share"] = protocol
+        values["comment_write_share"] = comments
+        attributes = [{"name": "month_baseline", "value": baseline}]
+        attributes.extend({"name": key, "value": value} for key, value in values.items())
+        return {
+            "group_id": group_id,
+            "conduct_label": "Low-reply prose poster",
+            "attributes": attributes,
+        }
+
+    titles = _titles_for_records([
+        record("2026-02_c4", 0.46, 0.25),
+        record("2026-02_c10", 0.87, 0.16),
+        {
+            "group_id": "2026-02_c6",
+            "conduct_label": "Long first-person writer",
+            "attributes": [],
+        },
+    ])
+    names = list(titles.values())
+    assert len(names) == len(set(names))
+    assert all("(c" not in name for name in names)
+    assert titles["2026-02_c10"] == "The Protocol Poster"
+    assert titles["2026-02_c6"] == "The Long Writer"
+
+
 def test_stands_out_does_not_call_the_baseline_other_accounts():
     clause = _stands_out("comment_write_share", -0.2)
     assert clause is not None

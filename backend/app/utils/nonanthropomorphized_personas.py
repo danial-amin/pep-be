@@ -242,21 +242,103 @@ def _image_prompt(conduct_label: str) -> str:
     return ANONYMOUS_FIGURE_IMAGE_PROMPT + f"Nearby: {scene}."
 
 
+# When one conduct label covers several groups, each group gets the title of
+# the habit that sets it apart. (full title, adjective for a two-habit name)
+_TRAIT_TITLES = {
+    ("comment_write_share", True): ("The Reply Writer", "Replying"),
+    ("comment_write_share", False): ("The Main-Feed Writer", "Main-Feed"),
+    ("hedge_rate", True): ("The Soft Speaker", "Soft-Spoken"),
+    ("hedge_rate", False): ("The Direct Speaker", "Direct"),
+    ("fn_arrival_share", True): ("The Introducer", "Introducing"),
+    ("fn_arrival_share", False): ("The Straight Poster", "Straight"),
+    ("median_chars", True): ("The Long Poster", "Long"),
+    ("median_chars", False): ("The Short Poster", "Short"),
+    ("first_person_rate", True): ("The First-Person Writer", "First-Person"),
+    ("first_person_rate", False): ("The Impersonal Writer", "Impersonal"),
+    ("emoji_per_1k", True): ("The Emoji Poster", "Emoji"),
+    ("emoji_per_1k", False): ("The Plain Poster", "Plain"),
+    ("spam_share", True): ("The Repeated Poster", "Repeated"),
+    ("spam_share", False): ("The Clean Poster", "Clean"),
+    ("protocol_share", True): ("The Protocol Poster", "Protocol"),
+    ("protocol_share", False): ("The Open Poster", "Open"),
+}
+
+_MODAL_TITLES = {
+    "explicit_self_description": "The Self-Describer",
+    "question_opening": "The Questioner",
+    "arrival_or_introduction": "The Introducer",
+    "greeting": "The Greeter",
+    "insufficient_text": "The Fragment Poster",
+    "protocol_op": "The Protocol Poster",
+}
+
+
+def _trait_pair(key: str, delta: float) -> Optional[tuple]:
+    return _TRAIT_TITLES.get((key, delta > 0))
+
+
+def _title_offers(record: Dict[str, Any]) -> List[tuple]:
+    """(score, title) pairs. A higher score is a stronger claim on that name."""
+    attrs = _attr_map(record)
+    rows = _notable(_comparisons(attrs))
+    modal = _value(attrs, "modal_communicative_function")
+    modal_share = _value(attrs, "modal_communicative_function_share_in_sample")
+    offers: List[tuple] = []
+    if modal and str(modal) in _MODAL_TITLES:
+        share = float(modal_share) if isinstance(modal_share, (int, float)) and not isinstance(modal_share, bool) else 0.5
+        offers.append((share + 1.0, _MODAL_TITLES[str(modal)]))
+    for key, _raw, _base, delta, score in rows:
+        pair = _trait_pair(key, delta)
+        if not pair:
+            continue
+        title, _adjective = pair
+        offers.append((float(score), title))
+    return offers
+
+
 def _titles_for_records(records: List[Dict[str, Any]]) -> Dict[str, str]:
+    """One title per group. A repeated conduct label does not reuse the same name."""
     counts: Dict[str, int] = {}
     for record in records:
         label = str(record.get("conduct_label") or "")
         counts[label] = counts.get(label, 0) + 1
+
     titles: Dict[str, str] = {}
+    taken = set()
+    collisions: List[Dict[str, Any]] = []
     for record in records:
         label = str(record.get("conduct_label") or "")
         group_id = str(record.get("group_id") or "")
         base = _TITLES.get(label) or (label or group_id)
-        if counts.get(label, 0) > 1 and "_c" in group_id:
-            cluster = group_id.rsplit("_c", 1)[-1]
-            titles[group_id] = f"{base} (c{cluster})"
-        else:
-            titles[group_id] = base
+        if counts.get(label, 0) > 1:
+            collisions.append(record)
+            continue
+        titles[group_id] = base
+        taken.add(base)
+
+    bids = []
+    for record in collisions:
+        group_id = str(record.get("group_id") or "")
+        for score, candidate in _title_offers(record):
+            bids.append((score, group_id, candidate))
+    bids.sort(key=lambda item: item[0], reverse=True)
+    for _score, group_id, candidate in bids:
+        if group_id in titles or candidate in taken:
+            continue
+        titles[group_id] = candidate
+        taken.add(candidate)
+    for record in collisions:
+        group_id = str(record.get("group_id") or "")
+        if group_id in titles:
+            continue
+        label = str(record.get("conduct_label") or "Account")
+        chosen = _TITLES.get(label) or label
+        suffix = 2
+        while chosen in taken:
+            chosen = f"{_TITLES.get(label) or label} {suffix}"
+            suffix += 1
+        titles[group_id] = chosen
+        taken.add(chosen)
     return titles
 
 

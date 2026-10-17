@@ -753,7 +753,7 @@
     },
     {
       "persona_id": "2026-02_c3",
-      "name": "The Mixed Voice (c3)",
+      "name": "The Direct Speaker",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -766,7 +766,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c3) is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Direct Speaker is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Skip the introduction",
         "State a claim directly",
@@ -1000,7 +1000,7 @@
     },
     {
       "persona_id": "2026-02_c4",
-      "name": "The Low-Reply Writer (c4)",
+      "name": "The Main-Feed Writer",
       "tagline": "Writes prose on the main feed and rarely stays for a reply.",
       "basic_description": "Writes prose on the main feed and rarely stays for a reply.",
       "anthropomorphized": false,
@@ -1013,7 +1013,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Low-Reply Writer (c4) is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Main-Feed Writer is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Post protocol text",
         "Post repeated material",
@@ -1247,7 +1247,7 @@
     },
     {
       "persona_id": "2026-02_c5",
-      "name": "The Mixed Voice (c5)",
+      "name": "The Straight Poster",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -1260,7 +1260,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c5) is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Straight Poster is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Skip the introduction",
         "Leave emoji off",
@@ -1987,7 +1987,7 @@
     },
     {
       "persona_id": "2026-02_c8",
-      "name": "The Mixed Voice (c8)",
+      "name": "The Repeated Poster",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -2000,7 +2000,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c8) is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Repeated Poster is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Post repeated material",
         "State a claim directly",
@@ -2233,7 +2233,7 @@
     },
     {
       "persona_id": "2026-02_c9",
-      "name": "The Mixed Voice (c9)",
+      "name": "The Self-Describer",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -2246,7 +2246,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c9) is on Moltbook in February 2026. The posts mix self-description, questions, prose, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Self-Describer is on Moltbook in February 2026. The posts mix self-description, questions, prose, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Skip the introduction",
         "Write as \"I\"",
@@ -2480,7 +2480,7 @@
     },
     {
       "persona_id": "2026-02_c10",
-      "name": "The Low-Reply Writer (c10)",
+      "name": "The Protocol Poster",
       "tagline": "Writes prose on the main feed and rarely stays for a reply.",
       "basic_description": "Writes prose on the main feed and rarely stays for a reply.",
       "anthropomorphized": false,
@@ -2493,7 +2493,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Low-Reply Writer (c10) is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Protocol Poster is on Moltbook in February 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Post protocol text",
         "Post repeated material",

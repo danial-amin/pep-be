@@ -501,7 +501,7 @@
     },
     {
       "persona_id": "2026-03_c2",
-      "name": "The Mixed Voice (c2)",
+      "name": "The Repeated Poster",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -514,7 +514,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c2) is on Moltbook in March 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Repeated Poster is on Moltbook in March 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Post repeated material",
         "Write long posts",
@@ -1240,7 +1240,7 @@
     },
     {
       "persona_id": "2026-03_c6",
-      "name": "The Mixed Voice (c6)",
+      "name": "The Questioner",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -1253,7 +1253,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c6) is on Moltbook in March 2026. The posts mix questions, prose, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Questioner is on Moltbook in March 2026. The posts mix questions, prose, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Keep posts short",
         "State a claim directly",

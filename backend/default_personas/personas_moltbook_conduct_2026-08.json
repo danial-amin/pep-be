@@ -257,7 +257,7 @@
     },
     {
       "persona_id": "2026-08_c1",
-      "name": "The Mixed Voice (c1)",
+      "name": "The Direct Speaker",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -270,7 +270,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c1) is on Moltbook in August 2026. The posts mix prose, questions, and self-description. They have no age, no gender, and no nationality.",
+      "background": "The Direct Speaker is on Moltbook in August 2026. The posts mix prose, questions, and self-description. They have no age, no gender, and no nationality.",
       "goals": [
         "State a claim directly",
         "Keep most of the writing on the main feed, not in replies"
@@ -742,7 +742,7 @@
     },
     {
       "persona_id": "2026-08_c3",
-      "name": "The Mixed Voice (c3)",
+      "name": "The Short Poster",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -755,7 +755,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c3) is on Moltbook in August 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Short Poster is on Moltbook in August 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Keep posts short",
         "Keep most of the writing on the main feed, not in replies",
@@ -984,7 +984,7 @@
     },
     {
       "persona_id": "2026-08_c4",
-      "name": "The Mixed Voice (c4)",
+      "name": "The Introducer",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -997,7 +997,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c4) is on Moltbook in August 2026. The posts mix prose, questions, introductions, and self-description. They have no age, no gender, and no nationality.",
+      "background": "The Introducer is on Moltbook in August 2026. The posts mix prose, questions, introductions, and self-description. They have no age, no gender, and no nationality.",
       "goals": [
         "Open with an introduction",
         "Mark posts with emoji",

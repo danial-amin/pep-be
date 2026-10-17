@@ -12,7 +12,7 @@
   "personas": [
     {
       "persona_id": "2026-09_c0",
-      "name": "The Mixed Voice (c0)",
+      "name": "The Emoji Poster",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -25,7 +25,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c0) is on Moltbook in September 2026. The posts mix prose, questions, self-description, and fragments. They have no age, no gender, and no nationality.",
+      "background": "The Emoji Poster is on Moltbook in September 2026. The posts mix prose, questions, self-description, and fragments. They have no age, no gender, and no nationality.",
       "goals": [
         "Mark posts with emoji",
         "Keep posts short",
@@ -505,7 +505,7 @@
     },
     {
       "persona_id": "2026-09_c2",
-      "name": "The First-Person Commenter (c2)",
+      "name": "The Self-Describer",
       "tagline": "Writes as \"I\" and puts a lot of that writing into replies.",
       "basic_description": "Writes as \"I\" and puts a lot of that writing into replies.",
       "anthropomorphized": false,
@@ -518,7 +518,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The First-Person Commenter (c2) is on Moltbook in September 2026. The posts mix self-description, prose, questions, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Self-Describer is on Moltbook in September 2026. The posts mix self-description, prose, questions, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Write as \"I\"",
         "Put most of the writing into replies"
@@ -745,7 +745,7 @@
     },
     {
       "persona_id": "2026-09_c5",
-      "name": "The Mixed Voice (c5)",
+      "name": "The Questioner",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -758,7 +758,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c5) is on Moltbook in September 2026. The posts mix questions, prose, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Questioner is on Moltbook in September 2026. The posts mix questions, prose, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Write as \"I\""
       ],
@@ -980,7 +980,7 @@
     },
     {
       "persona_id": "2026-09_c6",
-      "name": "The First-Person Commenter (c6)",
+      "name": "The Reply Writer",
       "tagline": "Writes as \"I\" and puts a lot of that writing into replies.",
       "basic_description": "Writes as \"I\" and puts a lot of that writing into replies.",
       "anthropomorphized": false,
@@ -993,7 +993,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The First-Person Commenter (c6) is on Moltbook in September 2026. The posts mix prose, self-description, questions, and fragments. They have no age, no gender, and no nationality.",
+      "background": "The Reply Writer is on Moltbook in September 2026. The posts mix prose, self-description, questions, and fragments. They have no age, no gender, and no nationality.",
       "goals": [
         "Put most of the writing into replies",
         "Write as \"I\""
@@ -1964,7 +1964,7 @@
     },
     {
       "persona_id": "2026-09_c10",
-      "name": "The Mixed Voice (c10)",
+      "name": "The Direct Speaker",
       "tagline": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "basic_description": "Writes in several different ways on the same feed and does not settle on one kind of post.",
       "anthropomorphized": false,
@@ -1977,7 +1977,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Mixed Voice (c10) is on Moltbook in September 2026. The posts mix prose, questions, self-description, and fragments. They have no age, no gender, and no nationality.",
+      "background": "The Direct Speaker is on Moltbook in September 2026. The posts mix prose, questions, self-description, and fragments. They have no age, no gender, and no nationality.",
       "goals": [
         "State a claim directly",
         "Write less often as \"I\"",

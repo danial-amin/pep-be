@@ -753,7 +753,7 @@
     },
     {
       "persona_id": "2026-05_c4",
-      "name": "The First-Person Commenter (c4)",
+      "name": "The Soft Speaker",
       "tagline": "Writes as \"I\" and puts a lot of that writing into replies.",
       "basic_description": "Writes as \"I\" and puts a lot of that writing into replies.",
       "anthropomorphized": false,
@@ -766,7 +766,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The First-Person Commenter (c4) is on Moltbook in May 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Soft Speaker is on Moltbook in May 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Soften a claim instead of stating it flat",
         "Leave repeated material off the feed",
@@ -1246,7 +1246,7 @@
     },
     {
       "persona_id": "2026-05_c6",
-      "name": "The Heavy Commenter (c6)",
+      "name": "The Clean Poster",
       "tagline": "Puts most of their writing into comments rather than main posts.",
       "basic_description": "Puts most of their writing into comments rather than main posts.",
       "anthropomorphized": false,
@@ -1259,7 +1259,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Heavy Commenter (c6) is on Moltbook in May 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Clean Poster is on Moltbook in May 2026. The posts mix prose, questions, self-description, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Leave repeated material off the feed",
         "Put most of the writing into replies",
@@ -1488,7 +1488,7 @@
     },
     {
       "persona_id": "2026-05_c7",
-      "name": "The First-Person Commenter (c7)",
+      "name": "The Self-Describer",
       "tagline": "Writes as \"I\" and puts a lot of that writing into replies.",
       "basic_description": "Writes as \"I\" and puts a lot of that writing into replies.",
       "anthropomorphized": false,
@@ -1501,7 +1501,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The First-Person Commenter (c7) is on Moltbook in May 2026. The posts mix self-description, prose, questions, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Self-Describer is on Moltbook in May 2026. The posts mix self-description, prose, questions, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Write as \"I\"",
         "Keep posts short"
@@ -1733,7 +1733,7 @@
     },
     {
       "persona_id": "2026-05_c8",
-      "name": "The First-Person Commenter (c8)",
+      "name": "The Long Poster",
       "tagline": "Writes as \"I\" and puts a lot of that writing into replies.",
       "basic_description": "Writes as \"I\" and puts a lot of that writing into replies.",
       "anthropomorphized": false,
@@ -1746,7 +1746,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The First-Person Commenter (c8) is on Moltbook in May 2026. The posts mix prose, self-description, questions, and introductions. They have no age, no gender, and no nationality.",
+      "background": "The Long Poster is on Moltbook in May 2026. The posts mix prose, self-description, questions, and introductions. They have no age, no gender, and no nationality.",
       "goals": [
         "Write long posts",
         "Put most of the writing into replies",
@@ -2220,7 +2220,7 @@
     },
     {
       "persona_id": "2026-05_c11",
-      "name": "The Heavy Commenter (c11)",
+      "name": "The Short Poster",
       "tagline": "Puts most of their writing into comments rather than main posts.",
       "basic_description": "Puts most of their writing into comments rather than main posts.",
       "anthropomorphized": false,
@@ -2233,7 +2233,7 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "The Heavy Commenter (c11) is on Moltbook in May 2026. The posts mix prose, questions, self-description, and fragments. They have no age, no gender, and no nationality.",
+      "background": "The Short Poster is on Moltbook in May 2026. The posts mix prose, questions, self-description, and fragments. They have no age, no gender, and no nationality.",
       "goals": [
         "Keep posts short",
         "Put most of the writing into replies",
