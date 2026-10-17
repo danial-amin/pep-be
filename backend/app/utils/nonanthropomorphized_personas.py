@@ -172,8 +172,313 @@ def _behaviors(attrs: Dict[str, Dict[str, Any]]) -> str:
     return " ".join(lines)
 
 
+_MONTH_NAMES = {
+    "01": "January",
+    "02": "February",
+    "03": "March",
+    "04": "April",
+    "05": "May",
+    "06": "June",
+    "07": "July",
+    "08": "August",
+    "09": "September",
+    "10": "October",
+    "11": "November",
+    "12": "December",
+}
+
+# (when higher than the month, when lower). Infinitive, the way PEP states a goal.
+_GOAL_PHRASES = {
+    "median_chars": (
+        "Write longer posts than the rest of that month",
+        "Write shorter posts than the rest of that month",
+    ),
+    "first_person_rate": (
+        "Write in the first person more often than the month",
+        "Write in the first person less often than the month",
+    ),
+    "comment_write_share": (
+        "Put more of their writing into comments than the month",
+        "Put less of their writing into comments than the month",
+    ),
+    "fn_arrival_share": (
+        "Open with an arrival or introduction more often than the month",
+        "Open with an arrival or introduction less often than the month",
+    ),
+    "spam_share": (
+        "Post material scored as spam more often than the month",
+        "Post material scored as spam less often than the month",
+    ),
+    "hedge_rate": (
+        "Hedge claims more often than the month",
+        "Hedge claims less often than the month",
+    ),
+    "emoji_per_1k": (
+        "Use more emoji than the month",
+        "Use less emoji than the month",
+    ),
+    "protocol_share": (
+        "Post protocol text more often than the month",
+        "Post protocol text less often than the month",
+    ),
+}
+
+
+def _month_label(month: str) -> str:
+    year, _, mm = month.partition("-")
+    return f"{_MONTH_NAMES.get(mm, mm)} {year}".strip()
+
+
+def _value(attrs: Dict[str, Dict[str, Any]], name: str) -> Any:
+    raw = (attrs.get(name) or {}).get("value")
+    if isinstance(raw, bool):
+        return None
+    return raw
+
+
+def _plain_code(code: str) -> str:
+    return str(code).replace("_", " ")
+
+
+def _comparisons(attrs: Dict[str, Dict[str, Any]]) -> List[tuple]:
+    baseline = _value(attrs, "month_baseline")
+    if not isinstance(baseline, dict):
+        baseline = {}
+    rows = []
+    for key, _label in _STYLE_FIELDS:
+        raw = _value(attrs, key)
+        base = baseline.get(key)
+        if not isinstance(raw, (int, float)) or not isinstance(base, (int, float)):
+            continue
+        if isinstance(raw, bool) or isinstance(base, bool):
+            continue
+        scale = abs(base) if abs(base) > 1e-9 else 1.0
+        rows.append((key, raw, base, raw - base, abs(raw - base) / scale))
+    rows.sort(key=lambda row: row[4], reverse=True)
+    return rows
+
+
+def _notable(rows: List[tuple]) -> List[tuple]:
+    kept = []
+    for key, raw, base, delta, score in rows:
+        if key == "median_chars" and abs(delta) < 80:
+            continue
+        if key == "emoji_per_1k" and abs(delta) < 0.5:
+            continue
+        if key not in {"median_chars", "emoji_per_1k"} and abs(delta) < 0.04:
+            continue
+        kept.append((key, raw, base, delta, score))
+    return kept
+
+
+def _goal_lines(rows: List[tuple], modal: Optional[str]) -> List[str]:
+    lines = []
+    for key, _raw, _base, delta, _score in _notable(rows)[:4]:
+        pair = _GOAL_PHRASES.get(key)
+        if not pair:
+            continue
+        lines.append(pair[0] if delta > 0 else pair[1])
+    if not lines and modal:
+        lines.append(f"Post mostly {_plain_code(modal)} in the posts that were sampled")
+    return lines
+
+
+def _frustration_lines(
+    attrs: Dict[str, Dict[str, Any]],
+    modal: Optional[str],
+    modal_share: Any,
+) -> List[str]:
+    lines = [
+        "Being read as one voice when the group is a mix of accounts",
+        "Working from a sample of posts rather than every account in the group",
+    ]
+    if isinstance(modal_share, (int, float)) and not isinstance(modal_share, bool) and modal_share < 0.6:
+        label = _plain_code(modal) if modal else "one post type"
+        lines.append(
+            f"Having no single post type that covers the sample — {label} is {modal_share:.0%} of it"
+        )
+    variation = _value(attrs, "observed_variation")
+    codes = variation.get("minority_codes") if isinstance(variation, dict) else None
+    if isinstance(codes, dict) and codes:
+        ranked = sorted(codes.items(), key=lambda item: item[1], reverse=True)
+        others = [_plain_code(name) for name, _count in ranked if name != modal][:3]
+        if others:
+            lines.append("Sharing the group with posts that are " + ", ".join(others))
+    return lines[:4]
+
+
+def _third_person(phrase: str) -> str:
+    verb, _, rest = phrase.partition(" ")
+    if verb.endswith("e"):
+        verb = verb + "s"
+    elif verb.endswith("y"):
+        verb = verb[:-1] + "ies"
+    else:
+        verb = verb + "s"
+    return f"{verb} {rest}" if rest else verb
+
+
+def _tagline(conduct_label: str, rows: List[tuple]) -> str:
+    bits = []
+    for key, _raw, _base, delta, _score in _notable(rows)[:2]:
+        pair = _GOAL_PHRASES.get(key)
+        if not pair:
+            continue
+        bits.append(_third_person(pair[0] if delta > 0 else pair[1]))
+    if not bits:
+        fallback = conduct_label[:1].lower() + conduct_label[1:] if conduct_label else "an account pattern"
+        return fallback
+    if len(bits) == 1:
+        return bits[0]
+    return f"{bits[0]}, and {bits[1][0].lower()}{bits[1][1:]}"
+
+
+def _as_measure(key: str, raw: float) -> str:
+    if key == "median_chars":
+        return f"about {_fmt_num(raw)} characters"
+    if key == "emoji_per_1k":
+        return f"{_fmt_num(raw)} per 1,000 characters"
+    if 0 <= raw <= 1:
+        return f"{raw:.0%}" if raw >= 0.1 else f"{raw:.1%}"
+    return _fmt_num(raw)
+
+
+def _comparison_sentence(key: str, raw: float, base: float, delta: float) -> str:
+    higher = delta > 0
+    if key == "median_chars":
+        direction = "longer" if higher else "shorter"
+        return (
+            f"A typical post is about {_fmt_num(raw)} characters, {direction} than "
+            f"the month average of about {_fmt_num(base)}."
+        )
+    if key == "emoji_per_1k":
+        direction = "more" if higher else "less"
+        return (
+            f"Emoji show up {_fmt_num(raw)} times per 1,000 characters, {direction} than "
+            f"the month's {_fmt_num(base)}."
+        )
+    if key == "comment_write_share":
+        direction = "more" if higher else "less"
+        return f"About {raw:.0%} of the writing is comments, {direction} than the month's {base:.0%}."
+    if key == "first_person_rate":
+        direction = "more" if higher else "less"
+        return (
+            f"About {raw:.0%} of the writing is in the first person, {direction} than the month's {base:.0%}."
+        )
+    if key == "fn_arrival_share":
+        direction = "more" if higher else "less"
+        return (
+            f"About {raw:.0%} of posts open as an arrival or introduction, {direction} than the month's {base:.0%}."
+        )
+    if key == "spam_share":
+        direction = "more" if higher else "less"
+        told = f"{raw:.0%}" if raw >= 0.1 else f"{raw:.1%}"
+        month = f"{base:.0%}" if base >= 0.1 else f"{base:.1%}"
+        return f"About {told} of posts are scored as spam, {direction} than the month's {month}."
+    if key == "hedge_rate":
+        direction = "more" if higher else "less"
+        told = f"{raw:.0%}" if raw >= 0.1 else f"{raw:.1%}"
+        month = f"{base:.0%}" if base >= 0.1 else f"{base:.1%}"
+        return f"About {told} of the writing hedges a claim, {direction} than the month's {month}."
+    if key == "protocol_share":
+        direction = "more" if higher else "less"
+        return (
+            f"About {raw:.1%} of posts are protocol text, {direction} than the month's {base:.1%}."
+        )
+    direction = "higher" if higher else "lower"
+    return f"{_as_measure(key, raw)} is {direction} than the month average of {_as_measure(key, base)}."
+
+
+def _background(
+    name: str,
+    month: str,
+    conduct_label: str,
+    attrs: Dict[str, Dict[str, Any]],
+    rows: List[tuple],
+    modal: Optional[str],
+    modal_share: Any,
+) -> str:
+    when = _month_label(month)
+    n_accounts = _value(attrs, "n_accounts")
+    account_share = _value(attrs, "account_share")
+    called = conduct_label[0].lower() + conduct_label[1:] if conduct_label else "an account pattern"
+    sentences = [
+        f"{name} is an account pattern on Moltbook in {when}, not a person. It is the {called} pattern."
+    ]
+    if isinstance(n_accounts, (int, float)):
+        share_bit = ""
+        if isinstance(account_share, (int, float)) and not isinstance(account_share, bool):
+            share_bit = f", {account_share:.1%} of the accounts eligible that month"
+        sentences.append(f"It covers {int(n_accounts):,} accounts{share_bit}.")
+    for key, raw, base, delta, _score in _notable(rows)[:3]:
+        sentences.append(_comparison_sentence(key, raw, base, delta))
+    if modal:
+        share_bit = ""
+        if isinstance(modal_share, (int, float)) and not isinstance(modal_share, bool):
+            share_bit = f", and that is {modal_share:.0%} of the sampled posts"
+        sentences.append(
+            f"In the sampled posts, the most common form is {_plain_code(modal)}{share_bit}. "
+            "That share is the sample, not every account in the group."
+        )
+    sentences.append(
+        "Age, gender, location, occupation, and motive are not known, and they are not assigned."
+    )
+    return " ".join(sentences)
+
+
+def _behaviors_prose(
+    name: str,
+    month: str,
+    attrs: Dict[str, Dict[str, Any]],
+    modal: Optional[str],
+    modal_share: Any,
+) -> str:
+    when = _month_label(month)
+    variation = _value(attrs, "observed_variation")
+    codes = variation.get("minority_codes") if isinstance(variation, dict) else None
+    mix = ""
+    if isinstance(codes, dict) and codes:
+        ranked = sorted(codes.items(), key=lambda item: item[1], reverse=True)
+        parts = [f"{_plain_code(code)} ({count:,})" for code, count in ranked[:4]]
+        mix = " The posts in the characterization pool mix " + ", ".join(parts) + "."
+    modal_bit = ""
+    if modal:
+        share_bit = ""
+        if isinstance(modal_share, (int, float)) and not isinstance(modal_share, bool):
+            share_bit = f" ({modal_share:.0%} of that sample)"
+        modal_bit = f" The sampled posts most often take the form of {_plain_code(modal)}{share_bit}."
+    return (
+        f"{name} is how a group of accounts participates on Moltbook in {when}. "
+        f"The description follows the measured conduct of the group, not a story about one account."
+        f"{modal_bit}{mix} "
+        "The same cluster id in another month is a different fit."
+    )
+
+
+def _quote_from_excerpts(excerpts: List[Dict[str, str]]) -> Optional[str]:
+    ordered = sorted(excerpts, key=lambda item: 0 if item.get("stratum") == "central" else 1)
+    for item in ordered:
+        text = (item.get("text") or "").strip()
+        if not text:
+            continue
+        sentence = text
+        for mark in (". ", "! ", "? "):
+            if mark in text:
+                sentence = text.split(mark, 1)[0].strip() + mark.strip()
+                break
+        if len(sentence) > 220:
+            sentence = sentence[:217].rstrip() + "..."
+        return sentence
+    return None
+
+
 def persona_from_conduct_record(record: Dict[str, Any]) -> Dict[str, Any]:
-    """Turn one conduct-group record into a persona with no demographic fields."""
+    """Turn one conduct-group record into a PEP-shaped persona with no demographics.
+
+    Background, goals, frustrations, behaviors, and quote use the same slots as
+    every other PEP persona. The sentences stay with the measured account pattern.
+    They do not add a person, a motive, or a demographic.
+    """
     group_id = str(record.get("group_id") or "").strip()
     if not group_id:
         raise ValueError("Conduct record is missing group_id")
@@ -182,15 +487,23 @@ def persona_from_conduct_record(record: Dict[str, Any]) -> Dict[str, Any]:
     narrative = str(record.get("narrative") or "").strip()
     attrs = _attr_map(record)
     unknowns = _unknowns(narrative)
+    rows = _comparisons(attrs)
+    modal = _value(attrs, "modal_communicative_function")
+    modal_share = _value(attrs, "modal_communicative_function_share_in_sample")
+    if modal is not None:
+        modal = str(modal)
     name = f"{conduct_label} ({group_id})"
-    overview = (
-        f"Observed account participation pattern in {month}: {conduct_label}. "
-        "Not a person, and not a psychological personality."
-    )
-    return {
+    tagline = _tagline(conduct_label, rows)
+    excerpts = _observed_excerpts(record)
+    quote = _quote_from_excerpts(excerpts)
+    spoken = tagline[0].upper() + tagline[1:] if tagline else ""
+    if spoken and not spoken.endswith("."):
+        spoken = spoken + "."
+    overview = f"{conduct_label} on Moltbook in {_month_label(month)}. {spoken}".strip()
+    persona: Dict[str, Any] = {
         "persona_id": group_id,
         "name": name,
-        "tagline": conduct_label,
+        "tagline": tagline,
         "basic_description": overview,
         "anthropomorphized": False,
         "persona_kind": "conduct",
@@ -202,23 +515,28 @@ def persona_from_conduct_record(record: Dict[str, Any]) -> Dict[str, Any]:
         "objective": "",
         "segment_name": "",
         "k_selected": None,
-        "background": narrative,
-        "goals": [],
-        "frustrations": [],
-        "behaviors": _behaviors(attrs),
+        "background": _background(name, month, conduct_label, attrs, rows, modal, modal_share),
+        "goals": _goal_lines(rows, modal),
+        "frustrations": _frustration_lines(attrs, modal, modal_share),
+        "behaviors": _behaviors_prose(name, month, attrs, modal, modal_share),
         "unknowns": unknowns,
         "rules": record.get("rules") or {},
         "narrative_template": record.get("narrative_template"),
         "measured_attributes": _compact_attributes(record),
-        "observed_excerpts": _observed_excerpts(record),
+        "observed_excerpts": excerpts,
         "other_information": (
-            "This persona is an observed account participation pattern, not a person. "
-            f"Unknown, and left blank: {', '.join(unknowns)}. "
-            "Not every account in the group matches the modal pattern. "
+            "Goals and frustrations are the measured conduct and its limits, not a person's motives. "
+            "The quote, when present, is one sampled post, not a line every account uses. "
+            f"Unknown, and not filled in: {', '.join(unknowns)}. "
             "Cluster ids are fit separately each month and are not aligned across months."
         ),
         "image_prompt": NO_PERSON_IMAGE_PROMPT,
     }
+    if quote:
+        persona["quote"] = quote
+    if narrative:
+        persona["source_narrative"] = narrative
+    return persona
 
 
 def _cluster_sort_key(path: Path) -> int:
@@ -247,8 +565,9 @@ def build_month_persona_set(month_dir: Path) -> Dict[str, Any]:
         "metadata": {
             "context": (
                 f"Moltbook {month}. Non-anthropomorphized conduct personas. "
-                "Each persona is an observed account participation pattern, not a person. "
-                "Demographic fields are empty. Goals and motivations are empty. "
+                "Each persona uses the PEP profile — tagline, background, goals, frustrations, "
+                "behaviors, and a quote — and describes an account pattern, not a person. "
+                "Demographic fields are empty. Goals are measured conduct, not motives. "
                 "Cluster ids are fit separately each month and are not aligned across months."
             ),
             "month": month,
@@ -337,6 +656,7 @@ UNKNOWNS — if asked about these, say they are unknown: {unknown_line}.
 
 Rules:
 - Describe the group pattern. Do not claim every account shows the modal conduct.
+- Goals and frustrations in this profile are measured conduct and its limits, not personal motives.
 - Do not add a personality, a backstory, or a demographic.
 - If asked who you are, say you are this measured account pattern, not a person.
 - Stay with the measurements and the sampled posts.

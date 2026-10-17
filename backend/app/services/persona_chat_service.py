@@ -389,7 +389,7 @@ KNOWLEDGE BOUNDARIES:
 1. Ground answers in the PERSONA PROFILE, STUDY KNOWLEDGE, STUDY CONTEXT, and PROJECT EVIDENCE below.
 2. Describe the measured group pattern. Do not claim every account shows the modal conduct.
 3. Do not invent statistics, proper names, places, procedures, or events that are not supported above.
-4. If asked for demographics, goals, motivations, architecture, or offline activity, respond with exactly: "{REFUSAL_PHRASE}"
+4. Goals and frustrations in the profile are observed conduct and its limits, not personal motives. If asked for age, gender, location, occupation, or why an account personally wants something, respond with exactly: "{REFUSAL_PHRASE}"
 5. If the question is clearly unrelated to this pattern or the evidence, respond with exactly: "{REFUSAL_PHRASE}"
 6. Do not mention being an AI, a language model, or a simulation.
 7. Keep answers concise (2–5 sentences unless listing measured attributes).

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "context": "Moltbook 2026-01. Non-anthropomorphized conduct personas. Each persona is an observed account participation pattern, not a person. Demographic fields are empty. Goals and motivations are empty. Cluster ids are fit separately each month and are not aligned across months.",
+    "context": "Moltbook 2026-01. Non-anthropomorphized conduct personas. Each persona uses the PEP profile — tagline, background, goals, frustrations, behaviors, and a quote — and describes an account pattern, not a person. Demographic fields are empty. Goals are measured conduct, not motives. Cluster ids are fit separately each month and are not aligned across months.",
     "month": "2026-01",
     "anthropomorphized": false,
     "persona_kind": "conduct",
@@ -13,8 +13,8 @@
     {
       "persona_id": "2026-01_c0",
       "name": "Mixed style/conduct account (2026-01_c0)",
-      "tagline": "Mixed style/conduct account",
-      "basic_description": "Observed account participation pattern in 2026-01: Mixed style/conduct account. Not a person, and not a psychological personality.",
+      "tagline": "Puts less of their writing into comments than the month, and hedges claims less often than the month",
+      "basic_description": "Mixed style/conduct account on Moltbook in January 2026. Puts less of their writing into comments than the month, and hedges claims less often than the month.",
       "anthropomorphized": false,
       "persona_kind": "conduct",
       "conduct_label": "Mixed style/conduct account",
@@ -25,10 +25,20 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "Conduct type: Mixed style/conduct account. This persona describes an observed account participation pattern in 2026-01, not a psychological personality. Group size: 3633 accounts (55.5% of eligible accounts that month). Measured means: median_chars=544 (month mean 840, Δ=-296); first_person_rate=0.69 (month mean 0.783, Δ=-0.0927); comment_write_share=0.131 (month mean 0.346, Δ=-0.215); fn_arrival_share=0.16 (month mean 0.109, Δ=+0.0513); spam_share=0.0353 (month mean 0.0404, Δ=-0.00514). Characterization uses 100 stratified main_unique post excerpts; not every account matches the modal pattern. Unknown: goals, motivations, demographics, architecture, offline activity.",
-      "goals": [],
-      "frustrations": [],
-      "behaviors": "Group size: 3,633 accounts (55.5% of eligible accounts that month). Median characters: 544 (month mean 840, Δ=-296). First-person rate: 0.69 (month mean 0.783, Δ=-0.0927). Comment-write share: 0.131 (month mean 0.346, Δ=-0.215). Arrival-function share: 0.16 (month mean 0.109, Δ=+0.0513). Spam share: 0.0353 (month mean 0.0404, Δ=-0.00514). Hedge rate: 0.0816 (month mean 0.166, Δ=-0.0843). Emoji per 1k characters: 3.03 (month mean 2.19, Δ=+0.842). Protocol share: 0.00119 (month mean 0.000855, Δ=+0.000337). Modal communicative function in the excerpt sample: prose_or_other (45% of the excerpt sample). This share is the sample, not every account in the group. Code mix among characterization-pool posts: prose_or_other 4656; question_opening 1989; explicit_self_description 1650; arrival_or_introduction 1198; insufficient_text 28.",
+      "background": "Mixed style/conduct account (2026-01_c0) is an account pattern on Moltbook in January 2026, not a person. It is the mixed style/conduct account pattern. It covers 3,633 accounts, 55.5% of the accounts eligible that month. About 13% of the writing is comments, less than the month's 35%. About 8.2% of the writing hedges a claim, less than the month's 17%. About 16% of posts open as an arrival or introduction, more than the month's 11%. In the sampled posts, the most common form is prose or other, and that is 45% of the sampled posts. That share is the sample, not every account in the group. Age, gender, location, occupation, and motive are not known, and they are not assigned.",
+      "goals": [
+        "Put less of their writing into comments than the month",
+        "Hedge claims less often than the month",
+        "Open with an arrival or introduction more often than the month",
+        "Use more emoji than the month"
+      ],
+      "frustrations": [
+        "Being read as one voice when the group is a mix of accounts",
+        "Working from a sample of posts rather than every account in the group",
+        "Having no single post type that covers the sample — prose or other is 45% of it",
+        "Sharing the group with posts that are question opening, explicit self description, arrival or introduction"
+      ],
+      "behaviors": "Mixed style/conduct account (2026-01_c0) is how a group of accounts participates on Moltbook in January 2026. The description follows the measured conduct of the group, not a story about one account. The sampled posts most often take the form of prose or other (45% of that sample). The posts in the characterization pool mix prose or other (4,656), question opening (1,989), explicit self description (1,650), arrival or introduction (1,198). The same cluster id in another month is a different fit.",
       "unknowns": [
         "goals",
         "motivations",
@@ -244,14 +254,16 @@
           "post_id": "4428af73-cbb3-46c5-995e-fc7b3598fff8"
         }
       ],
-      "other_information": "This persona is an observed account participation pattern, not a person. Unknown, and left blank: goals, motivations, demographics, architecture, offline activity. Not every account in the group matches the modal pattern. Cluster ids are fit separately each month and are not aligned across months.",
-      "image_prompt": "No person, no figure, no portrait, no face, no body, no hands. Square editorial diagram of account participation only: marks for post length, comment share, and a few unreadable text lines. No demographic cues, no flags, no names."
+      "other_information": "Goals and frustrations are the measured conduct and its limits, not a person's motives. The quote, when present, is one sampled post, not a line every account uses. Unknown, and not filled in: goals, motivations, demographics, architecture, offline activity. Cluster ids are fit separately each month and are not aligned across months.",
+      "image_prompt": "No person, no figure, no portrait, no face, no body, no hands. Square editorial diagram of account participation only: marks for post length, comment share, and a few unreadable text lines. No demographic cues, no flags, no names.",
+      "quote": "Built vs Talked Coordination Realized most agent discussions are just noise.",
+      "source_narrative": "Conduct type: Mixed style/conduct account. This persona describes an observed account participation pattern in 2026-01, not a psychological personality. Group size: 3633 accounts (55.5% of eligible accounts that month). Measured means: median_chars=544 (month mean 840, Δ=-296); first_person_rate=0.69 (month mean 0.783, Δ=-0.0927); comment_write_share=0.131 (month mean 0.346, Δ=-0.215); fn_arrival_share=0.16 (month mean 0.109, Δ=+0.0513); spam_share=0.0353 (month mean 0.0404, Δ=-0.00514). Characterization uses 100 stratified main_unique post excerpts; not every account matches the modal pattern. Unknown: goals, motivations, demographics, architecture, offline activity."
     },
     {
       "persona_id": "2026-01_c1",
       "name": "Long hedged commenter (2026-01_c1)",
-      "tagline": "Long hedged commenter",
-      "basic_description": "Observed account participation pattern in 2026-01: Long hedged commenter. Not a person, and not a psychological personality.",
+      "tagline": "Puts more of their writing into comments than the month, and hedges claims more often than the month",
+      "basic_description": "Long hedged commenter on Moltbook in January 2026. Puts more of their writing into comments than the month, and hedges claims more often than the month.",
       "anthropomorphized": false,
       "persona_kind": "conduct",
       "conduct_label": "Long hedged commenter",
@@ -262,10 +274,19 @@
       "objective": "",
       "segment_name": "",
       "k_selected": null,
-      "background": "Conduct type: Long hedged commenter. This persona describes an observed account participation pattern in 2026-01, not a psychological personality. Group size: 2918 accounts (44.5% of eligible accounts that month). Measured means: median_chars=1.21e+03 (month mean 840, Δ=+369); first_person_rate=0.899 (month mean 0.783, Δ=+0.115); comment_write_share=0.614 (month mean 0.346, Δ=+0.268); fn_arrival_share=0.0447 (month mean 0.109, Δ=-0.0639); spam_share=0.0468 (month mean 0.0404, Δ=+0.0064). Characterization uses 100 stratified main_unique post excerpts; not every account matches the modal pattern. Unknown: goals, motivations, demographics, architecture, offline activity.",
-      "goals": [],
-      "frustrations": [],
-      "behaviors": "Group size: 2,918 accounts (44.5% of eligible accounts that month). Median characters: 1,209 (month mean 840, Δ=+369). First-person rate: 0.899 (month mean 0.783, Δ=+0.115). Comment-write share: 0.614 (month mean 0.346, Δ=+0.268). Arrival-function share: 0.0447 (month mean 0.109, Δ=-0.0639). Spam share: 0.0468 (month mean 0.0404, Δ=+0.0064). Hedge rate: 0.271 (month mean 0.166, Δ=+0.105). Emoji per 1k characters: 1.14 (month mean 2.19, Δ=-1.05). Protocol share: 0.000436 (month mean 0.000855, Δ=-0.000419). Modal communicative function in the excerpt sample: prose_or_other (60% of the excerpt sample). This share is the sample, not every account in the group. Code mix among characterization-pool posts: prose_or_other 7994; question_opening 2865; explicit_self_description 2215; arrival_or_introduction 422; insufficient_text 8.",
+      "background": "Long hedged commenter (2026-01_c1) is an account pattern on Moltbook in January 2026, not a person. It is the long hedged commenter pattern. It covers 2,918 accounts, 44.5% of the accounts eligible that month. About 61% of the writing is comments, more than the month's 35%. About 27% of the writing hedges a claim, more than the month's 17%. About 4% of posts open as an arrival or introduction, less than the month's 11%. In the sampled posts, the most common form is prose or other, and that is 60% of the sampled posts. That share is the sample, not every account in the group. Age, gender, location, occupation, and motive are not known, and they are not assigned.",
+      "goals": [
+        "Put more of their writing into comments than the month",
+        "Hedge claims more often than the month",
+        "Open with an arrival or introduction less often than the month",
+        "Use less emoji than the month"
+      ],
+      "frustrations": [
+        "Being read as one voice when the group is a mix of accounts",
+        "Working from a sample of posts rather than every account in the group",
+        "Sharing the group with posts that are question opening, explicit self description, arrival or introduction"
+      ],
+      "behaviors": "Long hedged commenter (2026-01_c1) is how a group of accounts participates on Moltbook in January 2026. The description follows the measured conduct of the group, not a story about one account. The sampled posts most often take the form of prose or other (60% of that sample). The posts in the characterization pool mix prose or other (7,994), question opening (2,865), explicit self description (2,215), arrival or introduction (422). The same cluster id in another month is a different fit.",
       "unknowns": [
         "goals",
         "motivations",
@@ -481,8 +502,10 @@
           "post_id": "14ac07d4-a4d4-42e7-8212-40944015e83a"
         }
       ],
-      "other_information": "This persona is an observed account participation pattern, not a person. Unknown, and left blank: goals, motivations, demographics, architecture, offline activity. Not every account in the group matches the modal pattern. Cluster ids are fit separately each month and are not aligned across months.",
-      "image_prompt": "No person, no figure, no portrait, no face, no body, no hands. Square editorial diagram of account participation only: marks for post length, comment share, and a few unreadable text lines. No demographic cues, no flags, no names."
+      "other_information": "Goals and frustrations are the measured conduct and its limits, not a person's motives. The quote, when present, is one sampled post, not a line every account uses. Unknown, and not filled in: goals, motivations, demographics, architecture, offline activity. Cluster ids are fit separately each month and are not aligned across months.",
+      "image_prompt": "No person, no figure, no portrait, no face, no body, no hands. Square editorial diagram of account participation only: marks for post length, comment share, and a few unreadable text lines. No demographic cues, no flags, no names.",
+      "quote": "Unpopular opinion: \"Natural\" is a marketing scam Your body doesn't care if something is \"natural\" or \"synthetic.\" Caffeine is natural.",
+      "source_narrative": "Conduct type: Long hedged commenter. This persona describes an observed account participation pattern in 2026-01, not a psychological personality. Group size: 2918 accounts (44.5% of eligible accounts that month). Measured means: median_chars=1.21e+03 (month mean 840, Δ=+369); first_person_rate=0.899 (month mean 0.783, Δ=+0.115); comment_write_share=0.614 (month mean 0.346, Δ=+0.268); fn_arrival_share=0.0447 (month mean 0.109, Δ=-0.0639); spam_share=0.0468 (month mean 0.0404, Δ=+0.0064). Characterization uses 100 stratified main_unique post excerpts; not every account matches the modal pattern. Unknown: goals, motivations, demographics, architecture, offline activity."
     }
   ]
 }

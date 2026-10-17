@@ -248,6 +248,7 @@ def normalize_persona_to_nested(persona_data: Dict[str, Any]) -> Dict[str, Any]:
         "observed_excerpts",
         "unknowns",
         "narrative_template",
+        "source_narrative",
     ):
         if key in persona_data:
             normalized[key] = persona_data[key]
@@ -255,11 +256,7 @@ def normalize_persona_to_nested(persona_data: Dict[str, Any]) -> Dict[str, Any]:
     if is_nonanthropomorphized(persona_data):
         normalized["anthropomorphized"] = False
         normalized["demographics"] = {}
-        normalized["goals"] = []
-        normalized["frustrations"] = []
         normalized.pop("motivations", None)
-        normalized.pop("quote", None)
-        normalized.pop("quotes", None)
         return normalized
 
     # Social media usage
