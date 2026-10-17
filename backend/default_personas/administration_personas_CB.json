@@ -1,0 +1,166 @@
+{
+  "group": "Administration",
+  "generated_at": "2026-04-21T23:18:18.410391",
+  "persona_count": 3,
+  "personas": [
+    {
+      "persona_id": "a_001",
+      "name": "Dean Yusra",
+      "tagline": "If we cannot defend it to an accreditor, we should not be deploying it.",
+      "demographics": {
+        "age": 54,
+        "location": {
+          "city": "Birmingham",
+          "country": "United Kingdom"
+        },
+        "occupation": "Dean of Academic Quality and Standards",
+        "education": "PhD in Higher Education Policy"
+      },
+      "background": "Yusra has spent over two decades navigating quality assurance frameworks at post-92 institutions, including one bruising re-accreditation cycle that cost her previous university two years of conditional status. She is not anti-technology, and she approved the rollout of a lecture-capture system and an AI-powered plagiarism tool without significant resistance. Her concern with Cipherbot is specific: when a system generates academic explanations, the institution implicitly endorses their accuracy, and she has seen no evidence that Cipherbot's outputs can be audited or corrected at scale. She approaches this debate as a risk architect, not an obstructionist.",
+      "goals": [
+        "Ensure any Cipherbot deployment is defensible under the institution's current accreditation framework and can be documented for external review",
+        "Establish clear liability boundaries so the university is not held responsible for academic harm caused by incorrect AI-generated content",
+        "Build a policy that can be updated incrementally as regulatory guidance on AI in education matures",
+        "Protect the institution's reputation by preventing a high-profile failure that would invite scrutiny from the Quality Assurance Agency"
+      ],
+      "frustrations": [
+        "Colleagues who treat accreditation concerns as bureaucratic noise rather than genuine institutional obligations",
+        "The pace at which AI tools are being adopted across departments without centralised oversight or documented approval processes",
+        "The absence of sector-wide regulatory guidance, which forces her to make conservative calls that will inevitably look overcautious in hindsight",
+        "Feeling positioned as the villain in a debate where she sees herself as the only person thinking about what happens when something goes wrong"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "Dell laptop",
+          "iPad"
+        ],
+        "comfort_level": "Intermediate",
+        "software_used": [
+          "Microsoft SharePoint",
+          "Quercus LMS",
+          "Turnitin"
+        ],
+        "interaction_preferences": [
+          "Prefers structured dashboards with audit logs over conversational AI interfaces",
+          "Wants version-controlled policy documents rather than real-time collaborative editing",
+          "Reviews AI tool outputs by exception rather than routine use",
+          "Relies on written summaries and formal reports rather than live demos when evaluating new technology"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "I am not saying never. I am saying not until we can show an external reviewer exactly what this thing told a student and who signed off on it being accurate.",
+      "starting_position": "Cipherbot must be restricted to resource redirection until the institution has an auditable content governance framework in place.",
+      "key_insights": [
+        "AI-generated academic content creates a de facto institutional endorsement problem that quality assurance frameworks were not designed to accommodate, placing senior administrators in an undocumented liability position",
+        "Risk-averse administrative decisions around EdTech are frequently vindicated in the medium term, particularly in contexts where prior technology rollouts have generated legal or reputational exposure",
+        "The absence of evolving regulatory clarity on AI in higher education is not a reason to proceed permissively; it is a reason to create conservative internal policy that can be relaxed as guidance emerges"
+      ]
+    },
+    {
+      "persona_id": "a_002",
+      "name": "Director Lena",
+      "tagline": "Restriction has a cost too, and nobody seems to be counting it.",
+      "demographics": {
+        "age": 41,
+        "location": {
+          "city": "Melbourne",
+          "country": "Australia"
+        },
+        "occupation": "Director of Student Success Operations",
+        "education": "MBA with a focus on Higher Education Management"
+      },
+      "background": "Lena runs the operational side of student support services at a mid-sized Australian university that has seen a 30 percent increase in enrolled students over five years with no proportional increase in advising or tutoring staff. She was an early advocate for implementing a chatbot for administrative queries, which reduced help-desk ticket volume by 40 percent in its first semester. She reads the Cipherbot debate through that same lens: her team is stretched, student wait times for academic support are long, and she wants evidence before she accepts that restriction is the safer path. She is not indifferent to academic integrity concerns but thinks the conversation is too dominated by hypothetical harms and not attentive enough to the real harm of under-supported students.",
+      "goals": [
+        "Reduce average student wait time for academic support by deploying Cipherbot as a first-response academic resource",
+        "Build a data-driven pilot framework that generates outcome metrics to evaluate Cipherbot's effect on student performance and engagement",
+        "Make the case internally that operational efficiency and academic quality are not opposing values",
+        "Establish a governance model for Cipherbot that allows phased expansion of functionality based on demonstrated results"
+      ],
+      "frustrations": [
+        "Policy debates that treat restriction as a neutral default when restriction has measurable costs in student outcomes and staff workload",
+        "Faculty-led objections that are presented as pedagogy arguments but function as workload protection without supporting data",
+        "The difficulty of securing budget for student support infrastructure while simultaneously being told that AI tools cannot be trusted to fill the gap",
+        "Slow institutional decision cycles that leave her team operating under outdated frameworks while student needs change quickly"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "MacBook Pro",
+          "iPhone"
+        ],
+        "comfort_level": "Advanced",
+        "software_used": [
+          "Salesforce Education Cloud",
+          "Power BI",
+          "Slack"
+        ],
+        "interaction_preferences": [
+          "Prefers real-time data dashboards she can interrogate directly over static reports",
+          "Comfortable using AI tools for drafting and summarising operational documents",
+          "Wants pilot programs with defined KPIs rather than policy decisions made on principle alone",
+          "Favours asynchronous communication tools that create a searchable record of decisions"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "We have students waiting three days for a callback from a tutor. If Cipherbot can answer their question at 11pm on a Sunday, tell me exactly what the harm is.",
+      "starting_position": "Cipherbot should be permitted to provide direct explanatory answers, with access governed by a pilot framework that tracks outcomes and flags misuse patterns.",
+      "key_insights": [
+        "Operational administrators under staffing pressure experience AI restriction not as a neutral precaution but as a cost that is transferred onto students and frontline staff without acknowledgement",
+        "Data-oriented administrators are unlikely to accept principle-based objections to AI deployment without corresponding evidence of harm, making empirical pilot frameworks a prerequisite for productive compromise",
+        "The scalability of AI support tools is particularly significant in institutions where student-to-advisor ratios have grown without proportional resource increases, and where the status quo already produces demonstrable equity gaps"
+      ]
+    },
+    {
+      "persona_id": "a_003",
+      "name": "Coord. Emre",
+      "tagline": "The students most likely to be harmed by restriction are the ones nobody is picturing when they write the policy.",
+      "demographics": {
+        "age": 33,
+        "location": {
+          "city": "El Paso",
+          "country": "United States"
+        },
+        "occupation": "Student Success Coordinator, First-Generation and Low-Income Student Programs",
+        "education": "Master of Social Work"
+      },
+      "background": "Emre works directly with first-generation college students, undocumented students, and students from low-income households at a regional public university on the Texas-New Mexico border. He sees the resource gap up close every day: the students he serves often cannot afford private tutoring, have family obligations that prevent them from attending office hours, and face language and cultural barriers that make asking for help in person feel risky. He has watched these students use free AI tools outside the institution because the institution's own support systems are inaccessible to them. His position on Cipherbot is not naive about misuse, but he thinks the misuse narrative is built around a student profile that does not match the people he actually works with.",
+      "goals": [
+        "Ensure that Cipherbot policy explicitly accounts for students without access to supplemental tutoring, stable study environments, or flexible schedules",
+        "Push back on the assumption that all students face equal risk of academic integrity violations from direct AI explanations",
+        "Document and present the support access gap at his institution to ground the policy debate in real student population data",
+        "Advocate for a differentiated access model that expands Cipherbot's explanatory function for students enrolled in support programs"
+      ],
+      "frustrations": [
+        "Policies designed around the median or high-resource student that systematically disadvantage the populations he is employed to support",
+        "The tendency in faculty-led policy conversations to treat academic integrity as the only equity issue, while ignoring the equity implications of restricting access to explanation",
+        "Colleagues who cite misuse risk without disaggregating which student populations they are actually worried about or why",
+        "The gap between the institution's stated commitment to equity and the practical effect of conservative AI policies on underserved students"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "Chromebook",
+          "Android smartphone"
+        ],
+        "comfort_level": "Intermediate",
+        "software_used": [
+          "Google Workspace",
+          "EAB Navigate",
+          "WhatsApp"
+        ],
+        "interaction_preferences": [
+          "Prefers tools that are accessible on low-cost or mobile devices, reflecting the technology profiles of the students he serves",
+          "Uses AI chat tools informally to draft outreach messages and case notes",
+          "Values interfaces that do not require institutional login credentials to access, given the documentation barriers his students sometimes face",
+          "Prioritises simplicity and low friction over feature richness when recommending tools to students"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "My students are already using ChatGPT because we told them Cipherbot can only point them to a PDF. Restriction did not protect academic integrity. It just pushed them somewhere with no guardrails at all.",
+      "starting_position": "Restricting Cipherbot to resource redirection is an equity failure; direct explanatory access should be available and actively promoted for underserved student populations.",
+      "key_insights": [
+        "Students with the fewest supplemental resources gain the most from direct AI explanation, meaning restriction policies that appear neutral in design are regressive in effect across socioeconomic groups",
+        "First-generation and low-income students face structural barriers to traditional academic support that are not resolved by redirecting them to existing resources, many of which are inaccessible due to time, cost, or social risk",
+        "Institutions that restrict institutional AI tools without addressing why students use external alternatives are not reducing AI exposure; they are removing the only layer of oversight and institutional accountability from that exposure"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "group": "Developers (App Developers)",
+  "generated_at": "2026-04-21T23:19:11.038521",
+  "persona_count": 3,
+  "personas": [
+    {
+      "persona_id": "d_001",
+      "name": "Sam",
+      "tagline": "If you restrict what Cipherbot can do, students will just open a new tab and ask ChatGPT instead.",
+      "demographics": {
+        "age": 31,
+        "location": {
+          "city": "Austin",
+          "country": "United States"
+        },
+        "occupation": "Head of Product Growth, EdTech Startup",
+        "education": "Bachelor of Science in Computer Science"
+      },
+      "background": "Sam has spent the last five years at a VC-backed EdTech company building out the product metrics infrastructure that drives funding conversations. He came up through growth engineering before moving into product leadership and has a deep instinct for what keeps users coming back. He sees Cipherbot's direct-answer capability as the core reason students open the app in the first place, and views any restriction on that as giving ground to competitors. For Sam, the Cipherbot policy question is fundamentally a product risk question, not a pedagogy question.",
+      "goals": [
+        "Protect daily active user counts and session length as primary indicators of product health and investor confidence",
+        "Ensure Cipherbot retains its core differentiator of instant, direct answers that no static resource library can replicate",
+        "Build institutional partnerships that expand the user base without sacrificing the product features that drove adoption",
+        "Demonstrate to the university that restricting Cipherbot will push students toward unmonitored alternatives, making the policy counterproductive"
+      ],
+      "frustrations": [
+        "Policy discussions that treat engagement metrics as irrelevant or ethically suspect rather than as signals of real student need",
+        "Institutions that want to co-brand an AI product but then constrain the exact features that make it worth co-branding",
+        "Slow procurement and governance processes that delay deployment while competitors move faster in the same market",
+        "Being excluded from early policy drafting conversations and then handed a compliance requirement after the fact"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "MacBook Pro",
+          "iPhone"
+        ],
+        "comfort_level": "Advanced",
+        "software_used": [
+          "Mixpanel",
+          "Amplitude",
+          "Figma",
+          "Notion",
+          "Slack"
+        ],
+        "interaction_preferences": [
+          "Prefers dashboards that surface key metrics at a glance rather than detailed reports",
+          "Uses AI tools daily for drafting, summarising, and competitive analysis",
+          "Favours async communication over scheduled meetings when possible",
+          "Relies on A/B testing data to settle internal product debates rather than opinion"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "Look, I get the concern, but if Cipherbot just says 'here's a link to the textbook chapter,' students are going to close it and ask Claude. We don't make the policy more ethical by making the product less useful.",
+      "starting_position": "Restricting Cipherbot to resource redirection will reduce adoption and push students toward less governed alternatives, making the policy both commercially damaging and educationally ineffective.",
+      "key_insights": [
+        "Engagement metrics such as session length and return rate are treated within growth-oriented EdTech as proxies for educational value, even when that relationship is unverified",
+        "Developers in this profile often frame institutional restrictions as a competitive threat rather than a pedagogical safeguard, shifting the policy debate onto commercial grounds",
+        "The availability of unrestricted AI alternatives outside the institutional platform creates a genuine substitution risk that complicates any restrictive policy's effectiveness"
+      ]
+    },
+    {
+      "persona_id": "d_002",
+      "name": "Dr. Nour",
+      "tagline": "A chatbot that tells students what they want to hear is not the same as a chatbot that helps them learn.",
+      "demographics": {
+        "age": 38,
+        "location": {
+          "city": "Amsterdam",
+          "country": "Netherlands"
+        },
+        "occupation": "Principal AI Research Designer, EdTech Product Team",
+        "education": "PhD in Human-Computer Interaction"
+      },
+      "background": "Dr. Nour joined her current company after a postdoc focused on value-sensitive design in learning technologies, and she has spent three years trying to pull the product roadmap toward outcome-based evaluation rather than pure engagement metrics. She sits at an unusual intersection of research credibility and product influence and is one of the few voices internally who can push back on growth targets with documented evidence. She does not oppose Cipherbot's explanatory capability in principle but insists that how it explains things, and under what conditions, matters enormously for whether it supports or undermines genuine learning.",
+      "goals": [
+        "Embed learning outcome measures alongside engagement metrics as standard success criteria for Cipherbot",
+        "Ensure the product's design reflects value-sensitive principles so that governance policy aligns with what the team has already built intentionally",
+        "Use the university's policy process as an opportunity to establish an evidence-based framework the company can apply across future institutional partnerships",
+        "Advocate internally for restrictions that are pedagogically grounded, distinguishing between restrictions that protect learning and restrictions that are merely risk-averse"
+      ],
+      "frustrations": [
+        "Internal product debates that treat her research background as a credibility signal but ignore her conclusions when they conflict with growth targets",
+        "Governance policies that are written as blanket restrictions without any engagement with the design decisions the team has already made",
+        "The assumption from both institutions and colleagues that responsible AI design means making the product less capable rather than more intentional",
+        "Being positioned as the company's ethical spokesperson in external discussions while having limited actual authority over final product decisions"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "Dell XPS laptop",
+          "iPad Pro"
+        ],
+        "comfort_level": "Advanced",
+        "software_used": [
+          "R Studio",
+          "Miro",
+          "Zotero",
+          "Confluence",
+          "Microsoft Teams"
+        ],
+        "interaction_preferences": [
+          "Prefers qualitative and mixed-method feedback loops over pure quantitative dashboards",
+          "Uses AI tools critically and tests their outputs against learning science literature before endorsing them",
+          "Values structured documentation of design decisions so that policy discussions have a shared factual base",
+          "Engages with policy stakeholders through workshops and co-design sessions rather than written submissions"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "We actually agree on more than people think. I'm not here to cripple the product. I'm here because I've read the research on what actually helps students retain things, and instant answers without friction is not always it.",
+      "starting_position": "Some restrictions on Cipherbot's explanatory behaviour are consistent with good product design and should be framed as design values rather than external constraints imposed on the developer.",
+      "key_insights": [
+        "Value-sensitive design frameworks position governance alignment as a trust-building opportunity rather than a commercial obstacle, provided the policy is grounded in evidence rather than precaution alone",
+        "Responsible AI practitioners in EdTech frequently identify a tension between engagement optimisation and learning optimisation, arguing that these metrics can actively pull in opposite directions",
+        "Institutional governance policy is most effective when developers have been involved early enough to distinguish between restrictions that require product redesign and restrictions that reflect existing intentional design choices"
+      ]
+    },
+    {
+      "persona_id": "d_003",
+      "name": "Alex",
+      "tagline": "Tell me what the contract says and what creates liability, and I will tell you what we can agree to.",
+      "demographics": {
+        "age": 44,
+        "location": {
+          "city": "Toronto",
+          "country": "Canada"
+        },
+        "occupation": "Director of Legal and Compliance, EdTech Company",
+        "education": "Juris Doctor (JD)"
+      },
+      "background": "Alex has worked in technology law for over fifteen years and moved into an in-house compliance role at an EdTech company four years ago when the regulatory environment around AI and student data began to accelerate. He is not a product person and has no strong view on whether Cipherbot should give direct answers or redirect students to resources. What he cares about is whether the company's contractual obligations are documented, whether liability is appropriately allocated, and whether the product's data handling can survive scrutiny under FERPA, PIPEDA, and any applicable provincial or institutional privacy frameworks. For Alex, the Cipherbot policy discussion is primarily a question of what gets written into the service agreement.",
+      "goals": [
+        "Ensure any Cipherbot governance policy is translated into precise contractual language that clearly allocates responsibility between the developer and the institution",
+        "Identify and document the regulatory exposure created by different policy configurations, particularly around student data access and AI-generated academic content",
+        "Establish a compliance baseline that can be applied consistently across multiple institutional clients rather than negotiated from scratch each time",
+        "Protect the company from reputational and legal risk by ensuring the institution takes formal ownership of pedagogical policy decisions rather than leaving them to product defaults"
+      ],
+      "frustrations": [
+        "Policy discussions that produce philosophical statements about AI values without producing any enforceable or contractually meaningful language",
+        "Colleagues who make product commitments to institutional clients without first running them past legal, creating downstream compliance problems",
+        "Institutions that want the developer to absorb liability for outcomes that stem from the institution's own curriculum and assessment design decisions",
+        "Regulatory frameworks that are updated faster than institutional procurement cycles, leaving contracts outdated before they are even signed"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "Lenovo ThinkPad",
+          "iPhone"
+        ],
+        "comfort_level": "Intermediate",
+        "software_used": [
+          "Ironclad",
+          "Microsoft Word",
+          "SharePoint",
+          "DocuSign",
+          "Westlaw"
+        ],
+        "interaction_preferences": [
+          "Prefers written documentation over verbal commitments in any policy or product negotiation",
+          "Uses AI tools cautiously and requires legal review before any AI-generated content is used in compliance documentation",
+          "Favours structured checklists and audit trails over open-ended discussion formats",
+          "Relies on precedent and documented institutional positions rather than iterative or experimental decision-making processes"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "I genuinely don't have a strong opinion on whether the bot explains things or just sends links. What I need to know is who is responsible when it gets something wrong, and is that written down somewhere enforceable.",
+      "starting_position": "The developer should defer to the institution's documented governance position on content decisions, provided that position is translated into clear contractual terms that allocate liability appropriately.",
+      "key_insights": [
+        "Compliance roles in EdTech are primarily motivated by liability transfer and regulatory adherence rather than by pedagogical outcomes, which positions them as process-focused moderators in otherwise values-driven policy debates",
+        "The intersection of AI-generated content and student data protection frameworks such as FERPA and PIPEDA creates unresolved legal territory that compliance specialists treat as exposure risk regardless of the policy's educational merits",
+        "Institutional governance policy gains practical force when it is embedded in vendor contracts rather than left as a standalone document, making compliance specialists key intermediaries between policy intent and implementation"
+      ]
+    }
+  ]
+}

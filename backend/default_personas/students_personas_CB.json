@@ -1,0 +1,166 @@
+{
+  "group": "Students",
+  "generated_at": "2026-04-21T23:16:27.632413",
+  "persona_count": 3,
+  "personas": [
+    {
+      "persona_id": "s_001",
+      "name": "Asel",
+      "tagline": "If you let a machine explain it to you, you never actually learned it.",
+      "demographics": {
+        "age": 21,
+        "location": {
+          "city": "Almaty",
+          "country": "Kazakhstan"
+        },
+        "occupation": "Undergraduate student, Computer Science (Year 3)",
+        "education": "Pursuing Bachelor of Science"
+      },
+      "background": "Asel grew up in a household where academic achievement was treated as a form of personal discipline, not just credential-building. She earned a competitive scholarship to study abroad and feels a strong sense of obligation to prove that she deserves her place. She understands how AI tools work and has experimented with them, but she made a deliberate decision to stop using them for academic work after concluding that they were hollowing out her thinking. On the Cipherbot question, she sees any direct content response as a structural invitation to skip the hard part of learning, and she worries that a permissive policy will degrade the value of the degree she is working hard to earn.",
+      "goals": [
+        "Maintain personal academic integrity standards that she can defend regardless of what peers or policy allow",
+        "Advocate for a Cipherbot policy that does not reward students who outsource their thinking",
+        "Protect the signalling value of high grades by ensuring they reflect genuine effort across her cohort",
+        "Demonstrate that ethical AI use is possible even in a tech-forward discipline like computer science"
+      ],
+      "frustrations": [
+        "Peers who openly admit to pasting assignment questions into AI tools and face no consequences",
+        "Faculty who frame AI restrictions as technophobia rather than engaging with the integrity argument",
+        "The assumption that opposing AI assistance means you do not understand the technology",
+        "Feeling that institutional policies lag so far behind student behaviour that they become meaningless"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "laptop",
+          "smartphone"
+        ],
+        "comfort_level": "Advanced",
+        "software_used": [
+          "VS Code",
+          "Notion",
+          "Google Scholar"
+        ],
+        "interaction_preferences": [
+          "Prefers to write code from scratch rather than accept generated snippets",
+          "Uses digital tools for organisation and research retrieval, not content generation",
+          "Reads primary sources and documentation directly rather than relying on summarisation tools",
+          "Comfortable evaluating AI outputs critically but chooses not to depend on them for coursework"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "I know exactly what ChatGPT would say if I asked it to explain recursion. That is not the point. The point is whether I can work it out myself under pressure.",
+      "starting_position": "Cipherbot should not provide direct answers to academic content questions because doing so normalises bypassing the cognitive effort that constitutes learning.",
+      "key_insights": [
+        "Students who internalise academic integrity norms sometimes experience AI assistance as a form of self-betrayal, even when institutional rules permit it",
+        "High-achieving students in competitive environments often perceive AI use by peers as a threat to the fairness of assessment, making them more likely to advocate for collective restrictions than individual opt-outs",
+        "Principled refusal is not the same as technophobia; students like Asel often have above-average AI literacy and reject these tools on reasoned ethical grounds rather than unfamiliarity"
+      ]
+    },
+    {
+      "persona_id": "s_002",
+      "name": "Marcus",
+      "tagline": "I need answers that work, not a policy designed to protect how professors feel about effort.",
+      "demographics": {
+        "age": 26,
+        "location": {
+          "city": "Birmingham",
+          "country": "United Kingdom"
+        },
+        "occupation": "Part-time undergraduate student, Business Management (Year 2)",
+        "education": "Pursuing Bachelor of Business Administration"
+      },
+      "background": "Marcus returned to university after three years working in logistics management, and he studies part-time while holding down a 30-hour-a-week job. He does not have the luxury of extended revision sessions or office-hour visits with lecturers, so he has built a personal system around getting targeted answers fast. He treats AI tools the same way he treats any other resource: if it helps him understand something or complete a task, it is a legitimate part of his toolkit. He is not interested in debating whether AI is good or bad for education in the abstract. For him, the Cipherbot debate is really a debate about whether the university respects that students have different lives and different constraints.",
+      "goals": [
+        "Access clear, direct academic explanations on demand without navigating bureaucratic referral chains",
+        "Complete his degree without falling behind due to time constraints that other students do not face",
+        "Push back on AI restrictions he sees as driven by institutional anxiety rather than student evidence",
+        "Demonstrate that using AI efficiently is itself a professional skill worth developing during study"
+      ],
+      "frustrations": [
+        "Policies that seem designed with full-time 18-year-olds in mind and ignore the realities of mature or part-time students",
+        "Being told to visit the library or a tutor when he genuinely cannot fit those options into his schedule",
+        "The inconsistency of universities allowing calculators and internet searches but drawing a line at conversational AI",
+        "Feeling that the integrity debate is used as a proxy to avoid addressing real gaps in academic support provision"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "smartphone",
+          "laptop"
+        ],
+        "comfort_level": "Intermediate",
+        "software_used": [
+          "ChatGPT",
+          "Microsoft Teams",
+          "Excel"
+        ],
+        "interaction_preferences": [
+          "Prefers direct, specific answers over broad guidance that requires further reading",
+          "Uses AI conversationally to get explanations he can immediately apply or verify",
+          "Values tools that save time without requiring significant setup or learning curves",
+          "Skeptical of tools that redirect rather than answer, which he associates with wasted time"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "If I could go to a tutor at 11pm on a Wednesday I would. I cannot. So either Cipherbot helps me or nothing does.",
+      "starting_position": "Cipherbot should provide complete, direct answers because restricting it to signposting resources ignores how many students actually study and when.",
+      "key_insights": [
+        "Outcome-focused students, particularly those balancing work and study, treat AI tools as a functional equivalent to tutoring and see access restrictions as a fairness issue rather than an integrity issue",
+        "Pragmatic heavy users are often most critical of policy debates they perceive as driven by faculty discomfort rather than empirical evidence about student harm",
+        "Time pressure is a structural factor that shapes AI use; policies that ignore unequal access to conventional support resources inadvertently make AI the only viable option for some students"
+      ]
+    },
+    {
+      "persona_id": "s_003",
+      "name": "Priya",
+      "tagline": "I want someone to just tell me what the rules are so I can stop worrying about whether I am doing this wrong.",
+      "demographics": {
+        "age": 20,
+        "location": {
+          "city": "Melbourne",
+          "country": "Australia"
+        },
+        "occupation": "Undergraduate student, Psychology (Year 2)",
+        "education": "Pursuing Bachelor of Psychological Science"
+      },
+      "background": "Priya is a conscientious student who consistently worries that she is not working hard enough, even when her grades suggest otherwise. She started using AI tools during her first year mostly because friends in her study group were using them and she was afraid of being left behind. She does not feel confident that she is using them in the right way, and the lack of clear institutional guidance makes her anxious rather than empowered. She would genuinely prefer a more structured, guided form of support, but in the absence of clear rules she defaults to matching what she thinks peers are doing. The Cipherbot policy question feels like a relief to her: she wants someone with authority to settle it so she can stop second-guessing herself.",
+      "goals": [
+        "Have a transparent, clearly communicated institutional policy on Cipherbot that removes ambiguity about what is allowed",
+        "Access academic support that builds her confidence rather than making her feel dependent on a tool she does not fully trust",
+        "Reduce the social pressure she feels to match the AI usage levels she assumes her peers are at",
+        "Develop study habits she can genuinely defend in an academic integrity context"
+      ],
+      "frustrations": [
+        "The absence of any clear guidance from the university, which leaves her to guess what counts as acceptable AI use",
+        "The social dynamic in her study group where using AI aggressively is treated as normal and not using it seems naive",
+        "A persistent sense that she is less capable than peers, which AI use temporarily relieves but never actually resolves",
+        "Finding that AI answers are sometimes confident and wrong, which unsettles her more than it would a less anxious user"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "laptop",
+          "tablet"
+        ],
+        "comfort_level": "Intermediate",
+        "software_used": [
+          "ChatGPT",
+          "Zotero",
+          "Canvas LMS"
+        ],
+        "interaction_preferences": [
+          "Prefers guided interactions with clear scaffolding over open-ended prompting",
+          "Tends to double-check AI responses against lecture notes or textbooks rather than accepting them directly",
+          "More comfortable using AI to clarify concepts she has already encountered than to introduce new ones",
+          "Responds well to tools that explain their reasoning rather than just giving an output"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "I do not even know if I am allowed to be using it right now. Nobody has actually said. I just know everyone else is.",
+      "starting_position": "Cipherbot should offer guided support with clear boundaries rather than direct answers, because regulated access would reduce the social pressure that currently drives students like her toward overuse.",
+      "key_insights": [
+        "A substantial group of students uses AI reactively in response to perceived peer behaviour rather than as a deliberate strategic choice, meaning policy clarity has direct effects on this cohort's wellbeing and usage patterns",
+        "Anxious pragmatists often experience unregulated AI environments as stressful rather than freeing, and they tend to overestimate how much AI assistance their peers are receiving and how much it is helping them",
+        "This group is more likely to welcome institutional guardrails than resist them, provided the policy is communicated transparently and framed around support rather than punishment"
+      ]
+    }
+  ]
+}

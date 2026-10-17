@@ -32,7 +32,7 @@ RUN mkdir -p /app/uploads /app/static/images/personas
 # Expose port (Railway will provide PORT env var)
 EXPOSE 8080
 
-# Run the application
+# Run the application (same as pre-judge deploys — no Alembic on boot)
 # Railway provides PORT env var, fallback to 8080 for local development
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
 
