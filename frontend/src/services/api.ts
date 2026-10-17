@@ -228,6 +228,11 @@ export const personasApi = {
     return response.data;
   },
 
+  narrate: async (personaSetId: number) => {
+    const response = await api.post(`/personas/${personaSetId}/narrative`);
+    return response.data;
+  },
+
   generateImages: async (personaSetId: number) => {
     const response = await api.post(`/personas/${personaSetId}/generate-images`);
     return response.data;

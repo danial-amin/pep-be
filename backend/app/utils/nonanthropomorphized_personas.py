@@ -795,6 +795,7 @@ def persona_from_conduct_record(record: Dict[str, Any], title: Optional[str] = N
     }
     if quote:
         persona["quote"] = quote
+    persona["narrative"] = conduct_narrative(persona)
     if narrative:
         persona["source_narrative"] = narrative
     return persona
@@ -873,6 +874,78 @@ def write_month_persona_sets(source_dir: Path, out_dir: Path) -> List[Path]:
     if not written:
         raise ValueError(f"No month directories with conduct personas in {source_dir}")
     return written
+
+
+def _measured_clause(other_information: Any) -> str:
+    """One measured sentence, so the narrative can cite the month without repeating the card."""
+    text = str(other_information or "")
+    start = text.find("Measured against")
+    if start < 0:
+        return ""
+    end = text.find("Unknown", start)
+    clause = text[start:end].strip() if end > start else text[start:].strip()
+    return clause if clause.endswith(".") else (clause + "." if clause else "")
+
+
+def conduct_narrative(persona: Dict[str, Any]) -> str:
+    """Nielsen engaging sketch, adjusted so nothing private is invented.
+
+    Same six elements as the normal narrative prompt: name and figure,
+    background, a stretch of activity, surroundings, what they keep doing,
+    and attitude toward the product. Only the conduct on record is used.
+    """
+    name = str(persona.get("name") or "This figure")
+    overview = str(persona.get("basic_description") or "").strip()
+    background = str(persona.get("background") or "").strip()
+    behaviors = str(persona.get("behaviors") or "").strip()
+    goals = [str(item).rstrip(".").strip() for item in (persona.get("goals") or []) if str(item).strip()]
+    frustrations = [
+        str(item).rstrip(".").strip()
+        for item in (persona.get("frustrations") or [])
+        if str(item).strip()
+    ]
+    quote = str(persona.get("quote") or "").strip()
+    measured = _measured_clause(persona.get("other_information"))
+
+    figure = (
+        f"{name} is a title for a way of acting, not a personal name. "
+        "Picture an anonymous, featureless figure, with no age, no gender, and no nationality. Not a chart."
+    )
+    if overview:
+        figure = f"{figure} {overview if overview.endswith('.') else overview + '.'}"
+
+    history = background or f"Nothing on record describes {name} beyond the posts."
+    if "unknown" not in history.lower() and "no age" not in history.lower():
+        history = f"{history} Anything away from the feed is unknown."
+
+    if goals:
+        lowered = [goal[0].lower() + goal[1:] if goal else goal for goal in goals]
+        activity = f"A stretch of activity on the feed is to {_joined(lowered)}."
+    else:
+        activity = "The data does not show a stretch of activity beyond the posts themselves."
+    if behaviors:
+        activity = f"{activity} {behaviors if behaviors.endswith('.') else behaviors + '.'}"
+
+    if frustrations:
+        sentences = " ".join(item if item.endswith(".") else item + "." for item in frustrations)
+        surround = f"What surrounds this figure is the feed, not a private circle. {sentences}"
+    else:
+        surround = "No private circle is on record. What surrounds this figure is only the feed in the data."
+
+    limits = "There is no private hope on record."
+    if measured:
+        limits = f"{limits} {measured}"
+    limits = f"{limits} What gets in the way is that one description does not cover every account."
+    if quote:
+        attitude = (
+            "No private feeling about the product is on record. "
+            f'One sampled post, not a line every account uses, begins: "{quote}"'
+        )
+    else:
+        attitude = "No private feeling about the product is on record."
+
+    parts = [figure, history, activity, surround, limits, attitude]
+    return "\n\n".join(part.strip() for part in parts if part and part.strip())
 
 
 def conduct_persona_instructions(persona_data: Dict[str, Any]) -> str:

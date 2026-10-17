@@ -47,6 +47,28 @@ def test_visible_profile_stays_short():
     assert all("%" not in goal for goal in goals)
 
 
+def test_conduct_narrative_does_not_invent_a_life():
+    from app.utils.nonanthropomorphized_personas import conduct_narrative
+
+    text = conduct_narrative({
+        "name": "The Direct Speaker",
+        "basic_description": "States a claim directly.",
+        "background": "The Direct Speaker is on Moltbook in February 2026.",
+        "goals": ["State a claim directly"],
+        "frustrations": ["One description does not fit every account in the group"],
+        "behaviors": "The usual post is prose.",
+        "quote": "Hello there.",
+    })
+    assert "The Direct Speaker" in text
+    assert "no age" in text.lower()
+    assert "anonymous" in text.lower()
+    assert "not a chart" in text.lower()
+    assert "family" not in text.lower()
+    assert "café" not in text.lower()
+    assert "\n\n" in text
+    assert text.count("\n\n") >= 4
+
+
 def test_repeated_conduct_labels_get_different_titles():
     from app.utils.nonanthropomorphized_personas import _titles_for_records
 
@@ -86,6 +108,30 @@ def test_repeated_conduct_labels_get_different_titles():
     assert all("(c" not in name for name in names)
     assert titles["2026-02_c10"] == "The Protocol Poster"
     assert titles["2026-02_c6"] == "The Long Writer"
+
+
+def test_creation_prompts_keep_nielsen_and_drop_a_private_life():
+    from app.utils.prompts import (
+        ENGAGING_NARRATIVE_PROMPT,
+        NONANTHROPOMORPHIZED_NARRATIVE_PROMPT,
+        narrative_json_contract,
+    )
+
+    normal = ENGAGING_NARRATIVE_PROMPT.format(num_personas=3)
+    anonymous = NONANTHROPOMORPHIZED_NARRATIVE_PROMPT.format(num_personas=3)
+    assert "Lene Nielsen" in normal
+    assert "family situation" in normal
+    assert "A Day in the Life" in normal
+    assert "favorite café" in normal
+    assert "non-anthropomorphized" in anonymous
+    assert "Do not invent an age" in anonymous
+    assert "Not a chart" in anonymous
+    assert "favorite café" in anonymous
+    assert "anonymous, featureless figure" in anonymous
+    contract = narrative_json_contract(3, anonymous=True)
+    assert '"narrative"' in contract
+    assert "demographics" in contract
+    assert "non_anthropomorphized" in contract
 
 
 def test_stands_out_does_not_call_the_baseline_other_accounts():

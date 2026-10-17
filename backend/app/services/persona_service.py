@@ -174,8 +174,8 @@ class PersonaService:
         await session.flush()
         
         # Create basic personas
-        # Handle different output formats
-        if output_format == "json":
+        # Narrative and non-anthropomorphized sets are JSON objects, same as json.
+        if output_format in {"json", "narrative", "non_anthropomorphized"}:
             personas_data = persona_set_data.get("personas", [])
             if not isinstance(personas_data, list):
                 # If personas is not a list, try to extract it
@@ -183,6 +183,11 @@ class PersonaService:
             
             for persona_data in personas_data:
                 if isinstance(persona_data, dict):
+                    if output_format == "non_anthropomorphized":
+                        persona_data = dict(persona_data)
+                        persona_data["anthropomorphized"] = False
+                        persona_data["persona_kind"] = "non_anthropomorphized"
+                        persona_data["demographics"] = {}
                     # Normalize to standard nested structure
                     normalized_data = normalize_persona_to_nested(persona_data)
                     persona = Persona(
@@ -221,6 +226,37 @@ class PersonaService:
         
         return persona_set
     
+    @staticmethod
+    async def narrate_persona(
+        session: AsyncSession,
+        persona_id: int,
+    ) -> Persona:
+        """Write a narrative persona onto an existing profile.
+
+        Conduct personas use the grounded Nielsen-style prose and do not
+        invent a private life. Other personas are left unchanged here; the
+        narrative format on generation is the option for those.
+        """
+        from sqlalchemy.orm.attributes import flag_modified
+
+        from app.utils.nonanthropomorphized_personas import conduct_narrative
+
+        result = await session.execute(select(Persona).where(Persona.id == persona_id))
+        persona = result.scalar_one_or_none()
+        if not persona:
+            raise ValueError(f"Persona with ID {persona_id} not found")
+        data = dict(persona.persona_data or {})
+        if not is_nonanthropomorphized(data):
+            return persona
+        data["narrative"] = conduct_narrative(data)
+        persona.persona_data = data
+        if data.get("name"):
+            persona.name = data["name"]
+        flag_modified(persona, "persona_data")
+        await session.commit()
+        await session.refresh(persona)
+        return persona
+
     @staticmethod
     async def expand_persona(
         session: AsyncSession,

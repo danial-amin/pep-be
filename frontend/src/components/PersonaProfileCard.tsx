@@ -316,6 +316,14 @@ export default function PersonaProfileCard({
 
       {/* Body sections */}
       <div className={`min-w-0 ${compact ? 'space-y-1' : 'grid grid-cols-1 gap-2 lg:grid-cols-2'}`}>
+        {personaData.narrative && (
+          <Section
+            title="Narrative"
+            icon={<Quote className="h-3 w-3 text-stone-500" />}
+            data={personaData.narrative}
+          />
+        )}
+
         <Section
           title="Background"
           icon={<User className="h-3 w-3 text-stone-500" />}

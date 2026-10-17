@@ -249,6 +249,7 @@ def normalize_persona_to_nested(persona_data: Dict[str, Any]) -> Dict[str, Any]:
         "unknowns",
         "narrative_template",
         "source_narrative",
+        "narrative",
     ):
         if key in persona_data:
             normalized[key] = persona_data[key]

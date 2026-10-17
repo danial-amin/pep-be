@@ -146,6 +146,25 @@ async def generate_persona_set(
         )
 
 
+@router.post("/{persona_set_id}/narrative", response_model=List[PersonaResponse])
+async def narrate_personas(
+    persona_set_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Write a narrative persona for each conduct persona in the set."""
+    persona_set = await PersonaService.get_persona_set(db, persona_set_id)
+    if not persona_set:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Persona set with ID {persona_set_id} not found",
+        )
+    written = []
+    for persona in persona_set.personas:
+        updated = await PersonaService.narrate_persona(db, persona.id)
+        written.append(PersonaResponse.model_validate(updated))
+    return written
+
+
 @router.post("/{persona_set_id}/expand", response_model=List[PersonaResponse])
 async def expand_personas(
     persona_set_id: int,

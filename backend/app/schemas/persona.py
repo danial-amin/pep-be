@@ -29,6 +29,8 @@ class PersonaFormat(str, Enum):
     GOAL_BASED = "goal_based"
     ROLE_BASED = "role_based"
     INTERACTIVE = "interactive"
+    NARRATIVE = "narrative"
+    NON_ANTHROPOMORPHIZED = "non_anthropomorphized"
 
 
 class PersonaSetCreateRequest(BaseModel):
@@ -64,7 +66,7 @@ class PersonaSetCreateRequest(BaseModel):
     )
     output_format: PersonaFormat = Field(
         default=PersonaFormat.JSON,
-        description="Format for persona output: json, profile, chat, proto, adhoc, engaging, goal_based, role_based, or interactive"
+        description="Format for persona output: json, profile, chat, proto, adhoc, engaging, goal_based, role_based, interactive, narrative, or non_anthropomorphized"
     )
     document_ids: Optional[List[int]] = Field(
         default=None,

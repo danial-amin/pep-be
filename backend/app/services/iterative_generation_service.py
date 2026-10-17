@@ -147,6 +147,11 @@ class IterativeGenerationService:
 
             # Create persona records
             for idx, persona_data in enumerate(persona_data_list):
+                if output_format == "non_anthropomorphized" and isinstance(persona_data, dict):
+                    persona_data = dict(persona_data)
+                    persona_data["anthropomorphized"] = False
+                    persona_data["persona_kind"] = "non_anthropomorphized"
+                    persona_data["demographics"] = {}
                 normalized_data = normalize_persona_to_nested(persona_data)
                 if groups:
                     # Enforce stakeholder mapping by position if model omitted the field

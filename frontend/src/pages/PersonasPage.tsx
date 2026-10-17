@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3, Play, FileJson, LayoutGrid } from 'lucide-react';
+import { Plus, Sparkles, Image as ImageIcon, Eye, CheckCircle, Circle, BarChart3, Play, FileJson, LayoutGrid, Quote } from 'lucide-react';
 import { personasApi } from '../services/api';
 import { PersonaSet, PersonaSetGenerateResponse, Persona } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -107,6 +107,7 @@ export default function PersonasPage() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [expanding, setExpanding] = useState<number | null>(null);
+  const [narrating, setNarrating] = useState<number | null>(null);
   const [generatingImages, setGeneratingImages] = useState<number | null>(null);
   const [measuringDiversity, setMeasuringDiversity] = useState<number | null>(null);
   const [validating, setValidating] = useState<number | null>(null);
@@ -175,6 +176,23 @@ export default function PersonasPage() {
       alert(`Failed to generate personas: ${error.response?.data?.detail || error.message}`);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleNarrate = async (personaSetId: number) => {
+    setNarrating(personaSetId);
+    try {
+      await personasApi.narrate(personaSetId);
+      await loadPersonaSets();
+      if (selectedSet?.id === personaSetId) {
+        const updated = await personasApi.getSet(personaSetId);
+        setSelectedSet(updated);
+      }
+      alert('Narrative personas written.');
+    } catch (error: any) {
+      alert(`Failed to write narrative personas: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setNarrating(null);
     }
   };
 
@@ -359,7 +377,19 @@ export default function PersonasPage() {
               <option value="goal_based">Goal-based</option>
               <option value="role_based">Role-based</option>
               <option value="interactive">Interactive</option>
+              <option value="narrative">Narrative</option>
+              <option value="non_anthropomorphized">Non-anthropomorphized</option>
             </select>
+            {outputFormat === 'narrative' && (
+              <p className="mt-1 text-xs text-stone-500">
+                Nielsen engaging sketch: name, background, a day, relationships, hopes and fears, and attitude toward the product.
+              </p>
+            )}
+            {outputFormat === 'non_anthropomorphized' && (
+              <p className="mt-1 text-xs text-stone-500">
+                Same Nielsen sketch, with no age, gender, family, or life off the data. The figure stays anonymous.
+              </p>
+            )}
           </div>
         </div>
 
@@ -727,6 +757,14 @@ export default function PersonasPage() {
                         : currentRqe(set) != null
                           ? `RQE ${(currentRqe(set)! * 100).toFixed(0)}% · Re-measure`
                           : 'Measure RQE'}
+                    </button>
+                    <button
+                      onClick={() => handleNarrate(set.id)}
+                      disabled={narrating === set.id}
+                      className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded-lg hover:bg-stone-200 disabled:opacity-50 transition-all duration-150 border border-stone-200"
+                    >
+                      <Quote className="inline h-3 w-3 mr-1" />
+                      {narrating === set.id ? 'Writing...' : 'Narrative'}
                     </button>
                     <button
                       onClick={() => handleExpand(set.id)}

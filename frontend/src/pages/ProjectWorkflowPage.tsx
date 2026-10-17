@@ -564,7 +564,19 @@ export default function ProjectWorkflowPage() {
                       <option value="json">JSON</option>
                       <option value="profile">Profile</option>
                       <option value="chat">Chat</option>
+                      <option value="narrative">Narrative</option>
+                      <option value="non_anthropomorphized">Non-anthropomorphized</option>
                     </select>
+                    {outputFormat === 'narrative' && (
+                      <p className="mt-1 text-xs text-stone-500">
+                        Nielsen engaging sketch: name, background, a day, relationships, hopes and fears, and attitude toward the product.
+                      </p>
+                    )}
+                    {outputFormat === 'non_anthropomorphized' && (
+                      <p className="mt-1 text-xs text-stone-500">
+                        Same Nielsen sketch, with no age, gender, family, or life off the data. The figure stays anonymous.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div>

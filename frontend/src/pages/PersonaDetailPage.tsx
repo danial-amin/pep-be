@@ -674,8 +674,13 @@ export default function PersonaDetailPage() {
         {/* Details Section - 2x2 Grid */}
         {/* NOTE: No internal scrolling here; keep full profile visible + exportable */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Top Left: Background */}
+          {/* Top Left: Narrative, then background */}
           <div>
+            {personaData.narrative && renderSection(
+              'Narrative',
+              <Quote className="h-3 w-3 text-stone-500" />,
+              personaData.narrative
+            )}
             {renderSection(
               'Background',
               <User className="h-3 w-3 text-stone-500" />,

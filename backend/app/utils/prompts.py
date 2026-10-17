@@ -143,6 +143,80 @@ OUTPUT FORMAT:
 {ethical_guardrails_section}"""
 
 
+# Lene Nielsen engaging narrative. This is the normal narrative prompt.
+ENGAGING_NARRATIVE_PROMPT = """You are a design researcher specializing in Lene Nielsen's engaging persona methodology. From the uploaded data, create {num_personas} personas for the product or setting described in that data.
+
+Each persona must read as a vivid, empathy-inducing character sketch. Include the following elements:
+
+1. Name & Photo Description: A full name and a brief description of what the persona looks like (to guide later image generation).
+
+2. Personal Background: A 3-4 sentence narrative covering upbringing, education, family situation, and formative life events. Write in third-person storytelling style, not bullet points.
+
+3. A Day in the Life: A 4-6 sentence narrative describing a typical day, weaving in routines, social interactions, stressors, and moments of satisfaction.
+
+4. Relationships & Social Context: Key people in the persona's life (e.g., partner, colleague, friend) and how these relationships influence the persona's decisions and attitudes toward the product.
+
+5. Hopes & Fears: 2-3 personal aspirations and 2-3 anxieties, at least one of each directly related to the product.
+
+6. Attitude Toward the Product: A nuanced paragraph describing the persona's beliefs, past experiences, and emotional associations with the product.
+
+Write each persona as a cohesive narrative that a design team could read aloud and feel they know the person. Avoid generic descriptions; include specific, concrete details (e.g., the name of a favorite café, a specific hobby, a memorable experience) that make the persona feel like a real individual.
+
+Provide the narrative as a unified persona description, with concise paragraphs for each attribute area. Use proper paragraph spacing for legibility. Do not use headings or bullet point style listings inside the narrative."""
+
+
+# Same Nielsen sketch, with nothing invented about a private person.
+NONANTHROPOMORPHIZED_NARRATIVE_PROMPT = """You are a design researcher specializing in Lene Nielsen's engaging persona methodology. From the uploaded data, create {num_personas} non-anthropomorphized personas for the product or setting described in that data.
+
+These personas describe a way of acting in the data. They are not people with a private life. Do not invent an age, a gender, a body, an ethnicity, a nationality, a family, an occupation, an education, or any activity away from what the data shows.
+
+Each persona must read as a vivid sketch of that way of acting. Include the following elements, in third-person storytelling style:
+
+1. Name & Figure: A title-style name, not a personal name. Describe an anonymous, featureless figure with no age, no gender, and no nationality. Not a chart.
+
+2. Background: A short narrative of what the data actually shows about this way of acting. If upbringing, education, family, or formative life events are not in the data, leave them unknown. Do not invent them.
+
+3. A Stretch of Activity: A few sentences describing what this figure does in the data: routines of use, what they write or do, and what repeats. Do not invent a day away from the product.
+
+4. Surroundings: What else is present in the data around this figure, such as other posts, other accounts, or the product itself. Do not invent a partner, colleague, friend, or family.
+
+5. What They Keep Doing and What Gets in the Way: 2-3 things the data shows them continuing, and 2-3 limits or mismatches in the data. Do not invent personal hopes or private fears.
+
+6. Attitude Toward the Product: A short paragraph using only beliefs and experiences the data supports. If the data does not show an attitude, say that it is unknown.
+
+Write each persona as prose a design team could read aloud. Use only concrete details that appear in the data. Do not add a favorite café, a hobby, or a memorable life event unless the data contains it.
+
+Provide the narrative as a unified description, with concise paragraphs for each element. Use proper paragraph spacing. Do not use headings or bullet points inside the narrative."""
+
+
+def narrative_json_contract(num_personas: int, *, anonymous: bool) -> str:
+    """Ask for PEP JSON so the creation pipeline can store each narrative persona."""
+    if anonymous:
+        return f"""
+Return JSON with a "personas" array of exactly {num_personas} objects.
+Each object must include:
+- "name": the title
+- "tagline": one sentence
+- "demographics": an empty object
+- "anthropomorphized": false
+- "persona_kind": "non_anthropomorphized"
+- "background": short prose from the data
+- "goals": an array of measured or evidenced conduct
+- "frustrations": an array of limits in the data
+- "behaviors": a short paragraph
+- "quote": a line from the data, or empty if none
+- "narrative": the unified prose above
+Do not put age, gender, location, occupation, or nationality in any field."""
+    return f"""
+Return JSON with a "personas" array of exactly {num_personas} objects.
+Each object must use the nested PEP structure:
+- "name", "tagline"
+- "demographics": {{"age", "gender", "location", "occupation"}}
+- "background", "goals" (array), "frustrations" (array), "behaviors", "quote"
+- "narrative": the unified prose above
+The structured fields must agree with the narrative. The narrative itself has paragraphs only, with no headings and no bullets."""
+
+
 """
 ═══════════════════════════════════════════════════════════════════════════════
 PERSONA EXPANSION PROMPTS

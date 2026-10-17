@@ -14,7 +14,13 @@ from app.utils.prompts import (
     PERSONA_EXPANSION_SYSTEM_PROMPT,
     PERSONA_EXPANSION_PROMPT_TEMPLATE,
     PERSONA_EVIDENCE_GROUNDEDNESS_RULES,
+    ENGAGING_NARRATIVE_PROMPT,
+    NONANTHROPOMORPHIZED_NARRATIVE_PROMPT,
+    narrative_json_contract,
 )
+
+# Formats the creation pipeline stores as one persona object per figure.
+STRUCTURED_PERSONA_FORMATS = {"json", "narrative", "non_anthropomorphized"}
 from typing import List, Dict, Any, Optional
 import json
 import asyncio
@@ -425,7 +431,7 @@ own priorities.
         
         # Get format instructions
         format_instructions = self._get_format_instructions(output_format, num_personas)
-        if groups and output_format == "json":
+        if groups and output_format in STRUCTURED_PERSONA_FORMATS:
             format_instructions += (
                 "\nEach persona object MUST include \"stakeholder_group\" set to the "
                 "exact group ID it represents."
@@ -433,7 +439,12 @@ own priorities.
         
         # Build ethical guardrails section
         ethical_guardrails_section = ""
-        if include_ethical_guardrails:
+        if output_format == "non_anthropomorphized":
+            ethical_guardrails_section = """\n\nNON-ANTHROPOMORPHIZED RULES:
+- Do not invent age, gender, body, ethnicity, nationality, family, occupation, education, or a life away from the data.
+- demographics must be an empty object.
+- Differences between personas are differences in conduct, not in protected characteristics."""
+        elif include_ethical_guardrails:
             ethical_guardrails_section = """\n\nETHICAL AND FAIRNESS CONSIDERATIONS:
 Please ensure personas are:
 - Representative and diverse (avoid stereotypes)
@@ -458,10 +469,17 @@ Please ensure personas are:
             format_instructions=format_instructions,
             ethical_guardrails_section=ethical_guardrails_section
         )
+        if output_format == "non_anthropomorphized":
+            prompt = prompt.replace(
+                "IMPORTANT: All personas MUST use the nested structure with a 'demographics' object. Goals and frustrations must be arrays.",
+                "IMPORTANT: demographics must be an empty object. Do not fill age, gender, location, or occupation. Goals and frustrations must be arrays.",
+            )
         
         try:
-            # Determine response format based on output_format
-            response_format = {"type": "json_object"} if output_format == "json" else None
+            # Narrative and non-anthropomorphized sets are stored as persona objects.
+            response_format = (
+                {"type": "json_object"} if output_format in STRUCTURED_PERSONA_FORMATS else None
+            )
 
             create_kwargs = chat_completion_kwargs(
                 messages=[
@@ -476,7 +494,7 @@ Please ensure personas are:
             response = await self.client.chat.completions.create(**create_kwargs)
             
             # Parse response based on format
-            if output_format == "json":
+            if output_format in STRUCTURED_PERSONA_FORMATS:
                 result = json.loads(response.choices[0].message.content)
             else:
                 # For non-JSON formats, return content in "personas" field for consistency
@@ -586,6 +604,16 @@ Format emphasizing goals and motivations.""",
 - Role-based decision making
 Format emphasizing professional roles and contexts.""",
             
+            "narrative": (
+                ENGAGING_NARRATIVE_PROMPT.format(num_personas=num_personas)
+                + narrative_json_contract(num_personas, anonymous=False)
+            ),
+
+            "non_anthropomorphized": (
+                NONANTHROPOMORPHIZED_NARRATIVE_PROMPT.format(num_personas=num_personas)
+                + narrative_json_contract(num_personas, anonymous=True)
+            ),
+
             "interactive": f"""Generate {num_personas} interactive personas. Each should include:
 - Dynamic characteristics
 - Scenario-based descriptions
