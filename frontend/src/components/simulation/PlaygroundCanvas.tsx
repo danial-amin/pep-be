@@ -37,7 +37,7 @@ function CanvasNode({ data, selected }: NodeProps<Node<CanvasNodeData>>) {
 
   return (
     <div className={`w-[200px] rounded-xl border px-3 py-2 text-left ${tone} ${pathEdge} ${selectedRing}`}>
-      <Handle type="target" position={Position.Top} className="!h-2 !w-2 !bg-stone-400" />
+      <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-stone-400" />
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">{data.eyebrow}</span>
         {data.forkCount > 1 && (
@@ -57,10 +57,10 @@ function CanvasNode({ data, selected }: NodeProps<Node<CanvasNodeData>>) {
             data.onHide();
           }}
         >
-          {data.hiddenCount > 0 ? `Show ${data.hiddenCount}` : 'Hide below'}
+          {data.hiddenCount > 0 ? `Show ${data.hiddenCount}` : 'Hide ahead'}
         </button>
       )}
-      <Handle type="source" position={Position.Bottom} className="!h-2 !w-2 !bg-stone-400" />
+      <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-stone-400" />
     </div>
   );
 }
@@ -113,12 +113,12 @@ export default function PlaygroundCanvas({
       if (kids.length === 0) {
         const slot = cursor;
         cursor += 1;
-        positions.set(id, { x: slot * 240, y: depth * 150 });
+        positions.set(id, { x: depth * 280, y: slot * 140 });
         return slot;
       }
       const slots = kids.map((child) => place(child.id, depth + 1));
       const mid = (slots[0] + slots[slots.length - 1]) / 2;
-      positions.set(id, { x: mid * 240, y: depth * 150 });
+      positions.set(id, { x: depth * 280, y: mid * 140 });
       return mid;
     };
     place('root', 0);
@@ -205,7 +205,7 @@ export default function PlaygroundCanvas({
           <span className="h-2 w-2 rounded-full bg-amber-400" />
           Facilitator
         </span>
-        <span>A blue fork count means this turn has more than one continuation.</span>
+        <span>A thread reads left to right. A fork opens another row.</span>
       </div>
       <div className="h-[640px]">
         <ReactFlow
