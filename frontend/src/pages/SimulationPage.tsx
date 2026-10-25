@@ -29,6 +29,7 @@ import {
   SimulationEvaluationScores,
 } from '../types';
 import PlaygroundCanvas from '../components/simulation/PlaygroundCanvas';
+import PlaygroundRoom from '../components/simulation/PlaygroundRoom';
 import PlaygroundDetails from '../components/simulation/PlaygroundDetails';
 import PlaygroundSessionBar from '../components/simulation/PlaygroundSessionBar';
 import PlaygroundSetup from '../components/simulation/PlaygroundSetup';
@@ -926,6 +927,7 @@ export default function SimulationPage() {
   const selectedMessage = typeof selectedId === 'number'
     ? playgroundMessages.find((message) => message.id === selectedId) ?? null
     : null;
+  const floorMessage = streamingOnPath && streamingMessage ? streamingMessage : selectedMessage;
   const selectedClosed = !!currentSimulation && (
     pathIsClosed({
       messages: playgroundMessages.filter((message) => message.id > 0),
@@ -967,7 +969,7 @@ export default function SimulationPage() {
             <p className="text-stone-600 text-lg">
               {isStudyMode
                 ? `Signed in as ${user?.participant_code || user?.name || 'participant'} — set the room, then fork the discussion`
-                : 'Seat a cast, then fork the discussion from any earlier turn'}
+                : 'A hall with seats, one speaker on the floor, and threads that fork to the right'}
             </p>
           </div>
         </div>
@@ -977,7 +979,7 @@ export default function SimulationPage() {
             className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            New Simulation
+            New hall
           </button>
         )}
       </div>
@@ -1131,6 +1133,35 @@ export default function SimulationPage() {
                 onDownload={handleDownloadSimulation}
               />
 
+              <PlaygroundRoom
+                goal={currentSimulation.goal}
+                running={running}
+                facilitatorSpeaking={
+                  !!floorMessage && (floorMessage.is_human_message || floorMessage.persona_id == null)
+                }
+                floorName={
+                  floorMessage
+                    ? (floorMessage.is_human_message || floorMessage.persona_id == null
+                      ? 'Facilitator'
+                      : floorMessage.persona_name)
+                    : undefined
+                }
+                floorText={floorMessage?.content}
+                seats={currentSimulation.participants.map((participant) => ({
+                  id: participant.persona_id,
+                  name: participant.persona_name,
+                  imageUrl: participant.persona_image_url,
+                  role: participant.role,
+                  speaking: !!floorMessage
+                    && !floorMessage.is_human_message
+                    && floorMessage.persona_id === participant.persona_id,
+                }))}
+                onSeat={(personaId) => {
+                  const latest = [...pathMessages].reverse().find((message) => message.persona_id === personaId);
+                  if (latest) handleCanvasSelect(latest.id);
+                }}
+              />
+
               <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <div className="flex min-w-0 flex-col gap-4">
                   <PlaygroundCanvas
@@ -1138,6 +1169,7 @@ export default function SimulationPage() {
                     messages={playgroundMessages}
                     selectedId={selectedId}
                     onSelect={handleCanvasSelect}
+                    mapHeight={280}
                   />
                   {running && (
                     <div className="flex items-center text-sm text-stone-500">

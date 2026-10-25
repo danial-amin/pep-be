@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Loader2, Play, Users } from 'lucide-react';
 import type { Persona, PersonaSet } from '../../types';
 import { getPersonaImageUrl } from '../../utils/imageUtils';
+import PlaygroundRoom from './PlaygroundRoom';
 
 const STEPS = [
-  { id: 'brief', label: 'Brief' },
-  { id: 'cast', label: 'Cast' },
-  { id: 'rules', label: 'Rules' },
+  { id: 'brief', label: 'Agenda' },
+  { id: 'cast', label: 'Seats' },
+  { id: 'rules', label: 'Session' },
 ] as const;
 
 interface PlaygroundSetupProps {
@@ -111,9 +112,9 @@ export default function PlaygroundSetup({
     <div className="glass-card rounded-2xl p-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-stone-900">New playground</h3>
+          <h3 className="text-xl font-semibold text-stone-900">Open a hall</h3>
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-stone-500">
-            Write the brief, seat who speaks, then set how far one path can run. After it starts, any earlier turn can fork without erasing the others.
+            Set the agenda, give each persona a seat, and decide how long one thread of the meeting can run. You keep a facilitator seat. A fork stays in the room as another thread.
           </p>
         </div>
         <ol className="flex items-center gap-2">
@@ -230,6 +231,20 @@ export default function PlaygroundSetup({
             </ol>
           )}
 
+          <div className="mb-4">
+            <PlaygroundRoom
+              compact
+              title="Room preview"
+              goal={goal || 'The agenda appears on the floor'}
+              seats={seated.map((persona) => ({
+                id: persona.id,
+                name: persona.persona_data?.name || persona.name,
+                imageUrl: persona.image_url,
+                role: selectedPersonas.get(persona.id) || undefined,
+              }))}
+            />
+          </div>
+
           <input
             type="search"
             value={query}
@@ -338,7 +353,7 @@ export default function PlaygroundSetup({
 
           <div>
             <label className="mb-2 block text-sm font-medium text-stone-700" htmlFor="playground-turns">
-              Rounds on one path
+              Rounds on one thread
             </label>
             <select
               id="playground-turns"
@@ -423,7 +438,7 @@ export default function PlaygroundSetup({
             className="inline-flex items-center gap-2 rounded-xl bg-stone-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {loading ? 'Creating…' : 'Open playground'}
+            {loading ? 'Opening…' : 'Open the hall'}
           </button>
         )}
       </div>

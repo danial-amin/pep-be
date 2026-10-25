@@ -72,6 +72,7 @@ interface PlaygroundCanvasProps {
   messages: SimulationMessage[];
   selectedId: NodeSelection;
   onSelect: (id: NodeSelection) => void;
+  mapHeight?: number;
 }
 
 function previewText(message: SimulationMessage): string {
@@ -94,6 +95,7 @@ export default function PlaygroundCanvas({
   messages,
   selectedId,
   onSelect,
+  mapHeight = 640,
 }: PlaygroundCanvasProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -207,7 +209,7 @@ export default function PlaygroundCanvas({
         </span>
         <span>A thread reads left to right. A fork opens another row.</span>
       </div>
-      <div className="h-[640px]">
+      <div style={{ height: mapHeight }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
