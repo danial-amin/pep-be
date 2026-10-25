@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.persona import Persona
 from app.models.simulation import Simulation, SimulationMessage, SimulationParticipant
+from app.services.simulation_lineage import lineage_messages
 
 
 async def load_simulation_with_messages(
@@ -45,6 +46,11 @@ def _participant_names(simulation: Simulation) -> Dict[int, str]:
 
 
 def _ordered_messages(simulation: Simulation) -> List[SimulationMessage]:
+    """Focused path when a head is set. A null head is the root, so the path is empty."""
+    if getattr(simulation, "active_head_message_id", None) is not None or hasattr(
+        simulation, "active_head_message_id"
+    ):
+        return lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
     return sorted(
         simulation.messages,
         key=lambda m: (m.turn_number, m.id),

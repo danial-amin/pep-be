@@ -5,6 +5,7 @@ import { personasApi, simulationsApi } from '../services/api';
 import { Persona, Simulation, SimulationMessage } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
 import { studyPath } from '../hooks/useStudyTracker';
+import { lineageOf } from '../components/simulation/lineage';
 
 function PersonaAvatar({
   name,
@@ -135,7 +136,8 @@ export default function SimulationPersonaChatsPage() {
 
   const personaMessages = useMemo(() => {
     if (!simulation || !selectedPersonaId) return [];
-    return simulation.messages
+    const onPath = lineageOf(simulation.messages, simulation.active_head_message_id ?? null);
+    return onPath
       .filter(m => !isHumanMessage(m) && m.persona_id === selectedPersonaId)
       .slice()
       .sort(

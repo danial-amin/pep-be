@@ -248,6 +248,8 @@ export interface SimulationMessage {
   is_human_message?: boolean;
   /** Populated asynchronously by evaluator; 0=on-persona, 1=fully drifted */
   persona_drift_score?: number;
+  /** Tree edge. Null hangs this message off the goal root. */
+  parent_message_id?: number | null;
   created_at: string;
 }
 
@@ -292,6 +294,8 @@ export interface AgreementEvaluation {
   /** Keyed by string persona_id */
   persona_stances?: Record<string, PersonaStanceDetail>;
   evaluation_reasoning?: string;
+  /** Last message on the path this snapshot scored. */
+  head_message_id?: number | null;
   created_at: string;
 }
 
@@ -349,9 +353,13 @@ export interface Simulation {
   run_until_agreement: boolean;
   agreement_threshold: number;
   status: 'pending' | 'running' | 'completed' | 'stopped';
-  /** Full rounds completed (every participant spoke once per round). */
+  /** Full rounds completed on the focused path. */
   current_turn: number;
   tokens_used: number;
+  /** Message the next turn attaches to. Null is the goal root. */
+  active_head_message_id?: number | null;
+  path_complete?: boolean;
+  path_tokens?: number;
   /** Latest agreement snapshot score, if any evaluation has been run */
   latest_agreement_score?: number;
   agreement_reached: boolean;

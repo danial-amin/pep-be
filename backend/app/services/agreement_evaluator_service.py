@@ -32,6 +32,7 @@ from app.models.simulation import (
     SimulationAgreementEvaluation,
     SimulationMessage,
 )
+from app.services.simulation_lineage import lineage_messages
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +68,14 @@ class AgreementEvaluatorService:
             simulation, participants, session
         )
 
-        # 2. Extract current stances from messages
+        # 2. Extract current stances from the focused path only.
+        focused = lineage_messages(
+            list(simulation.messages or []),
+            simulation.active_head_message_id,
+        )
         messages = [
             m
-            for m in simulation.messages
+            for m in focused
             if m.persona_id is not None and not getattr(m, "is_human_message", False)
         ]
         current_stances = await self._extract_current_stances(
@@ -91,6 +96,7 @@ class AgreementEvaluatorService:
         evaluation = SimulationAgreementEvaluation(
             simulation_id=simulation.id,
             turn_number=turn_number,
+            head_message_id=simulation.active_head_message_id,
             overall_agreement_score=round(overall_score, 4),
             agreement_reached=agreement_reached,
             persona_stances=persona_stances,

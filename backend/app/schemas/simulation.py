@@ -108,6 +108,14 @@ class HumanInterventionRequest(BaseModel):
     content: str = Field(..., min_length=1, description="The facilitator's message or directive")
 
 
+class SimulationFocusRequest(BaseModel):
+    """Move the active head without copying messages. Null focuses the goal root."""
+    message_id: Optional[int] = Field(
+        default=None,
+        description="Message to continue from. Omit or null to focus the goal root.",
+    )
+
+
 class SimulationMessageResponse(BaseModel):
     """Response for a single simulation message."""
     id: int
@@ -120,6 +128,7 @@ class SimulationMessageResponse(BaseModel):
     is_moderator_message: bool = False
     is_human_message: bool = False
     persona_drift_score: Optional[float] = None
+    parent_message_id: Optional[int] = None
     created_at: datetime
 
     class Config:
@@ -169,6 +178,7 @@ class AgreementEvaluationResponse(BaseModel):
     turn_number: int
     overall_agreement_score: float
     agreement_reached: bool
+    head_message_id: Optional[int] = None
     # Keys are str(persona_id)
     persona_stances: Optional[Dict[str, PersonaStanceDetail]] = None
     evaluation_reasoning: Optional[str] = None
@@ -208,6 +218,10 @@ class SimulationResponse(BaseModel):
     status: str
     current_turn: int
     tokens_used: int
+    active_head_message_id: Optional[int] = None
+    # True when the focused path has hit its turn, token, or agreement limit.
+    path_complete: bool = False
+    path_tokens: int = 0
 
     # Latest agreement snapshot (None if not yet evaluated)
     latest_agreement_score: Optional[float] = None
@@ -269,6 +283,8 @@ class SimulationTurnResponse(BaseModel):
     tokens_remaining: int
     turns_remaining: int
     is_complete: bool
+    path_complete: bool = False
+    active_head_message_id: Optional[int] = None
     # Agreement info after this turn (populated if a full round just completed)
     agreement_evaluation: Optional[AgreementEvaluationResponse] = None
 

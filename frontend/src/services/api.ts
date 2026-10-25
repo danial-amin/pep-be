@@ -395,6 +395,12 @@ export const simulationsApi = {
     return response.data;
   },
 
+  /** Move the active head. Null focuses the goal root. Does not copy messages. */
+  focus: async (id: number, messageId: number | null) => {
+    const response = await api.post(`/simulations/${id}/focus`, { message_id: messageId });
+    return response.data;
+  },
+
   /** Add a human facilitator intervention; next persona turn will address it with strong weight */
   intervene: async (id: number, content: string) => {
     const response = await api.post(`/simulations/${id}/intervene`, { content });

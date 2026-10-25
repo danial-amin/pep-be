@@ -31,6 +31,7 @@ from app.schemas.simulation import (
     SimulationCreateRequest,
     SimulationStartRequest,
     HumanInterventionRequest,
+    SimulationFocusRequest,
     SimulationResponse,
     SimulationListResponse,
     SimulationMessageResponse,
@@ -43,6 +44,12 @@ from app.schemas.simulation import (
     PersonaStanceDetail,
 )
 from app.services.persona_simulation_service import simulation_service
+from app.services.simulation_lineage import (
+    completed_rounds,
+    lineage_messages,
+    path_is_closed,
+    path_tokens,
+)
 from app.services.persona_evaluation_service import persona_evaluation_service
 from app.services.agreement_evaluator_service import agreement_evaluator_service
 from app.services.simulation_judge_service import simulation_judge_service
@@ -69,6 +76,7 @@ def _build_message_response(
             is_moderator_message=msg.is_moderator_message,
             is_human_message=True,
             persona_drift_score=None,
+            parent_message_id=getattr(msg, "parent_message_id", None),
             created_at=msg.created_at,
         )
     return SimulationMessageResponse(
@@ -82,6 +90,7 @@ def _build_message_response(
         is_moderator_message=msg.is_moderator_message,
         is_human_message=getattr(msg, "is_human_message", False),
         persona_drift_score=getattr(msg, "persona_drift_score", None),
+        parent_message_id=getattr(msg, "parent_message_id", None),
         created_at=msg.created_at,
     )
 
@@ -126,6 +135,7 @@ def _build_agreement_evaluation_response(
         turn_number=ev.turn_number,
         overall_agreement_score=ev.overall_agreement_score,
         agreement_reached=ev.agreement_reached,
+        head_message_id=getattr(ev, "head_message_id", None),
         persona_stances=persona_stances_out,
         evaluation_reasoning=ev.evaluation_reasoning,
         created_at=ev.created_at,
@@ -187,12 +197,25 @@ async def _build_simulation_response(
         if persona_summaries_out is None:
             summary_out = summary_raw
 
-    # Latest agreement snapshot
+    focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+    participant_count = len(simulation.participants or [])
+    path_rounds = completed_rounds(focused, participant_count)
+    focused_tokens = path_tokens(focused)
+    focused_closed = path_is_closed(simulation, focused, participant_count)
+    lineage_ids = {m.id for m in focused}
+    single_path = len(focused) == len(list(simulation.messages or []))
+
+    # Latest agreement snapshot on the focused path
     latest_score: Optional[float] = None
     agreement_reached = False
-    evals = getattr(simulation, "agreement_evaluations", [])
-    if evals:
-        latest_eval = max(evals, key=lambda e: e.turn_number)
+    evals = getattr(simulation, "agreement_evaluations", []) or []
+    path_evals = [
+        e for e in evals
+        if getattr(e, "head_message_id", None) in lineage_ids
+        or (getattr(e, "head_message_id", None) is None and single_path)
+    ]
+    if path_evals:
+        latest_eval = max(path_evals, key=lambda e: (e.turn_number, e.id or 0))
         latest_score = latest_eval.overall_agreement_score
         agreement_reached = latest_eval.agreement_reached
 
@@ -207,8 +230,11 @@ async def _build_simulation_response(
         run_until_agreement=getattr(simulation, "run_until_agreement", False) or False,
         agreement_threshold=getattr(simulation, "agreement_threshold", 0.75) or 0.75,
         status=simulation.status,
-        current_turn=simulation.current_turn,
+        current_turn=path_rounds,
         tokens_used=simulation.tokens_used,
+        active_head_message_id=simulation.active_head_message_id,
+        path_complete=focused_closed,
+        path_tokens=focused_tokens,
         latest_agreement_score=latest_score,
         agreement_reached=agreement_reached,
         started_at=simulation.started_at,
@@ -440,12 +466,16 @@ async def _build_simulation_export(simulation: Simulation, session: AsyncSession
             "is_moderator_message": msg.is_moderator_message,
             "is_human_message": getattr(msg, "is_human_message", False),
             "responding_to_id": msg.responding_to_id,
+            "parent_message_id": getattr(msg, "parent_message_id", None),
             "persona_drift_score": getattr(msg, "persona_drift_score", None),
             "created_at": msg.created_at,
         })
 
+    focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
     payload: dict = {
         "simulation_id": simulation.id,
+        "active_head_message_id": simulation.active_head_message_id,
+        "focused_path": [m.id for m in focused],
         "setup": _serialize_export_value(setup),
         "conversations": _serialize_export_value(conversations),
     }
@@ -480,6 +510,7 @@ async def _build_simulation_export(simulation: Simulation, session: AsyncSession
         payload["agreement_history"] = _serialize_export_value([
             {
                 "turn_number": e.turn_number,
+                "head_message_id": getattr(e, "head_message_id", None),
                 "overall_agreement_score": e.overall_agreement_score,
                 "agreement_reached": e.agreement_reached,
                 "persona_stances": e.persona_stances,
@@ -573,6 +604,55 @@ async def start_simulation(
     return await _build_simulation_response(simulation, session)
 
 
+@router.post("/{simulation_id}/focus", response_model=SimulationResponse)
+async def focus_simulation(
+    simulation_id: int,
+    request: SimulationFocusRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """Point the next turn or intervention at an existing node. Does not copy messages."""
+    result = await session.execute(
+        select(Simulation)
+        .options(
+            selectinload(Simulation.participants),
+            selectinload(Simulation.messages),
+            selectinload(Simulation.agreement_evaluations),
+        )
+        .where(Simulation.id == simulation_id)
+    )
+    simulation = result.scalar_one_or_none()
+    if not simulation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Simulation with ID {simulation_id} not found",
+        )
+    if simulation.status == "stopped":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Simulation is stopped",
+        )
+    if simulation.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Simulation is already completed",
+        )
+
+    if request.message_id is not None:
+        message = next((m for m in simulation.messages if m.id == request.message_id), None)
+        if message is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Message {request.message_id} is not in this simulation",
+            )
+
+    simulation.active_head_message_id = request.message_id
+    focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+    simulation.current_turn = completed_rounds(focused, len(simulation.participants or []))
+    await session.commit()
+    await session.refresh(simulation, ["messages", "participants", "agreement_evaluations"])
+    return await _build_simulation_response(simulation, session)
+
+
 @router.post("/{simulation_id}/next-turn", response_model=SimulationTurnResponse)
 async def next_turn(
     simulation_id: int,
@@ -616,6 +696,12 @@ async def next_turn(
     turn_before = simulation.current_turn
     message = await simulation_service.generate_turn(simulation, session)
     if not message:
+        focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+        if path_is_closed(simulation, focused, len(simulation.participants or [])):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This path has reached its limit. Focus an earlier node to branch.",
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Could not generate next turn",
@@ -642,12 +728,8 @@ async def next_turn(
                 turn_number=simulation.current_turn,
             )
             agreement_eval_response = _build_agreement_evaluation_response(ev)
-            # Stop if agreement reached
-            if ev.agreement_reached and simulation.status == "running":
-                from datetime import timezone
-                simulation.status = "completed"
-                simulation.completed_at = datetime.now(timezone.utc)
-                await session.commit()
+            # Agreement closes this path on the next turn. The session stays open.
+            await session.refresh(simulation, ["agreement_evaluations"])
         except Exception as exc:
             import logging
             logging.getLogger(__name__).warning(
@@ -660,14 +742,19 @@ async def next_turn(
     persona = result_p.scalar_one_or_none()
 
     max_tokens = simulation.max_tokens or 0
+    focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+    path_closed = path_is_closed(simulation, focused, len(simulation.participants or []))
+    path_rounds = completed_rounds(focused, len(simulation.participants or []))
     return SimulationTurnResponse(
         message=_build_message_response(message, persona),
         simulation_status=simulation.status,
-        current_turn=simulation.current_turn,
+        current_turn=path_rounds,
         tokens_used=simulation.tokens_used,
-        tokens_remaining=max_tokens - simulation.tokens_used if max_tokens else 0,
-        turns_remaining=simulation.max_turns - simulation.current_turn,
-        is_complete=simulation.status == "completed",
+        tokens_remaining=max_tokens - path_tokens(focused) if max_tokens else 0,
+        turns_remaining=max(0, simulation.max_turns - path_rounds),
+        is_complete=path_closed,
+        path_complete=path_closed,
+        active_head_message_id=simulation.active_head_message_id,
         agreement_evaluation=agreement_eval_response,
     )
 
@@ -704,8 +791,14 @@ async def human_intervene(
             detail=f"Cannot intervene: simulation is already {simulation.status}",
         )
 
-    persona_count = simulation_service._count_persona_messages(list(simulation.messages))
+    focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
     num_participants = max(1, len(simulation.participants))
+    if path_is_closed(simulation, focused, len(simulation.participants or [])):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This path has reached its limit. Focus an earlier node to branch.",
+        )
+    persona_count = simulation_service._count_persona_messages(focused)
     # Use the same turn numbering as the next persona reply so interventions
     # land chronologically with the turn they trigger (not mid-previous-round).
     turn_number = simulation_service._round_turn_number(persona_count, num_participants)
@@ -717,7 +810,8 @@ async def human_intervene(
         tokens=0,
         is_human_message=True,
     )
-    session.add(message)
+    await simulation_service._attach_to_head(simulation, message, session)
+    simulation.current_turn = completed_rounds(focused, len(simulation.participants or []))
     await session.commit()
     await session.refresh(message)
     return _build_message_response(message, None)
@@ -834,10 +928,11 @@ async def evaluate_agreement_now(
             detail=f"Simulation with ID {simulation_id} not found",
         )
 
-    if not simulation.messages:
+    focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+    if not focused:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot evaluate agreement: simulation has no messages yet",
+            detail="Cannot evaluate agreement: the focused path has no messages yet",
         )
 
     participants = {}
@@ -854,7 +949,7 @@ async def evaluate_agreement_now(
             simulation=simulation,
             participants=participants,
             session=session,
-            turn_number=simulation.current_turn,
+            turn_number=completed_rounds(focused, len(simulation.participants or [])) or simulation.current_turn,
         )
     except Exception as exc:
         import logging
@@ -967,10 +1062,11 @@ async def generate_summary(
             detail=f"Simulation with ID {simulation_id} not found",
         )
 
-    if not simulation.messages:
+    focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+    if not focused:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Simulation has no messages to summarise",
+            detail="The focused path has no messages to summarise",
         )
 
     summary_result = await simulation_service.generate_summary(simulation, session)

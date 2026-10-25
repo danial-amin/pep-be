@@ -38,9 +38,20 @@ class Simulation(Base):
 
     # Current state
     status = Column(String(50), default="pending")  # pending, running, completed, stopped
-    # Number of fully completed rounds (each participant spoke once per round).
+    # Completed rounds on the focused path (every participant spoke once per round).
     current_turn = Column(Integer, default=0)
     tokens_used = Column(Integer, default=0)
+    # Node the next turn or intervention attaches to. Null is the goal root.
+    active_head_message_id = Column(
+        Integer,
+        ForeignKey(
+            "simulation_messages.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_simulations_active_head_message_id",
+        ),
+        nullable=True,
+    )
 
     # Timing
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -117,6 +128,17 @@ class SimulationMessage(Base):
     is_moderator_message = Column(Boolean, default=False)  # System/moderator messages
     is_human_message = Column(Boolean, default=False)  # Human facilitator intervention
     responding_to_id = Column(Integer, ForeignKey("simulation_messages.id"), nullable=True)
+    # Tree edge. Null means this message hangs off the goal root.
+    parent_message_id = Column(
+        Integer,
+        ForeignKey(
+            "simulation_messages.id",
+            ondelete="SET NULL",
+            name="fk_simulation_messages_parent_message_id",
+        ),
+        nullable=True,
+        index=True,
+    )
 
     # Personality drift score for this message (0.0 = on-persona, 1.0 = fully drifted)
     # Populated asynchronously by the agreement evaluator when available
@@ -145,6 +167,17 @@ class SimulationAgreementEvaluation(Base):
 
     # Which turn (round) this evaluation was taken after
     turn_number = Column(Integer, nullable=False)
+    # Last message on the path this snapshot scored. Lets two branches share a turn number.
+    head_message_id = Column(
+        Integer,
+        ForeignKey(
+            "simulation_messages.id",
+            ondelete="SET NULL",
+            name="fk_simulation_agreement_evaluations_head_message_id",
+        ),
+        nullable=True,
+        index=True,
+    )
 
     # Aggregate score: 0.0 = complete disagreement, 1.0 = full agreement
     overall_agreement_score = Column(Float, nullable=False)

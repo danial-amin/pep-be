@@ -38,6 +38,11 @@ import {
   SimulationEvaluationScores,
 } from '../types';
 import { getPersonaImageUrl } from '../utils/imageUtils';
+import PlaygroundCanvas from '../components/simulation/PlaygroundCanvas';
+import PlaygroundDetails from '../components/simulation/PlaygroundDetails';
+import PathChat from '../components/simulation/PathChat';
+import BranchCompare from '../components/simulation/BranchCompare';
+import { lineageOf, pathIsClosed, type NodeSelection } from '../components/simulation/lineage';
 import { getStudyScope, setStudyScope, studyPath, useStudyTracker } from '../hooks/useStudyTracker';
 import { useAuth } from '../context/AuthContext';
 
@@ -79,60 +84,6 @@ function PersonaAvatar({
       <span className="text-stone-600 font-semibold">
         {name.charAt(0).toUpperCase()}
       </span>
-    </div>
-  );
-}
-
-// Message Bubble Component
-function MessageBubble({ message, isLeft }: { message: SimulationMessage; isLeft: boolean }) {
-  const isHuman = message.is_human_message ?? (message.persona_id == null);
-  const displayName = isHuman ? 'Facilitator (you)' : message.persona_name;
-
-  if (isHuman) {
-    return (
-      <div className="flex justify-center mb-4">
-        <div className="flex items-start gap-3 max-w-[85%]">
-          <div className="rounded-2xl px-4 py-3 bg-amber-50 border border-amber-200 shadow-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-semibold text-amber-700">{displayName}</span>
-              <span className="text-xs text-amber-500">Intervention</span>
-            </div>
-            <p className="text-stone-900/95 text-sm leading-relaxed">{message.content}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`flex ${isLeft ? 'justify-start' : 'justify-end'} mb-4`}>
-      <div className={`flex ${isLeft ? 'flex-row' : 'flex-row-reverse'} items-start gap-3 max-w-[80%]`}>
-        <PersonaAvatar
-          name={message.persona_name}
-          imageUrl={message.persona_image_url}
-          personaId={message.persona_id ?? undefined}
-          size="sm"
-        />
-        <div className={`${isLeft ? 'bg-stone-50 border border-stone-100' : 'bg-white border border-stone-200'} rounded-2xl px-4 py-3`}>
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-sm font-semibold text-stone-900">{message.persona_name}</span>
-            <span className="text-xs text-stone-400">Turn {message.turn_number}</span>
-            {message.persona_drift_score !== undefined && (
-              <span
-                title={`Persona drift: ${(message.persona_drift_score * 100).toFixed(0)}% (0=on-persona, 100=fully drifted)`}
-                className={`text-xs px-1.5 py-0.5 rounded-full ${
-                  message.persona_drift_score > 0.6 ? 'bg-red-50 text-red-600' :
-                  message.persona_drift_score > 0.3 ? 'bg-amber-50 text-amber-600' :
-                  'bg-green-50 text-green-600'
-                }`}
-              >
-                drift {(message.persona_drift_score * 100).toFixed(0)}%
-              </span>
-            )}
-          </div>
-            <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
-        </div>
-      </div>
     </div>
   );
 }
@@ -211,7 +162,6 @@ export default function SimulationPage() {
   const studyScope = getStudyScope();
   const { track } = useStudyTracker(studySlug);
   const useStudyDefaults = shouldUseStudySimulationDefaults(user?.participant_code);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<AbortController | null>(null);
   const autoContinueRef = useRef(!isStudyMode);
   const streamingMessageRef = useRef<SimulationMessage | null>(null);
@@ -228,6 +178,11 @@ export default function SimulationPage() {
   const [streamingEnabled, setStreamingEnabled] = useState(true);
   const [interventionText, setInterventionText] = useState('');
   const [intervening, setIntervening] = useState(false);
+  const [selectedId, setSelectedId] = useState<NodeSelection>('root');
+  const [compareArmed, setCompareArmed] = useState(false);
+  const [compareId, setCompareId] = useState<number | null>(null);
+  const selectedRef = useRef<NodeSelection>('root');
+  const activeHeadRef = useRef<number | null>(null);
 
   // Setup form state
   const [showSetup, setShowSetup] = useState(!simulationId);
@@ -273,11 +228,6 @@ export default function SimulationPage() {
       loadSimulation(parseInt(simulationId));
     }
   }, [simulationId]);
-
-  // Auto-scroll to bottom of messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentSimulation?.messages, streamingMessage?.content]);
 
   useEffect(() => {
     autoContinueRef.current = autoContinue;
@@ -386,8 +336,20 @@ export default function SimulationPage() {
     try {
       const data = await simulationsApi.getById(id);
       setCurrentSimulation(data);
+      const head = data.active_head_message_id ?? null;
+      activeHeadRef.current = head;
+      selectedRef.current = head ?? 'root';
+      setSelectedId(selectedRef.current);
+      setCompareId(null);
+      setCompareArmed(false);
       setShowSetup(false);
-      if (data.status === 'completed' || data.status === 'stopped') {
+      try {
+        const history = await simulationsApi.getAgreementHistory(id);
+        setAgreementHistory(history);
+      } catch {
+        setAgreementHistory(null);
+      }
+      if (data.status === 'completed' || data.status === 'stopped' || data.path_complete) {
         await loadEvaluationScores(id);
       } else {
         setEvaluationScores(null);
@@ -499,6 +461,7 @@ export default function SimulationPage() {
                   turn_number: data.turn_number,
                   tokens: 0,
                   is_moderator_message: false,
+                  parent_message_id: data.parent_message_id ?? activeHeadRef.current,
                   created_at: new Date().toISOString(),
                 };
                 streamingMessageRef.current = nextMsg;
@@ -531,6 +494,24 @@ export default function SimulationPage() {
                 continue;
               }
 
+              if (data.type === 'complete' && data.reason === 'path_closed') {
+                setCurrentSimulation((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        path_complete: true,
+                        status: data.simulation_status ?? prev.status,
+                        current_turn: data.current_turn ?? prev.current_turn,
+                      }
+                    : prev,
+                );
+                streamingMessageRef.current = null;
+                setStreamingMessage(null);
+                setRunning(false);
+                closeStream();
+                return;
+              }
+
               if (data.type === 'complete') {
                 const fullContent =
                   (typeof data.content === 'string' && data.content.length > 0
@@ -560,6 +541,7 @@ export default function SimulationPage() {
                   tokens: data.tokens ?? 0,
                   is_moderator_message: false,
                   is_human_message: false,
+                  parent_message_id: data.parent_message_id ?? activeHeadRef.current,
                   created_at:
                     streamingMessageRef.current?.created_at || new Date().toISOString(),
                 };
@@ -575,6 +557,8 @@ export default function SimulationPage() {
                     status: data.simulation_status ?? prev.status,
                     current_turn: data.current_turn ?? prev.current_turn,
                     tokens_used: data.tokens_used ?? prev.tokens_used,
+                    active_head_message_id: finalized.id,
+                    path_complete: !!data.path_complete,
                     messages: already ? withoutTemp : [...withoutTemp, finalized],
                     latest_agreement_score:
                       evalResult?.overall_agreement_score ?? prev.latest_agreement_score,
@@ -594,6 +578,14 @@ export default function SimulationPage() {
                 setRunning(false);
                 closeStream();
                 loadSimulations();
+                const parentId = data.parent_message_id ?? activeHeadRef.current;
+                const followed =
+                  selectedRef.current === 'root' ? parentId == null : selectedRef.current === parentId;
+                if (followed && typeof finalized.id === 'number') {
+                  selectedRef.current = finalized.id;
+                  setSelectedId(finalized.id);
+                }
+                activeHeadRef.current = finalized.id;
 
                 track('simulation_turn_message', {
                   simulation_id: simulationId,
@@ -608,7 +600,8 @@ export default function SimulationPage() {
                 if (
                   shouldAutoContinue &&
                   autoContinueRef.current &&
-                  data.simulation_status === 'running'
+                  data.simulation_status === 'running' &&
+                  !data.path_complete
                 ) {
                   setTimeout(() => startStreamingTurn(true), 400);
                 }
@@ -714,8 +707,43 @@ export default function SimulationPage() {
     }
   };
 
+  const followHead = (simulation: { active_head_message_id?: number | null }) => {
+    const head = simulation.active_head_message_id ?? null;
+    activeHeadRef.current = head;
+    if (head != null) {
+      selectedRef.current = head;
+      setSelectedId(head);
+    }
+  };
+
+  const alignHead = async (target: number | null) => {
+    if (!currentSimulation) return;
+    activeHeadRef.current = target;
+    if ((currentSimulation.active_head_message_id ?? null) === target) return;
+    const updated = await simulationsApi.focus(currentSimulation.id, target);
+    activeHeadRef.current = updated.active_head_message_id ?? null;
+    setCurrentSimulation(updated);
+  };
+
+  const handleCanvasSelect = (id: NodeSelection) => {
+    if (compareArmed && typeof id === 'number') {
+      setCompareId(id);
+      setCompareArmed(false);
+      return;
+    }
+    selectedRef.current = id;
+    setSelectedId(id);
+  };
+
   const handleStartSimulation = async (autoContinue: boolean = true) => {
     if (!currentSimulation) return;
+    const target = selectedRef.current === 'root' ? null : selectedRef.current;
+    try {
+      await alignHead(target);
+    } catch (error: any) {
+      alert(`Failed to focus this node: ${error.response?.data?.detail || error.message}`);
+      return;
+    }
 
     track('simulation_start', {
       simulation_id: currentSimulation.id,
@@ -732,6 +760,7 @@ export default function SimulationPage() {
     try {
       const updated = await simulationsApi.start(currentSimulation.id, autoContinue);
       setCurrentSimulation(updated);
+      followHead(updated);
       await loadSimulations();
     } catch (error: any) {
       alert(`Failed to start simulation: ${error.response?.data?.detail || error.message}`);
@@ -745,7 +774,9 @@ export default function SimulationPage() {
     setIntervening(true);
     const text = interventionText.trim();
     const simId = currentSimulation.id;
+    const target = selectedRef.current === 'root' ? null : selectedRef.current;
     try {
+      await alignHead(target);
       await simulationsApi.intervene(simId, text);
       track('simulation_intervention', {
         simulation_id: simId,
@@ -755,6 +786,7 @@ export default function SimulationPage() {
       setInterventionText('');
       let updated = await simulationsApi.getById(simId);
       setCurrentSimulation(updated);
+      followHead(updated);
 
       // Intervention should immediately advance the discussion with a persona reply
       if (updated.status === 'pending' || updated.status === 'running') {
@@ -780,8 +812,10 @@ export default function SimulationPage() {
             updated = await simulationsApi.getById(simId);
           }
           setCurrentSimulation(updated);
+          followHead(updated);
           await loadSimulations();
-          const last = updated.messages?.[updated.messages.length - 1];
+          const last = updated.messages?.find((message: SimulationMessage) => message.id === updated.active_head_message_id)
+            ?? updated.messages?.[updated.messages.length - 1];
           if (last) {
             track('simulation_turn_message', {
               simulation_id: simId,
@@ -805,7 +839,14 @@ export default function SimulationPage() {
   };
 
   const handleNextTurn = async () => {
-    if (!currentSimulation) return;
+    if (!currentSimulation || running) return;
+    const target = selectedRef.current === 'root' ? null : selectedRef.current;
+    try {
+      await alignHead(target);
+    } catch (error: any) {
+      alert(`Failed to focus this node: ${error.response?.data?.detail || error.message}`);
+      return;
+    }
 
     track('simulation_next_turn', {
       simulation_id: currentSimulation.id,
@@ -824,7 +865,9 @@ export default function SimulationPage() {
       // Reload full simulation to get updated state
       const updated = await simulationsApi.getById(currentSimulation.id);
       setCurrentSimulation(updated);
-      const last = updated.messages?.[updated.messages.length - 1];
+      followHead(updated);
+      const last = updated.messages?.find((message: SimulationMessage) => message.id === updated.active_head_message_id)
+        ?? updated.messages?.[updated.messages.length - 1];
       if (last) {
         track('simulation_turn_message', {
           simulation_id: currentSimulation.id,
@@ -880,6 +923,13 @@ export default function SimulationPage() {
 
   const handleGenerateSummary = async () => {
     if (!currentSimulation) return;
+    const target = selectedRef.current === 'root' ? null : selectedRef.current;
+    try {
+      await alignHead(target);
+    } catch (error: any) {
+      alert(`Failed to focus this node: ${error.response?.data?.detail || error.message}`);
+      return;
+    }
 
     setGeneratingSummary(true);
     try {
@@ -895,6 +945,13 @@ export default function SimulationPage() {
 
   const handleEvaluateAgreement = async () => {
     if (!currentSimulation) return;
+    const target = selectedRef.current === 'root' ? null : selectedRef.current;
+    try {
+      await alignHead(target);
+    } catch (error: any) {
+      alert(`Failed to focus this node: ${error.response?.data?.detail || error.message}`);
+      return;
+    }
     setEvaluatingAgreement(true);
     try {
       await simulationsApi.evaluateAgreement(currentSimulation.id);
@@ -912,6 +969,13 @@ export default function SimulationPage() {
 
   const handleEvaluateDiscussion = async () => {
     if (!currentSimulation) return;
+    const target = selectedRef.current === 'root' ? null : selectedRef.current;
+    try {
+      await alignHead(target);
+    } catch (error: any) {
+      alert(`Failed to focus this node: ${error.response?.data?.detail || error.message}`);
+      return;
+    }
     const force = evaluationScores?.has_evaluation ?? false;
     if (force && !window.confirm('Re-run evaluation? Existing scores for this simulation will be replaced.')) {
       return;
@@ -952,18 +1016,47 @@ export default function SimulationPage() {
     navigate(studySlug ? studyPath(studySlug, '/simulations') : '/simulations');
   };
 
-  const displayMessages = (() => {
+  const playgroundMessages = (() => {
     const base = currentSimulation?.messages ? [...currentSimulation.messages] : [];
     if (streamingMessage) base.push(streamingMessage);
-    return base.sort((a, b) => {
-      const aid = a.id == null || a.id < 0 ? Number.MAX_SAFE_INTEGER : a.id;
-      const bid = b.id == null || b.id < 0 ? Number.MAX_SAFE_INTEGER : b.id;
-      if (aid !== bid) return aid - bid;
-      const at = a.created_at ? Date.parse(a.created_at) : 0;
-      const bt = b.created_at ? Date.parse(b.created_at) : 0;
-      return at - bt;
-    });
+    return base;
   })();
+  const selectedHead = selectedId === 'root' ? null : selectedId;
+  const pathAnchor = typeof selectedHead === 'number' && selectedHead > 0
+    ? selectedHead
+    : selectedId === -1
+      ? (streamingMessage?.parent_message_id ?? null)
+      : null;
+  const pathMessages = lineageOf(playgroundMessages, pathAnchor);
+  const streamingOnPath = !!streamingMessage && (
+    selectedId === 'root'
+      ? streamingMessage.parent_message_id == null
+      : streamingMessage.parent_message_id === selectedId
+  );
+  const chatMessages = streamingOnPath && streamingMessage ? [...pathMessages, streamingMessage] : pathMessages;
+  const selectedMessage = typeof selectedId === 'number'
+    ? playgroundMessages.find((message) => message.id === selectedId) ?? null
+    : null;
+  const selectedClosed = !!currentSimulation && (
+    pathIsClosed({
+      messages: playgroundMessages.filter((message) => message.id > 0),
+      headId: selectedHead,
+      numParticipants: currentSimulation.participants.length,
+      maxTurns: currentSimulation.max_turns,
+      maxTokens: currentSimulation.max_tokens,
+      runUntilAgreement: currentSimulation.run_until_agreement,
+      evaluations: agreementHistory?.evaluations,
+    }) ||
+    (!!currentSimulation.path_complete &&
+      selectedHead != null &&
+      selectedHead === currentSimulation.active_head_message_id)
+  );
+  const canScore = !!currentSimulation && (
+    currentSimulation.status === 'completed' ||
+    currentSimulation.status === 'stopped' ||
+    !!currentSimulation.path_complete ||
+    selectedClosed
+  );
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -1499,8 +1592,7 @@ export default function SimulationPage() {
                   </button>
                 )}
 
-                {(currentSimulation.status === 'completed' || currentSimulation.status === 'stopped') &&
-                  currentSimulation.messages.length > 0 && (
+                {canScore && currentSimulation.messages.length > 0 && (
                   <button
                     onClick={handleEvaluateDiscussion}
                     disabled={evaluatingDiscussion}
@@ -1512,7 +1604,7 @@ export default function SimulationPage() {
                   </button>
                 )}
 
-                {(currentSimulation.status === 'completed' || currentSimulation.status === 'stopped') &&
+                {canScore &&
                   currentSimulation.messages.length > 0 &&
                   !(currentSimulation.persona_summaries?.length) && !currentSimulation.summary && (
                   <button
@@ -1536,77 +1628,59 @@ export default function SimulationPage() {
                 )}
               </div>
 
-              {/* Chat area: messages scrollable, intervention box fixed at bottom */}
-              <div className="glass-card rounded-2xl overflow-hidden flex flex-col min-h-[480px] max-h-[70vh]">
-                {/* Messages - scrollable, takes remaining space */}
-                <div className="flex-1 min-h-0 overflow-y-auto p-4">
-                  {displayMessages.length === 0 ? (
-                    <div className="flex items-center justify-center h-64 text-stone-400">
-                      <div className="text-center">
-                        <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                        <p>No messages yet. Start the simulation to begin the conversation.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {displayMessages.map((msg, idx) => (
-                        <MessageBubble
-                          key={msg.id > 0 ? msg.id : `stream-${msg.persona_id}-${msg.turn_number}`}
-                          message={msg}
-                          isLeft={idx % 2 === 0}
-                        />
-                      ))}
-                      <div ref={messagesEndRef} />
-                    </>
-                  )}
+              <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="flex min-w-0 flex-col gap-4">
+                  <PlaygroundCanvas
+                    goal={currentSimulation.goal}
+                    messages={playgroundMessages}
+                    selectedId={selectedId}
+                    onSelect={handleCanvasSelect}
+                    onContinue={(id) => {
+                      selectedRef.current = id;
+                      setSelectedId(id);
+                      void handleNextTurn();
+                    }}
+                    onBranch={(id) => {
+                      selectedRef.current = id;
+                      setSelectedId(id);
+                    }}
+                  />
                   {running && (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className="w-6 h-6 text-stone-400 animate-spin" />
-                      <span className="ml-2 text-stone-400">Generating response...</span>
+                    <div className="flex items-center text-sm text-stone-500">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating response...
                     </div>
                   )}
+                  <PathChat messages={chatMessages} />
                 </div>
-
-                {/* Intervention + Next Turn - fixed at bottom under the chat */}
-                {(currentSimulation.status === 'running' || currentSimulation.status === 'pending') && (
-                  <div className="flex-shrink-0 p-4 pt-0 border-t border-stone-200">
-                    <div className="flex gap-2 items-center flex-wrap">
-                      <input
-                        type="text"
-                        value={interventionText}
-                        onChange={(e) => setInterventionText(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && !running && handleIntervene()}
-                        placeholder="Intervene — name who should reply, e.g. Bilal, what about remote villages?"
-                        className="flex-1 min-w-[12rem] px-4 py-2.5 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                        disabled={intervening || running}
-                      />
-                      <button
-                        onClick={handleIntervene}
-                        disabled={intervening || running || !interventionText.trim()}
-                        className="px-4 py-2.5 bg-amber-100 hover:bg-amber-200 disabled:opacity-50 text-amber-800 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
-                      >
-                        {intervening || running ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                        Intervene
-                      </button>
-                      {currentSimulation.status === 'running' && (
-                        <button
-                          onClick={handleNextTurn}
-                          disabled={running}
-                          className="px-4 py-2.5 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
-                        >
-                          {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <SkipForward className="w-4 h-4" />}
-                          Next Turn
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-stone-400 mt-1.5">
-                      {isStudyMode
-                        ? 'Intervene posts your message and immediately runs the next persona turn.'
-                        : 'Intervene posts your message and runs the next persona turn, which will address it.'}
-                    </p>
-                  </div>
-                )}
+                <PlaygroundDetails
+                  goal={currentSimulation.goal}
+                  goalContext={currentSimulation.goal_context}
+                  selected={selectedId}
+                  selectedMessage={selectedMessage}
+                  crumbs={pathMessages}
+                  pathClosed={selectedClosed || currentSimulation.status === 'stopped' || currentSimulation.status === 'completed'}
+                  running={running}
+                  intervening={intervening}
+                  interventionText={interventionText}
+                  onInterventionText={setInterventionText}
+                  onIntervene={handleIntervene}
+                  onNextTurn={handleNextTurn}
+                  compareArmed={compareArmed}
+                  onArmCompare={() => {
+                    if (typeof selectedId === 'number') setCompareArmed(true);
+                  }}
+                />
               </div>
+              {compareId != null && typeof selectedId === 'number' && compareId !== selectedId && (
+                <BranchCompare
+                  messages={playgroundMessages.filter((message) => message.id > 0)}
+                  leftId={selectedId}
+                  rightId={compareId}
+                  evaluations={agreementHistory?.evaluations ?? []}
+                  onClose={() => setCompareId(null)}
+                />
+              )}
 
               {/* LLM-as-judge Evaluation Panel */}
               {showEvaluationScores && evaluationScores?.has_evaluation && (

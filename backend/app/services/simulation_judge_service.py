@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.models.judge_score import JudgeRun, JudgeScore
 from app.models.simulation import Simulation, SimulationMessage
 from app.schemas.judge import JudgeLLMOutput, parse_judge_response
+from app.services.simulation_lineage import lineage_messages, path_is_closed
 from app.services.transcript_builder import (
     build_discussion_transcript,
     build_persona_transcript,
@@ -38,7 +39,8 @@ class SimulationJudgeService:
 
     def _persona_ids_with_messages(self, simulation: Simulation) -> Set[int]:
         ids: Set[int] = set()
-        for message in simulation.messages:
+        focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+        for message in focused:
             if message.persona_id and not message.is_moderator_message:
                 ids.add(message.persona_id)
         return ids
@@ -290,7 +292,11 @@ class SimulationJudgeService:
         result = await session.execute(
             select(Simulation)
             .where(Simulation.id == simulation_id)
-            .options(selectinload(Simulation.participants), selectinload(Simulation.messages))
+            .options(
+                selectinload(Simulation.participants),
+                selectinload(Simulation.messages),
+                selectinload(Simulation.agreement_evaluations),
+            )
         )
         simulation = result.scalar_one_or_none()
         if simulation is None:
@@ -309,13 +315,15 @@ class SimulationJudgeService:
     ) -> dict:
         """Score one simulation: discussion-level + every participating persona."""
         simulation = await self._get_simulation_or_raise(session, simulation_id)
-        if simulation.status not in ("completed", "stopped"):
+        focused = lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+        path_closed = path_is_closed(simulation, focused, len(simulation.participants or []))
+        if simulation.status not in ("completed", "stopped") and not path_closed:
             raise ValueError(
-                "Simulation must be completed or stopped before evaluation. "
+                "Finish the focused path or stop the session before evaluation. "
                 f"Current status: {simulation.status}"
             )
-        if not simulation.messages:
-            raise ValueError("Cannot evaluate: simulation has no messages yet")
+        if not focused:
+            raise ValueError("Cannot evaluate: the focused path has no messages yet")
 
         return await self._run_for_simulations(
             session,

@@ -39,6 +39,7 @@ from app.core.config import settings
 from app.core.openai_compat import chat_completion_kwargs
 from app.core.vector_db import vector_db
 from app.models.simulation import Simulation, SimulationParticipant, SimulationMessage
+from app.services.simulation_lineage import lineage_messages, path_is_closed
 from app.utils.rag_filter import get_project_document_filter
 from app.models.persona import Persona
 from app.utils.token_utils import estimate_tokens
@@ -581,6 +582,34 @@ If you change your earlier view, say so explicitly and name what persuaded you.
         return context
 
     # ──────────────────────────────────────────────────────────────────────────
+    # Focused path
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _focused_lineage(self, simulation: Simulation) -> List[SimulationMessage]:
+        """Ancestors of the active head, in speak order. Empty when the head is the root."""
+        return lineage_messages(list(simulation.messages or []), simulation.active_head_message_id)
+
+    def _lineage_closed(
+        self,
+        simulation: Simulation,
+        lineage: List[SimulationMessage],
+        num_participants: int,
+    ) -> bool:
+        return path_is_closed(simulation, lineage, num_participants)
+
+    async def _attach_to_head(
+        self,
+        simulation: Simulation,
+        message: SimulationMessage,
+        session: AsyncSession,
+    ) -> None:
+        """Hang a new message off the active head, then move the head forward."""
+        message.parent_message_id = simulation.active_head_message_id
+        session.add(message)
+        await session.flush()
+        simulation.active_head_message_id = message.id
+
+    # ──────────────────────────────────────────────────────────────────────────
     # Core turn generation
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -592,6 +621,7 @@ If you change your earlier view, say so explicitly and name what persuaded you.
         """Generate the next turn in the simulation."""
         if simulation.status in ("completed", "stopped"):
             return None
+        await session.refresh(simulation, ["agreement_evaluations"])
 
         # ── Load participants ─────────────────────────────────────────────────
         participants: Dict[int, Persona] = {}
@@ -615,17 +645,14 @@ If you change your earlier view, say so explicitly and name what persuaded you.
         ] or list(participants.keys())
 
         num_participants = len(participant_ids)
-        persona_count_before = self._count_persona_messages(list(simulation.messages))
+        messages_ordered = self._focused_lineage(simulation)
+        persona_count_before = self._count_persona_messages(messages_ordered)
         completed_before = self._completed_full_rounds(persona_count_before, num_participants)
-        # max_turns = number of full rounds (schema). Stop only after that many rounds finish.
-        if completed_before >= simulation.max_turns:
-            simulation.status = "completed"
-            simulation.completed_at = datetime.now(timezone.utc)
+        # Limits close this path only. The session stays running so another branch can grow.
+        if self._lineage_closed(simulation, messages_ordered, num_participants):
             simulation.current_turn = completed_before
             await session.commit()
             return None
-
-        messages_ordered = self._chronological_messages(list(simulation.messages))
         next_speaker_id = self._select_next_speaker(
             messages_ordered,
             participant_ids,
@@ -667,7 +694,7 @@ If you change your earlier view, say so explicitly and name what persuaded you.
 
         is_first_turn_for_agent = not any(
             m.persona_id == next_speaker_id
-            for m in simulation.messages
+            for m in messages_ordered
             if not getattr(m, "is_human_message", False) and m.persona_id is not None
         )
         # Final-round prompt only while still inside the last configured round (not when it has already finished).
@@ -719,7 +746,7 @@ If you change your earlier view, say so explicitly and name what persuaded you.
                 turn_number=turn_number,
                 tokens=tokens_used,
             )
-            session.add(message)
+            await self._attach_to_head(simulation, message, session)
 
             persona_count_after = persona_count_before + 1
             completed_after = self._completed_full_rounds(persona_count_after, num_participants)
@@ -731,11 +758,6 @@ If you change your earlier view, say so explicitly and name what persuaded you.
                     p.messages_count += 1
                     p.tokens_used    += tokens_used
                     break
-
-            # Stop only after max_turns full rounds are completed (every persona spoke each round).
-            if completed_after >= simulation.max_turns:
-                simulation.status = "completed"
-                simulation.completed_at = datetime.now(timezone.utc)
 
             await session.commit()
             await session.refresh(message)
@@ -1112,7 +1134,7 @@ If you change your earlier view, say so explicitly and name what persuaded you.
                 participants[p.persona_id] = persona
 
         transcript_parts = []
-        for msg in simulation.messages:
+        for msg in self._focused_lineage(simulation):
             if getattr(msg, "is_human_message", False) or msg.persona_id is None:
                 name = "Facilitator"
             else:
@@ -1211,6 +1233,7 @@ Respond in JSON format:
         if simulation.status in ("completed", "stopped"):
             yield {"type": "error", "message": "Simulation is not active"}
             return
+        await session.refresh(simulation, ["agreement_evaluations"])
 
         participants: Dict[int, Persona] = {}
         participant_roles: Dict[int, Optional[str]] = {}
@@ -1232,16 +1255,16 @@ Respond in JSON format:
         ] or list(participants.keys())
 
         num_participants = len(participant_ids)
-        persona_count_before = self._count_persona_messages(list(simulation.messages))
+        messages_ordered = self._focused_lineage(simulation)
+        persona_count_before = self._count_persona_messages(messages_ordered)
         completed_before = self._completed_full_rounds(persona_count_before, num_participants)
-        if completed_before >= simulation.max_turns:
-            simulation.status = "completed"
-            simulation.completed_at = datetime.now(timezone.utc)
+        if self._lineage_closed(simulation, messages_ordered, num_participants):
             simulation.current_turn = completed_before
             await session.commit()
             yield {
                 "type": "complete",
-                "reason": "max_turns_reached",
+                "reason": "path_closed",
+                "path_complete": True,
                 "simulation_status": simulation.status,
                 "current_turn": simulation.current_turn,
                 "tokens_used": simulation.tokens_used,
@@ -1249,7 +1272,7 @@ Respond in JSON format:
             return
 
         next_speaker_id = self._select_next_speaker(
-            self._chronological_messages(list(simulation.messages)),
+            messages_ordered,
             participant_ids,
             simulation.current_turn,
             participants=participants,
@@ -1264,9 +1287,9 @@ Respond in JSON format:
             "persona_id":   next_speaker_id,
             "persona_name": next_persona.name,
             "turn_number":  turn_number,
+            "parent_message_id": simulation.active_head_message_id,
         }
 
-        messages_ordered = self._chronological_messages(list(simulation.messages))
         last_facilitator_content, is_last_facilitator = self._get_facilitator_context(
             messages_ordered
         )
@@ -1294,7 +1317,7 @@ Respond in JSON format:
 
         is_first_turn_for_agent = not any(
             m.persona_id == next_speaker_id
-            for m in simulation.messages
+            for m in messages_ordered
             if not getattr(m, "is_human_message", False) and m.persona_id is not None
         )
         is_final_round = completed_before >= max(0, simulation.max_turns - 1)
@@ -1346,7 +1369,7 @@ Respond in JSON format:
                 turn_number=turn_number,
                 tokens=tokens_used,
             )
-            session.add(message)
+            await self._attach_to_head(simulation, message, session)
 
             persona_count_after = persona_count_before + 1
             completed_after = self._completed_full_rounds(persona_count_after, num_participants)
@@ -1359,20 +1382,18 @@ Respond in JSON format:
                     p.tokens_used    += tokens_used
                     break
 
-            if completed_after >= simulation.max_turns:
-                simulation.status = "completed"
-                simulation.completed_at = datetime.now(timezone.utc)
-
             await session.commit()
-
+            path_lineage = messages_ordered + [message]
             yield {
                 "type":              "complete",
                 "message_id":        message.id,
+                "parent_message_id": message.parent_message_id,
                 "content":           full_content,
                 "tokens":            tokens_used,
                 "simulation_status": simulation.status,
                 "current_turn":      simulation.current_turn,
                 "tokens_used":       simulation.tokens_used,
+                "path_complete":     self._lineage_closed(simulation, path_lineage, num_participants),
             }
 
         except Exception as e:
