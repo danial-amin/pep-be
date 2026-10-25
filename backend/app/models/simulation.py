@@ -71,6 +71,7 @@ class Simulation(Base):
         back_populates="simulation",
         cascade="all, delete-orphan",
         order_by="SimulationMessage.id",
+        foreign_keys="SimulationMessage.simulation_id",
     )
     participants = relationship("SimulationParticipant", back_populates="simulation", cascade="all, delete-orphan")
     project = relationship("Project", back_populates="simulations")
@@ -145,9 +146,17 @@ class SimulationMessage(Base):
     persona_drift_score = Column(Float, nullable=True)
 
     # Relationships
-    simulation = relationship("Simulation", back_populates="messages")
+    simulation = relationship(
+        "Simulation",
+        back_populates="messages",
+        foreign_keys=[simulation_id],
+    )
     persona = relationship("Persona")
-    responding_to = relationship("SimulationMessage", remote_side=[id])
+    responding_to = relationship(
+        "SimulationMessage",
+        remote_side=[id],
+        foreign_keys=[responding_to_id],
+    )
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
