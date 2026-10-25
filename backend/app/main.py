@@ -221,6 +221,83 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            # Branching playground columns. Missing columns make every simulation query fail,
+            # so the sidebar shows no previous sessions. Backfill runs only when a column
+            # is first added: a later restart must leave forks and a focused goal root alone.
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='simulation_messages') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='simulation_messages' AND column_name='parent_message_id') THEN
+                            ALTER TABLE simulation_messages ADD COLUMN parent_message_id INTEGER;
+                            WITH ordered AS (
+                                SELECT id,
+                                       lag(id) OVER (
+                                           PARTITION BY simulation_id
+                                           ORDER BY turn_number, id
+                                       ) AS prev_id
+                                FROM simulation_messages
+                            )
+                            UPDATE simulation_messages AS m
+                            SET parent_message_id = ordered.prev_id
+                            FROM ordered
+                            WHERE m.id = ordered.id
+                              AND ordered.prev_id IS NOT NULL;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_simulation_messages_parent_message_id') THEN
+                            ALTER TABLE simulation_messages
+                            ADD CONSTRAINT fk_simulation_messages_parent_message_id
+                            FOREIGN KEY (parent_message_id) REFERENCES simulation_messages(id) ON DELETE SET NULL;
+                        END IF;
+                        CREATE INDEX IF NOT EXISTS ix_simulation_messages_parent_message_id
+                            ON simulation_messages(parent_message_id);
+                    END IF;
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='simulations') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='simulations' AND column_name='active_head_message_id') THEN
+                            ALTER TABLE simulations ADD COLUMN active_head_message_id INTEGER;
+                            UPDATE simulations AS s
+                            SET active_head_message_id = sub.id
+                            FROM (
+                                SELECT DISTINCT ON (simulation_id) id, simulation_id
+                                FROM simulation_messages
+                                ORDER BY simulation_id, turn_number DESC, id DESC
+                            ) AS sub
+                            WHERE s.id = sub.simulation_id;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_simulations_active_head_message_id') THEN
+                            ALTER TABLE simulations
+                            ADD CONSTRAINT fk_simulations_active_head_message_id
+                            FOREIGN KEY (active_head_message_id) REFERENCES simulation_messages(id) ON DELETE SET NULL;
+                        END IF;
+                    END IF;
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='simulation_agreement_evaluations') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                       WHERE table_name='simulation_agreement_evaluations' AND column_name='head_message_id') THEN
+                            ALTER TABLE simulation_agreement_evaluations ADD COLUMN head_message_id INTEGER;
+                            UPDATE simulation_agreement_evaluations AS e
+                            SET head_message_id = sub.id
+                            FROM (
+                                SELECT DISTINCT ON (simulation_id, turn_number)
+                                       id, simulation_id, turn_number
+                                FROM simulation_messages
+                                ORDER BY simulation_id, turn_number, id DESC
+                            ) AS sub
+                            WHERE e.simulation_id = sub.simulation_id
+                              AND e.turn_number = sub.turn_number
+                              AND e.head_message_id IS NULL;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_simulation_agreement_evaluations_head_message_id') THEN
+                            ALTER TABLE simulation_agreement_evaluations
+                            ADD CONSTRAINT fk_simulation_agreement_evaluations_head_message_id
+                            FOREIGN KEY (head_message_id) REFERENCES simulation_messages(id) ON DELETE SET NULL;
+                        END IF;
+                        CREATE INDEX IF NOT EXISTS ix_simulation_agreement_evaluations_head_message_id
+                            ON simulation_agreement_evaluations(head_message_id);
+                    END IF;
+                END $$;
+            """))
             # LLM-as-judge score tables (additive only — does not touch existing simulation data)
             await conn.execute(text("""
                 DO $$
