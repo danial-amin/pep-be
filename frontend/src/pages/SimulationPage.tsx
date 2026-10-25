@@ -1,24 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Play,
-  Pause,
-  SkipForward,
   MessageSquare,
   Users,
-  Target,
-  Clock,
   FileText,
   ArrowLeft,
   Plus,
   CheckCircle,
   Loader2,
   Sparkles,
-  Download,
   TrendingUp,
-  Activity,
-  ChevronDown,
-  ChevronRight,
   BarChart3
 } from 'lucide-react';
 import { simulationsApi, personasApi, studyApi, API_BASE_URL, getAuthToken } from '../services/api';
@@ -37,117 +28,15 @@ import {
   AgreementEvaluation,
   SimulationEvaluationScores,
 } from '../types';
-import { getPersonaImageUrl } from '../utils/imageUtils';
 import PlaygroundCanvas from '../components/simulation/PlaygroundCanvas';
 import PlaygroundDetails from '../components/simulation/PlaygroundDetails';
+import PlaygroundSessionBar from '../components/simulation/PlaygroundSessionBar';
+import PlaygroundSetup from '../components/simulation/PlaygroundSetup';
 import PathChat from '../components/simulation/PathChat';
 import BranchCompare from '../components/simulation/BranchCompare';
 import { lineageOf, pathIsClosed, type NodeSelection } from '../components/simulation/lineage';
 import { getStudyScope, setStudyScope, studyPath, useStudyTracker } from '../hooks/useStudyTracker';
 import { useAuth } from '../context/AuthContext';
-
-// Persona Avatar Component (use personaId when available so API serves from file or base64)
-function PersonaAvatar({
-  name,
-  imageUrl,
-  personaId,
-  size = 'md',
-  showBorder = true
-}: {
-  name: string;
-  imageUrl?: string | null;
-  personaId?: number;
-  size?: 'sm' | 'md' | 'lg';
-  showBorder?: boolean;
-}) {
-  const [imageError, setImageError] = useState(false);
-  const sizeClasses = {
-    sm: 'w-8 h-8 text-sm',
-    md: 'w-12 h-12 text-lg',
-    lg: 'w-16 h-16 text-xl'
-  };
-  const src = getPersonaImageUrl(imageUrl, personaId);
-
-  if (src && !imageError) {
-    return (
-      <img
-        src={src}
-        alt={name}
-        className={`${sizeClasses[size]} object-cover rounded-full ${showBorder ? 'border-2 border-stone-200' : ''}`}
-        onError={() => setImageError(true)}
-      />
-    );
-  }
-
-  return (
-    <div className={`${sizeClasses[size]} rounded-full ${showBorder ? 'border-2 border-stone-200' : ''} bg-stone-200 flex items-center justify-center`}>
-      <span className="text-stone-600 font-semibold">
-        {name.charAt(0).toUpperCase()}
-      </span>
-    </div>
-  );
-}
-
-// Participant Card for Selection
-function SelectablePersonaCard({
-  persona,
-  isSelected,
-  role,
-  onToggle,
-  onRoleChange
-}: {
-  persona: Persona;
-  isSelected: boolean;
-  role: string;
-  onToggle: () => void;
-  onRoleChange: (role: string) => void;
-}) {
-  const personaData = persona.persona_data || {};
-  const demographics = personaData.demographics || {};
-
-  return (
-    <div
-      className={`glass-card rounded-xl p-4 border-2 transition-all duration-200 cursor-pointer ${
-        isSelected
-          ? 'border-stone-900 bg-stone-50'
-          : 'border-stone-200 hover:border-stone-200'
-      }`}
-      onClick={onToggle}
-    >
-      <div className="flex items-center gap-3">
-        <PersonaAvatar
-          name={persona.name}
-          imageUrl={persona.image_url}
-          personaId={persona.id}
-          size="md"
-        />
-        <div className="flex-1 min-w-0">
-          <h4 className="text-stone-900 font-semibold truncate">{personaData.name || persona.name}</h4>
-          <p className="text-stone-500 text-sm truncate">
-            {demographics.occupation || 'No occupation'}
-          </p>
-        </div>
-        <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-          isSelected ? 'bg-stone-900' : 'bg-stone-100'
-        }`}>
-          {isSelected && <CheckCircle className="w-4 h-4 text-stone-900" />}
-        </div>
-      </div>
-
-      {isSelected && (
-        <div className="mt-3" onClick={e => e.stopPropagation()}>
-          <input
-            type="text"
-            placeholder="Role (optional): e.g., moderator, critic"
-            value={role}
-            onChange={(e) => onRoleChange(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-stone-50 border border-stone-200 rounded-lg text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-purple-400"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Main Simulation Page
 export default function SimulationPage() {
@@ -1077,8 +966,8 @@ export default function SimulationPage() {
             </h2>
             <p className="text-stone-600 text-lg">
               {isStudyMode
-                ? `Signed in as ${user?.participant_code || user?.name || 'participant'} — run a multi-persona discussion`
-                : 'Watch your personas collaborate and discuss towards a common goal'}
+                ? `Signed in as ${user?.participant_code || user?.name || 'participant'} — set the room, then fork the discussion`
+                : 'Seat a cast, then fork the discussion from any earlier turn'}
             </p>
           </div>
         </div>
@@ -1167,466 +1056,80 @@ export default function SimulationPage() {
         {/* Main Content Area */}
         <div className="lg:col-span-3">
           {showSetup ? (
-            /* Setup Form */
-            <div className="glass-card rounded-2xl p-6">
-              <h3 className="text-xl font-semibold text-stone-900 mb-6 flex items-center gap-2">
-                <Sparkles className="w-5 h-5" />
-                Create New Simulation
-              </h3>
-
-              {/* Name and Goal */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-2">
-                    Simulation Name
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g., Product Strategy Discussion"
-                    className="w-full px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-2">
-                    <Target className="w-4 h-4 inline mr-1" />
-                    Goal / Topic *
-                  </label>
-                  <textarea
-                    value={goal}
-                    onChange={(e) => setGoal(e.target.value)}
-                    placeholder="e.g., Discuss how to improve our mobile app UX"
-                    rows={useStudyDefaults ? 3 : 2}
-                    className="w-full px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
-                  />
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-stone-700 mb-2">
-                  Additional Context {useStudyDefaults ? '' : '(Optional)'}
-                </label>
-                <textarea
-                  value={goalContext}
-                  onChange={(e) => setGoalContext(e.target.value)}
-                  placeholder="Provide any additional context, constraints, or specific aspects to focus on..."
-                  rows={useStudyDefaults ? 12 : 3}
-                  className="w-full px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
-                />
-                {useStudyDefaults && (
-                  <p className="mt-1.5 text-xs text-stone-500">
-                    Prefilled for study code {user?.participant_code}. You can edit if needed.
-                  </p>
-                )}
-              </div>
-
-              {/* Limits */}
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-stone-700 mb-3">
-                  Simulation Limits
-                </h4>
-                <div className="grid grid-cols-1 gap-4">
-                  <div>
-                    <label className="block text-sm text-stone-500 mb-2">
-                      <MessageSquare className="w-4 h-4 inline mr-1" />
-                      Number of Turns
-                    </label>
-                    <select
-                      value={maxTurns}
-                      onChange={(e) => setMaxTurns(parseInt(e.target.value))}
-                      className="w-full px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900/20 focus:border-stone-400"
-                    >
-                      <option value={5}>5 turns</option>
-                      <option value={10}>10 turns</option>
-                      <option value={15}>15 turns</option>
-                      <option value={20}>20 turns</option>
-                      <option value={30}>30 turns</option>
-                      <option value={50}>50 turns</option>
-                    </select>
-                  </div>
-                </div>
-                <p className="text-xs text-stone-400 mt-2">
-                  One turn = every selected persona speaks once (one full round). Conversation stops only when the turn limit is reached.
-                </p>
-              </div>
-
-              {/* Agreement Mode */}
-              <div className="mb-6 p-4 bg-stone-50 rounded-xl border border-stone-200">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={runUntilAgreement}
-                    onChange={(e) => setRunUntilAgreement(e.target.checked)}
-                    className="accent-purple-400 w-4 h-4"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-stone-900 flex items-center gap-1">
-                      <TrendingUp className="w-4 h-4 inline" />
-                      Run until agreement
-                    </span>
-                    <p className="text-xs text-stone-400 mt-0.5">
-                      Continue beyond max turns until personas reach the alignment threshold
-                    </p>
-                  </div>
-                </label>
-                {runUntilAgreement && (
-                  <div className="mt-4">
-                    <label className="block text-sm text-stone-500 mb-2">
-                      Agreement threshold: <span className="text-stone-900 font-semibold">{(agreementThreshold * 100).toFixed(0)}%</span>
-                    </label>
-                    <input
-                      type="range"
-                      min={0.1}
-                      max={1.0}
-                      step={0.05}
-                      value={agreementThreshold}
-                      onChange={(e) => setAgreementThreshold(parseFloat(e.target.value))}
-                      className="w-full accent-purple-400"
-                    />
-                    <div className="flex justify-between text-xs text-stone-400 mt-1">
-                      <span>10% (loose)</span>
-                      <span>100% (full)</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Persona Selection — pick from any set */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-stone-700 flex items-center gap-1">
-                    <Users className="w-4 h-4" />
-                    Select Participants (2–12 personas, mix from any set)
-                  </label>
-                  <span className="text-sm text-stone-400">{selectedPersonas.size} selected</span>
-                </div>
-
-                {personaSets.length === 0 ? (
-                  <p className="text-stone-400 text-sm">No persona sets found.</p>
-                ) : (
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                    {personaSets.map(set => {
-                      const isExpanded = expandedSetIds.has(set.id);
-                      const selectedInSet = set.personas.filter(p => selectedPersonas.has(p.id)).length;
-                      return (
-                        <div key={set.id} className="border border-stone-200 rounded-xl overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const next = new Set(expandedSetIds);
-                              isExpanded ? next.delete(set.id) : next.add(set.id);
-                              setExpandedSetIds(next);
-                            }}
-                            className="w-full flex items-center justify-between px-4 py-3 bg-stone-50 hover:bg-stone-50 transition-colors text-left"
-                          >
-                            <span className="text-sm font-medium text-stone-900">
-                              {set.name}
-                              <span className="ml-2 text-stone-400 font-normal">({set.personas.length} personas)</span>
-                              {selectedInSet > 0 && (
-                                <span className="ml-2 text-xs bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full">
-                                  {selectedInSet} selected
-                                </span>
-                              )}
-                            </span>
-                            {isExpanded ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
-                          </button>
-                          {isExpanded && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3">
-                              {set.personas.map(persona => (
-                                <SelectablePersonaCard
-                                  key={persona.id}
-                                  persona={persona}
-                                  isSelected={selectedPersonas.has(persona.id)}
-                                  role={selectedPersonas.get(persona.id) || ''}
-                                  onToggle={() => handlePersonaToggle(persona.id)}
-                                  onRoleChange={(role) => handleRoleChange(persona.id, role)}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Create Button */}
-              <button
-                onClick={handleCreateSimulation}
-                disabled={loading || selectedPersonas.size < 2 || !goal.trim()}
-                className="w-full px-6 py-3 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-5 h-5" />
-                    Create Simulation
-                  </>
-                )}
-              </button>
-            </div>
+            <PlaygroundSetup
+              name={name}
+              goal={goal}
+              goalContext={goalContext}
+              maxTurns={maxTurns}
+              runUntilAgreement={runUntilAgreement}
+              agreementThreshold={agreementThreshold}
+              personaSets={personaSets}
+              expandedSetIds={expandedSetIds}
+              selectedPersonas={selectedPersonas}
+              loading={loading}
+              useStudyDefaults={useStudyDefaults}
+              participantCode={user?.participant_code}
+              studyOrderNote={isStudyMode}
+              onName={setName}
+              onGoal={setGoal}
+              onGoalContext={setGoalContext}
+              onMaxTurns={setMaxTurns}
+              onRunUntilAgreement={setRunUntilAgreement}
+              onAgreementThreshold={setAgreementThreshold}
+              onToggleSet={(setId) => {
+                setExpandedSetIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(setId)) next.delete(setId);
+                  else next.add(setId);
+                  return next;
+                });
+              }}
+              onTogglePersona={handlePersonaToggle}
+              onRoleChange={handleRoleChange}
+              onCreate={handleCreateSimulation}
+            />
           ) : currentSimulation ? (
-            /* Simulation View */
-            <div className="space-y-6">
-              {/* Simulation Header */}
-              <div className="glass-card rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-stone-900">{currentSimulation.name}</h3>
-                    <p className="text-stone-600 mt-1">{currentSimulation.goal}</p>
-                  </div>
-                  <div className="flex items-center gap-3 flex-wrap justify-end">
-                    {/* Status Badge */}
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      currentSimulation.status === 'completed' ? 'bg-green-50 text-green-700' :
-                      currentSimulation.status === 'running' ? 'bg-blue-50 text-blue-700' :
-                      currentSimulation.status === 'stopped' ? 'bg-red-50 text-red-600' :
-                      'bg-amber-50 text-amber-700'
-                    }`}>
-                      {currentSimulation.status}
-                    </span>
-
-                    {/* Agreement reached badge */}
-                    {currentSimulation.agreement_reached && (
-                      <span className="px-3 py-1 rounded-full text-sm font-medium bg-teal-50 text-teal-700 flex items-center gap-1">
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        Agreement reached
-                      </span>
-                    )}
-
-                    {/* Agreement mode indicator */}
-                    {currentSimulation.run_until_agreement && !currentSimulation.agreement_reached && (
-                      <span className="px-3 py-1 rounded-full text-sm bg-violet-50 text-violet-700 flex items-center gap-1">
-                        <TrendingUp className="w-3.5 h-3.5" />
-                        Until {(currentSimulation.agreement_threshold * 100).toFixed(0)}% agreement
-                      </span>
-                    )}
-
-                    {/* Download JSON */}
-                    {currentSimulation.status === 'completed' && (
-                      <button
-                        type="button"
-                        onClick={handleDownloadSimulation}
-                        className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-100 text-stone-900 text-sm font-medium transition-all duration-200 flex items-center gap-2"
-                        title="Download simulation as JSON"
-                      >
-                        <Download className="w-4 h-4" />
-                        Download JSON
-                      </button>
-                    )}
-
-                    {/* Progress */}
-                    <div className="text-right">
-                      <div className="text-sm text-stone-600">
-                        <MessageSquare className="w-4 h-4 inline mr-1" />
-                        {currentSimulation.current_turn} / {currentSimulation.max_turns} rounds done
-                      </div>
-                      <div className="text-xs text-stone-400">
-                        <Clock className="w-3 h-3 inline mr-1" />
-                        {/* Turn-limit only; duration limit intentionally disabled */}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Participants */}
-                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-stone-200">
-                  <span className="text-sm text-stone-500">Participants:</span>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {currentSimulation.participants.map(p => (
-                      <div key={p.id} className="flex items-center gap-2 bg-stone-50 rounded-full px-3 py-1">
-                        <PersonaAvatar name={p.persona_name} imageUrl={p.persona_image_url} personaId={p.persona_id} size="sm" showBorder={false} />
-                        <span className="text-sm text-stone-900">{p.persona_name}</span>
-                        {p.role && <span className="text-xs text-stone-400">({p.role})</span>}
-                        {p.persona_set_name && (
-                          <span className="text-xs text-stone-300 italic">{p.persona_set_name}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Agreement score bar */}
-                {currentSimulation.latest_agreement_score !== undefined && (
-                  <div className="mt-3 pt-3 border-t border-stone-200">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-stone-500 flex items-center gap-1">
-                        <Activity className="w-3 h-3" />
-                        Agreement score
-                      </span>
-                      <span className="text-xs text-stone-900 font-semibold">
-                        {(currentSimulation.latest_agreement_score * 100).toFixed(0)}%
-                        {currentSimulation.run_until_agreement && (
-                          <span className="text-stone-400 font-normal ml-1">
-                            / {(currentSimulation.agreement_threshold * 100).toFixed(0)}% target
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="w-full bg-stone-50 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all duration-500 ${
-                          currentSimulation.agreement_reached ? 'bg-teal-400' :
-                          currentSimulation.latest_agreement_score > 0.6 ? 'bg-green-400' :
-                          currentSimulation.latest_agreement_score > 0.3 ? 'bg-yellow-400' :
-                          'bg-red-400'
-                        }`}
-                        style={{ width: `${Math.min(currentSimulation.latest_agreement_score * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Controls */}
-              <div className="flex items-center gap-3 flex-wrap">
-                {currentSimulation.status === 'pending' && (
-                  <>
-                    {isStudyMode ? (
-                      <button
-                        onClick={() => handleStartSimulation(false)}
-                        disabled={running}
-                        className="px-4 py-2 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                      >
-                        {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                        Start (step by step)
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => handleStartSimulation(autoContinue)}
-                          disabled={running}
-                          className="px-4 py-2 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                        >
-                          {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                          Run Full Simulation
-                        </button>
-                        <button
-                          onClick={() => handleStartSimulation(false)}
-                          disabled={running}
-                          className="px-4 py-2 bg-stone-100 hover:bg-stone-100 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                        >
-                          <SkipForward className="w-4 h-4" />
-                          Step by Step
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
-
-                {currentSimulation.status === 'running' && (
-                  <button
-                    onClick={handleStopSimulation}
-                    disabled={running}
-                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                  >
-                    <Pause className="w-4 h-4" />
-                    Stop
-                  </button>
-                )}
-
-                {!isStudyMode && (
-                  <div className="flex items-center gap-4 text-sm text-stone-500">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={streamingEnabled}
-                        onChange={(e) => setStreamingEnabled(e.target.checked)}
-                        className="accent-white"
-                      />
-                      Stream responses
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={autoContinue}
-                        onChange={(e) => setAutoContinue(e.target.checked)}
-                        className="accent-white"
-                      />
-                      Auto-continue turns
-                    </label>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(
-                      studySlug
-                        ? studyPath(studySlug, `/simulations/${currentSimulation.id}/persona-chats`)
-                        : `/simulations/${currentSimulation.id}/persona-chats`
-                    )
-                  }
-                  className="px-4 py-2 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 bg-stone-100 text-stone-900 hover:bg-stone-100"
-                  title="Open personas + chats view"
-                >
-                  <Users className="w-4 h-4" />
-                  Personas + Chats
-                </button>
-
-                {currentSimulation.messages.length > 0 && (
-                  <button
-                    onClick={handleEvaluateAgreement}
-                    disabled={evaluatingAgreement || running}
-                    className="px-4 py-2 bg-stone-100 hover:bg-stone-100 disabled:opacity-50 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                    title="Evaluate agreement among personas at this point"
-                  >
-                    {evaluatingAgreement ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
-                    Evaluate Agreement
-                  </button>
-                )}
-
-                {agreementHistory && agreementHistory.evaluations.length > 0 && (
-                  <button
-                    onClick={() => setShowAgreementHistory(v => !v)}
-                    className="px-4 py-2 bg-stone-100 hover:bg-stone-100 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                  >
-                    <TrendingUp className="w-4 h-4" />
-                    {showAgreementHistory ? 'Hide' : 'Show'} History
-                  </button>
-                )}
-
-                {canScore && currentSimulation.messages.length > 0 && (
-                  <button
-                    onClick={handleEvaluateDiscussion}
-                    disabled={evaluatingDiscussion}
-                    className="px-4 py-2 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                    title="Score this discussion and every participating persona with LLM judges"
-                  >
-                    {evaluatingDiscussion ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
-                    {evaluationScores?.has_evaluation ? 'Re-evaluate Discussion' : 'Evaluate Discussion'}
-                  </button>
-                )}
-
-                {canScore &&
-                  currentSimulation.messages.length > 0 &&
-                  !(currentSimulation.persona_summaries?.length) && !currentSimulation.summary && (
-                  <button
-                    onClick={handleGenerateSummary}
-                    disabled={generatingSummary}
-                    className="px-4 py-2 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                  >
-                    {generatingSummary ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                    Generate Summary
-                  </button>
-                )}
-
-                {evaluationScores?.has_evaluation && (
-                  <button
-                    onClick={() => setShowEvaluationScores(v => !v)}
-                    className="px-4 py-2 bg-stone-100 hover:bg-stone-100 text-stone-900 rounded-xl font-medium transition-all duration-200 flex items-center gap-2"
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                    {showEvaluationScores ? 'Hide' : 'Show'} Evaluation
-                  </button>
-                )}
-              </div>
+            <div className="space-y-4">
+              <PlaygroundSessionBar
+                simulation={currentSimulation}
+                roundsOnPath={
+                  currentSimulation.participants.length > 0
+                    ? Math.floor(
+                        pathMessages.filter((message) => message.persona_id != null && !message.is_human_message).length /
+                          currentSimulation.participants.length,
+                      )
+                    : 0
+                }
+                isStudyMode={isStudyMode}
+                running={running}
+                streamingEnabled={streamingEnabled}
+                autoContinue={autoContinue}
+                evaluatingAgreement={evaluatingAgreement}
+                evaluatingDiscussion={evaluatingDiscussion}
+                generatingSummary={generatingSummary}
+                showAgreementHistory={showAgreementHistory}
+                showEvaluationScores={showEvaluationScores}
+                hasAgreementHistory={!!agreementHistory && agreementHistory.evaluations.length > 0}
+                hasEvaluation={!!evaluationScores?.has_evaluation}
+                canScore={canScore}
+                onStart={handleStartSimulation}
+                onStop={handleStopSimulation}
+                onStreaming={setStreamingEnabled}
+                onAutoContinue={setAutoContinue}
+                onOpenChats={() =>
+                  navigate(
+                    studySlug
+                      ? studyPath(studySlug, `/simulations/${currentSimulation.id}/persona-chats`)
+                      : `/simulations/${currentSimulation.id}/persona-chats`,
+                  )
+                }
+                onEvaluateAgreement={handleEvaluateAgreement}
+                onToggleAgreementHistory={() => setShowAgreementHistory((value) => !value)}
+                onEvaluateDiscussion={handleEvaluateDiscussion}
+                onGenerateSummary={handleGenerateSummary}
+                onToggleEvaluation={() => setShowEvaluationScores((value) => !value)}
+                onDownload={handleDownloadSimulation}
+              />
 
               <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <div className="flex min-w-0 flex-col gap-4">
@@ -1635,15 +1138,6 @@ export default function SimulationPage() {
                     messages={playgroundMessages}
                     selectedId={selectedId}
                     onSelect={handleCanvasSelect}
-                    onContinue={(id) => {
-                      selectedRef.current = id;
-                      setSelectedId(id);
-                      void handleNextTurn();
-                    }}
-                    onBranch={(id) => {
-                      selectedRef.current = id;
-                      setSelectedId(id);
-                    }}
                   />
                   {running && (
                     <div className="flex items-center text-sm text-stone-500">
@@ -1651,7 +1145,6 @@ export default function SimulationPage() {
                       Generating response...
                     </div>
                   )}
-                  <PathChat messages={chatMessages} />
                 </div>
                 <PlaygroundDetails
                   goal={currentSimulation.goal}
@@ -1672,6 +1165,12 @@ export default function SimulationPage() {
                   }}
                 />
               </div>
+              <PathChat
+                messages={chatMessages}
+                participants={currentSimulation.participants}
+                selectedId={selectedId}
+                onSelect={handleCanvasSelect}
+              />
               {compareId != null && typeof selectedId === 'number' && compareId !== selectedId && (
                 <BranchCompare
                   messages={playgroundMessages.filter((message) => message.id > 0)}

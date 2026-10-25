@@ -63,15 +63,33 @@ export default function PlaygroundDetails({
         </p>
       )}
 
-      <div className="mt-4 space-y-2 border-t border-stone-200 pt-4">
-        <textarea
-          value={interventionText}
-          onChange={(event) => onInterventionText(event.target.value)}
-          placeholder="Branch with an intervention, e.g. Bilal, what about remote villages?"
-          rows={3}
-          disabled={intervening || running || pathClosed}
-          className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-50"
-        />
+      <div className="mt-4 space-y-3 border-t border-stone-200 pt-4">
+        <button
+          type="button"
+          onClick={onNextTurn}
+          disabled={running || pathClosed}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-stone-900 px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <SkipForward className="h-4 w-4" />}
+          Continue this path
+        </button>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-stone-600" htmlFor="path-intervention">
+            Speak from this point
+          </label>
+          <textarea
+            id="path-intervention"
+            value={interventionText}
+            onChange={(event) => onInterventionText(event.target.value)}
+            placeholder="Ask one persona, or add a constraint the cast has to answer."
+            rows={3}
+            disabled={intervening || running || pathClosed}
+            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-50"
+          />
+          <p className="mt-1.5 text-xs leading-relaxed text-stone-500">
+            If this turn already continues, speaking here opens a new branch. The earlier continuation stays on the map.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -80,16 +98,7 @@ export default function PlaygroundDetails({
             className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 px-3 py-2 text-sm font-medium text-amber-900 disabled:opacity-50"
           >
             {intervening || running ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
-            Intervene
-          </button>
-          <button
-            type="button"
-            onClick={onNextTurn}
-            disabled={running || pathClosed}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-stone-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <SkipForward className="h-4 w-4" />}
-            Next turn
+            Add and branch
           </button>
           <button
             type="button"
@@ -99,7 +108,7 @@ export default function PlaygroundDetails({
               compareArmed ? 'bg-blue-100 text-blue-800' : 'bg-stone-100 text-stone-800'
             } disabled:opacity-50`}
           >
-            {compareArmed ? 'Click a node' : 'Compare'}
+            {compareArmed ? 'Now click the other path' : 'Compare'}
           </button>
         </div>
       </div>

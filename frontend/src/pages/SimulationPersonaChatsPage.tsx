@@ -136,7 +136,10 @@ export default function SimulationPersonaChatsPage() {
 
   const personaMessages = useMemo(() => {
     if (!simulation || !selectedPersonaId) return [];
-    const onPath = lineageOf(simulation.messages, simulation.active_head_message_id ?? null);
+    const linked = simulation.messages.some((message) => message.parent_message_id != null);
+    const onPath = linked
+      ? lineageOf(simulation.messages, simulation.active_head_message_id ?? null)
+      : simulation.messages;
     return onPath
       .filter(m => !isHumanMessage(m) && m.persona_id === selectedPersonaId)
       .slice()
