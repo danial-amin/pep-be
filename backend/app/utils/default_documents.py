@@ -101,8 +101,9 @@ User: "Efficiency is my primary metric for success. I have a low tolerance for s
 
 
 async def create_default_documents(session: AsyncSession) -> None:
-    """Create default documents if they don't exist."""
+    """Create default documents if they don't exist. Idempotent: never re-add if a document with the same filename and type is already in the database (e.g. Railway deployment)."""
     try:
+        # Skip if already in DB (idempotent for redeploys)
         # Check if default context document exists
         context_result = await session.execute(
             select(Document).where(

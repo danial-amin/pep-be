@@ -239,11 +239,13 @@ def list_available_persona_sets() -> List[Dict[str, str]]:
 def convert_persona_to_db_format(persona_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert persona from JSON format to database format.
-    
-    This function normalizes all personas to the standard nested structure
-    for consistency across all persona sets.
+
+    If the input is an API-style row (has "persona_data" key), the inner
+    payload is normalized so demographics and other fields are preserved.
     """
     from app.utils.persona_normalizer import normalize_persona_to_nested
-    # Normalize to standard nested structure
+    # Use inner payload when file has API-style rows (id, persona_set_id, persona_data, ...)
+    if "persona_data" in persona_data and isinstance(persona_data["persona_data"], dict):
+        persona_data = persona_data["persona_data"]
     return normalize_persona_to_nested(persona_data)
 

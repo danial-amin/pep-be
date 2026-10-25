@@ -20,12 +20,34 @@ langchain-openai==0.0.2
 
 # Vector Database
 chromadb==0.4.18
+pinecone-client==3.0.0
+
+# Reranking (PEP paper methodology)
+cohere==5.0.0
+
+# Analytics
+scikit-learn==1.3.2
+numpy==1.26.2
 
 # File Processing
 aiofiles==23.2.1
+pdfplumber==0.11.4
 pypdf==3.17.1
 python-docx==1.1.0
 
+# Queue (Redis + ARQ)
+arq==0.25.0
+redis>=4.5.0
+
+# Storage (S3 / Railway Buckets)
+boto3>=1.34.0
+
 # Utilities
 python-multipart==0.0.6
+PyYAML>=6.0.1
 
+# Auth (invite-only login)
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+email-validator>=2.1.1

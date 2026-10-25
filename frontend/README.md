@@ -8,7 +8,7 @@ React frontend for the PEP Persona Generator application.
 - 👥 Persona generation and expansion
 - 🎨 AI-generated persona images
 - 💬 Prompt completion using document context
-- 🎨 Modern UI with Tailwind CSS
+- 🎨 Modern UI with Tailwind CSS in light colors
 
 ## Development
 

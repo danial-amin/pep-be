@@ -24,10 +24,11 @@ If you see build errors about missing files, it means Railway is building from t
 
 ## Overview
 
-Railway deployment requires three services:
+Railway deployment uses at least three services:
 1. **Backend API** - FastAPI application (in `backend/` directory)
 2. **Frontend** - React application served via nginx (in `frontend/` directory)
 3. **PostgreSQL Database** - Railway managed PostgreSQL service
+4. **Document worker** (recommended) - Processes uploaded documents into vectors; see [Document processing on Railway](#document-processing-on-railway) below.
 
 ## Prerequisites
 
@@ -89,6 +90,21 @@ ENVIRONMENT=production
 CORS_ORIGINS=<your-frontend-url>
 LOG_LEVEL=INFO
 ```
+
+**For simulation LLM-as-judge evaluation (optional):**
+```
+JUDGE_MODELS=["gpt-4o","gpt-4o-mini","gpt-4.1-mini"]
+JUDGE_PASS_COUNT=1
+JUDGE_TEMPERATURE=0
+```
+The backend does **not** run Alembic on container start (protects existing Railway data). New tables such as `judge_runs` / `judge_scores` are created via SQLAlchemy `create_all` on startup, which only adds missing tables and does not drop or overwrite existing rows. To run Alembic manually: `railway run --service <backend> alembic upgrade head`.
+```
+
+**For document processing (uploads → vectors):** use a **Railway Volume** and a **worker service** so uploads are processed reliably (see [Document processing on Railway](#document-processing-on-railway)):
+```
+UPLOAD_DIR=/data/uploads
+```
+Mount the same Volume at `/data` on both the backend and the document worker service.
 
 **Getting DATABASE_URL from Railway:**
 - Click on your PostgreSQL service
@@ -162,6 +178,36 @@ CORS_ORIGINS=*
 
 **Note**: The application will automatically parse any of these formats. For production, use Option 1 or 2 with your specific frontend URL(s).
 
+### Document processing on Railway (uploads → vectors)
+
+Document processing uses a **Redis queue** (ARQ). Uploads are stored (Volume or S3), jobs are enqueued, and a worker processes them reliably.
+
+1. **Add Redis**
+   - **New** → **Database** → **Add Redis**
+   - Copy `REDIS_URL` from the Redis service Variables
+   - Add `REDIS_URL` to both Backend and Document Worker services
+
+2. **Storage** (choose one)
+
+   **Option A: Railway Volume** (shared filesystem)
+   - **New** → **Volume** → Create (e.g. `uploads`), mount path `/data`
+   - Mount on **Backend** and **Document Worker**
+   - Set `UPLOAD_DIR=/data/uploads`, `STORAGE_TYPE=local`
+
+   **Option B: Railway Storage Buckets** (S3-compatible, no shared Volume)
+   - **New** → **Bucket** → Create bucket
+   - In Bucket → **Credentials** → Use Variable References to add S3 vars to Backend and Worker
+   - Set `STORAGE_TYPE=s3` and the S3 vars (`ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `BUCKET`, `ENDPOINT`, `REGION`)
+
+3. **Add Document Worker service**
+   - **New** → **GitHub Repo** (same repo)
+   - **Root Directory**: `backend`
+   - **Start Command**: `python -m app.document_worker`
+   - **Environment variables**: Same as Backend (`DATABASE_URL`, `OPENAI_API_KEY`, `PINECONE_*`, `REDIS_URL`, storage vars)
+   - **Volumes** (if using Option A): Mount the same Volume at `/data`
+
+The worker processes jobs from Redis: fetch file → extract text → LLM → chunk → embed → upsert to vector DB.
+
 ### Step 6: Run Database Migrations
 
 After the backend is deployed, you need to run Alembic migrations:
@@ -218,9 +264,12 @@ railway logs
 | `PINECONE_ENVIRONMENT` | Yes | Pinecone environment/region | - |
 | `PINECONE_INDEX_NAME` | No | Pinecone index name | `pep-documents` |
 | `VECTOR_DB_TYPE` | No | Vector DB type (`pinecone` or `chroma`) | `pinecone` |
-| `ENVIRONMENT` | No | Environment (`development` or `production`) | `development` |
+| `ENVIRONMENT` | No | Environment (`development`, `deployment`, or `production`) | `development` |
 | `CORS_ORIGINS` | No | CORS allowed origins (single URL, comma-separated, or JSON array) | `*` |
 | `LOG_LEVEL` | No | Logging level | `INFO` |
+| `UPLOAD_DIR` | No | Directory for uploads (when `STORAGE_TYPE=local`); use `/data/uploads` with a Volume | `uploads` |
+| `REDIS_URL` | Yes (for docs) | Redis URL for document queue; add Redis service and use its URL | - |
+| `STORAGE_TYPE` | No | `local` (Volume) or `s3` (Railway Buckets) | `local` |
 
 ### Frontend Service
 

@@ -1,48 +1,52 @@
 /**
  * Utility functions for handling persona images.
+ * Use persona ID when available so the API can serve from file or base64 (retained in DB).
  */
 
-// Get API base URL from runtime config or build-time env var
-const getApiBaseUrl = (): string => {
-  // Check for runtime config (injected via config.js)
+// Full API base URL (with /api/v1) for persona image endpoint
+const getFullApiUrl = (): string => {
   let apiUrl = 'http://localhost:8080/api/v1';
   if (typeof window !== 'undefined' && (window as any).APP_CONFIG?.VITE_API_URL) {
     apiUrl = (window as any).APP_CONFIG.VITE_API_URL;
   } else {
     apiUrl = import.meta.env.VITE_API_URL || apiUrl;
   }
-  // Remove /api/v1 suffix to get base URL
-  return apiUrl.replace('/api/v1', '');
+  return apiUrl;
 };
 
-const API_BASE_URL = getApiBaseUrl();
+// Base URL without /api/v1 for static assets
+const getApiBaseUrl = (): string => {
+  return getFullApiUrl().replace(/\/api\/v1\/?$/, '') || getFullApiUrl();
+};
 
 /**
- * Get the full URL for a persona image.
- * If the image_url is already a full URL (http/https), return it as-is.
- * If it's a relative path (starts with /static), prepend the API base URL.
+ * Get the image URL for a persona. Prefer the API endpoint when personaId is provided
+ * so the backend can serve from file or base64 (images are retained in DB).
  */
-export function getPersonaImageUrl(imageUrl: string | undefined | null): string | null {
+export function getPersonaImageUrl(
+  imageUrl: string | undefined | null,
+  personaId?: number
+): string | null {
+  // When we have a persona ID, use the API image endpoint (serves file or base64 from DB)
+  if (personaId != null) {
+    return `${getFullApiUrl()}/personas/persona/${personaId}/image`;
+  }
+
   if (!imageUrl) {
     return null;
   }
 
-  // If it's already a full URL, return as-is
+  const base = getApiBaseUrl();
+
   if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
     return imageUrl;
   }
-
-  // If it's a relative path, prepend the API base URL
   if (imageUrl.startsWith('/static')) {
-    return `${API_BASE_URL}${imageUrl}`;
+    return `${base}${imageUrl}`;
   }
-
-  // If it's just a filename or path, assume it's in static/images/personas
   if (imageUrl.startsWith('persona_')) {
-    return `${API_BASE_URL}/static/images/personas/${imageUrl}`;
+    return `${base}/static/images/personas/${imageUrl}`;
   }
-
-  // Default: treat as relative path
-  return `${API_BASE_URL}${imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl}`;
+  return `${base}${imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl}`;
 }
 
