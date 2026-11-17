@@ -29,40 +29,42 @@ def chunk_text_by_tokens(
     Returns:
         List of text chunks
     """
-    chunks = []
-    
+    if not text:
+        return []
+
     # Estimate characters per token (conservative: 4 chars = 1 token)
-    max_chars = max_tokens * 4
-    overlap_chars = overlap_tokens * 4
-    
-    start = 0
+    max_chars = max(1, max_tokens * 4)
+    overlap_chars = max(0, overlap_tokens * 4)
+    # Never allow overlap to be >= max chunk size (would cause no progress)
+    if overlap_chars >= max_chars:
+        overlap_chars = max(0, max_chars // 4)
+
+    chunks: List[str] = []
     text_length = len(text)
-    
+    start = 0
+
     while start < text_length:
-        # Calculate end position
         end = min(start + max_chars, text_length)
-        
-        # Try to break at sentence boundaries near the end
         chunk = text[start:end]
-        
-        # If not at the end of text, try to break at a sentence boundary
-        if end < text_length:
-            # Look for sentence endings in the last 20% of the chunk
-            search_start = max(0, len(chunk) - (max_chars // 5))
-            for i in range(len(chunk) - 1, search_start, -1):
-                if chunk[i] in '.!?\n' and i > search_start:
-                    chunk = chunk[:i+1]
+
+        # If not at the end of text, try to break at a boundary near the end
+        if end < text_length and chunk:
+            # Search last 20% of the chunk for a reasonable break point.
+            search_floor = max(0, len(chunk) - (len(chunk) // 5))
+            for i in range(len(chunk) - 1, search_floor, -1):
+                if chunk[i] in ".!?\n":
+                    chunk = chunk[: i + 1]
                     end = start + i + 1
                     break
-        
-        chunks.append(chunk)
-        
-        # Move start position with overlap
-        start = max(start + 1, end - overlap_chars)
-        
-        # Safety check to avoid infinite loop
-        if start >= end:
-            start = end
-    
+
+        if chunk:
+            chunks.append(chunk)
+
+        # Advance start; guarantee forward progress even in pathological inputs
+        next_start = end - overlap_chars
+        if next_start <= start:
+            next_start = end
+        start = next_start
+
     return chunks
 

@@ -1,0 +1,169 @@
+{
+  "group": "Teaching Faculty",
+  "generated_at": "2026-04-21T23:17:23.402112",
+  "persona_count": 3,
+  "personas": [
+    {
+      "persona_id": "f_001",
+      "name": "Prof. Habib",
+      "tagline": "If the bot gives them the answer, I have no idea what they actually understand.",
+      "demographics": {
+        "age": 54,
+        "location": {
+          "city": "Birmingham",
+          "country": "United Kingdom"
+        },
+        "occupation": "Professor of Electrical Engineering",
+        "education": "PhD in Electrical Engineering"
+      },
+      "background": "Habib has been teaching undergraduate circuits and signals courses for over two decades and has built a closely scaffolded assessment system where problem sets are designed to expose exactly where students struggle. He uses AI tools himself for literature reviews and grant writing, so his opposition to Cipherbot is not a blanket rejection of the technology. His concern is specific: in a discipline where a student either understands impedance or they do not, a chatbot that explains the concept on demand removes the only reliable signal he has about whether learning has actually happened. He approaches the policy debate as a matter of institutional credibility, not technophobia.",
+      "goals": [
+        "Preserve the diagnostic integrity of coursework so that grades reflect genuine student understanding",
+        "Ensure any AI governance policy includes enforceable boundaries rather than vague guidelines",
+        "Protect students from over-reliance on AI-generated explanations that may contain technical errors in STEM contexts",
+        "Establish clear accountability structures so that if Cipherbot produces a wrong answer, there is a defined response process"
+      ],
+      "frustrations": [
+        "Colleagues and administrators treating his concerns as old-fashioned rather than engaging with the specific academic integrity risks he is raising",
+        "The lack of any reliable way to detect whether a student used Cipherbot to complete a take-home problem set",
+        "Institutional pressure to adopt AI tools quickly without adequate evidence that student learning outcomes are maintained",
+        "The assumption that restricting AI access is the same as being anti-innovation, when his position is actually about protecting assessment validity"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "University-issued laptop",
+          "iPad for annotating papers"
+        ],
+        "comfort_level": "Intermediate",
+        "software_used": [
+          "MATLAB",
+          "Zotero",
+          "Turnitin",
+          "Moodle"
+        ],
+        "interaction_preferences": [
+          "Prefers tools with clear audit trails so he can see what students submitted and when",
+          "Uses AI for his own research in controlled, well-understood contexts rather than exploratory or open-ended ones",
+          "Favours institutional platforms with formal support and accountability over consumer-grade tools",
+          "Reads documentation and policy briefs before adopting any new technology"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "I use AI all the time for my own work. That is not the point. The point is that when a student hands in a problem set, I need that to tell me something. If Cipherbot walked them through every step first, it tells me nothing.",
+      "starting_position": "Cipherbot must be restricted to directing students toward existing resources; any direct explanatory answer is functionally equivalent to giving away the assessment.",
+      "key_insights": [
+        "Faculty with strong assessment ownership treat coursework as a diagnostic instrument, and direct AI answers corrupt the data that instrument is designed to collect",
+        "Concerns about AI hallucination in technical disciplines are a legitimate safety issue, not just a rhetorical device, since a confidently wrong answer in engineering or medicine carries real downstream risk",
+        "Opposition to student-facing AI can coexist with personal adoption of AI for research, which means framing this debate as technophobe versus innovator misses the actual argument being made"
+      ]
+    },
+    {
+      "persona_id": "f_002",
+      "name": "Prof. Jeff",
+      "tagline": "Students are already using it, so the question is whether we help them use it well or just pretend they are not.",
+      "demographics": {
+        "age": 41,
+        "location": {
+          "city": "Auckland",
+          "country": "New Zealand"
+        },
+        "occupation": "Associate Professor of Business Analytics",
+        "education": "PhD in Information Systems"
+      },
+      "background": "Jeff teaches data literacy and quantitative methods to business students and started redesigning his assessments two years ago when he noticed that students were using AI to generate initial code and analytical frameworks. Rather than fighting it, he shifted toward process-based assessment, requiring students to explain their reasoning in oral components and reflective journals. He sees Cipherbot as a version of a problem he has already navigated in his own courses and is frustrated that the policy conversation keeps getting stuck at whether to allow AI at all rather than how to govern it sensibly. He has no illusion that a restrictive policy will stop student use; he just thinks it will make that use less visible and harder to teach around.",
+      "goals": [
+        "Develop a university policy that regulates how Cipherbot is used rather than defaulting to prohibition",
+        "Build in transparency requirements so students must disclose when and how they used Cipherbot in their work",
+        "Encourage colleagues to redesign assessments to be AI-resilient rather than lobbying for restrictions that will not hold",
+        "Establish a feedback loop between Cipherbot usage data and teaching practice so faculty can see where students are actually getting stuck"
+      ],
+      "frustrations": [
+        "Policy discussions that treat restriction as a safe default when underground AI use is arguably riskier than structured integration",
+        "Colleagues who have not yet experimented with AI tools personally but are confident about what they do to student learning",
+        "The absence of any institutional support for faculty who want to redesign assessments in response to AI, including no time and no resources",
+        "Students who have learned to hide their AI use because they expect punishment, which makes it impossible to have honest conversations about responsible use"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "MacBook Pro",
+          "iPhone"
+        ],
+        "comfort_level": "Advanced",
+        "software_used": [
+          "R Studio",
+          "Canvas LMS",
+          "ChatGPT",
+          "Gradescope"
+        ],
+        "interaction_preferences": [
+          "Comfortable experimenting with new tools and iterating based on what he observes in student behaviour",
+          "Prefers platforms that give him usage analytics so he can make evidence-based adjustments to course design",
+          "Uses AI conversationally for drafting, brainstorming, and rapid prototyping rather than as a search engine",
+          "Values integration between tools rather than isolated platforms that do not talk to each other"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "We banned calculators once too. Then we figured out that the skill was not arithmetic, it was knowing what calculation to run and why. I think we are at that same moment with AI right now.",
+      "starting_position": "Policy should regulate and structure Cipherbot use with clear disclosure requirements rather than prohibit it, and faculty should respond by redesigning assessments rather than relying on restrictions.",
+      "key_insights": [
+        "Students will use available AI tools regardless of policy, which means prohibition without detection capacity is not a real policy but an aspiration, and it pushes use underground where it cannot be taught or monitored",
+        "Assessment redesign is a more durable response to AI than access restrictions, since process-based and oral components remain valid even when students have access to generative tools",
+        "Structured integration with transparency requirements produces more honest student behaviour than prohibition, because students no longer have an incentive to conceal their tool use"
+      ]
+    },
+    {
+      "persona_id": "f_003",
+      "name": "Dr. Bashir",
+      "tagline": "Restricting Cipherbot does not protect learning, it just protects a model of teaching that was already not working for a lot of students.",
+      "demographics": {
+        "age": 34,
+        "location": {
+          "city": "Toronto",
+          "country": "Canada"
+        },
+        "occupation": "Assistant Professor of Computer Science",
+        "education": "PhD in Human-Computer Interaction"
+      },
+      "background": "Bashir joined his institution three years ago after a postdoc that involved building adaptive learning systems, and he has spent much of his early career arguing that the lecture-plus-exam model fails students who need more iterative, personalised feedback to build procedural skills. He redesigned his introductory programming course around AI-assisted practice loops where students receive immediate explanatory feedback on their code from an AI tutor, and his own data suggests students reach proficiency faster than in the previous cohort. He sees the Cipherbot debate as a proxy for a deeper resistance to changing how teaching is evaluated and rewarded, and his frustration with cautious colleagues is genuine, though he is aware he sometimes comes across as dismissive of concerns he has not yet experienced from a position of curriculum ownership.",
+      "goals": [
+        "Win institutional support for AI-integrated course designs that use direct explanatory feedback as a core pedagogical mechanism",
+        "Shift the policy framing from risk minimisation to learning outcome optimisation, with evidence as the basis for decisions",
+        "Establish Cipherbot as a legitimate supplementary instructor rather than a threat to be contained",
+        "Create space for faculty to experiment with AI-integrated pedagogy without fear that it will be used against them in promotion decisions"
+      ],
+      "frustrations": [
+        "Colleagues treating caution as inherently responsible and experimentation as inherently reckless, without any evidence base for either claim",
+        "The policy conversation being dominated by integrity concerns from faculty in traditional assessment-heavy disciplines, with little representation from fields where iterative feedback is standard practice",
+        "Institutional promotion criteria that do not recognise course redesign or pedagogical innovation as scholarly contributions, which makes it professionally risky to spend time on the work he cares about",
+        "Students from under-resourced backgrounds who cannot afford tutors being the ones most harmed when AI explanatory tools are restricted, while students with private tutoring access are unaffected"
+      ],
+      "technology_profile": {
+        "primary_devices": [
+          "Custom-built desktop",
+          "ThinkPad laptop"
+        ],
+        "comfort_level": "Advanced",
+        "software_used": [
+          "GitHub Copilot",
+          "Jupyter Notebooks",
+          "OpenAI API",
+          "Slack"
+        ],
+        "interaction_preferences": [
+          "Builds and customises his own AI tool configurations rather than using off-the-shelf products as given",
+          "Prefers tools that expose their reasoning or provide confidence indicators so he can evaluate output quality",
+          "Integrates AI into every stage of his workflow from drafting papers to generating practice problems for students",
+          "Values open-source or auditable systems over closed proprietary platforms, particularly in educational contexts"
+        ],
+        "accessibility_needs": []
+      },
+      "quote": "A student who can ask Cipherbot to explain recursion at midnight and try again immediately learns more than one who waits three days for office hours and loses the thread completely. I do not understand why that is controversial.",
+      "starting_position": "Cipherbot should be permitted to provide direct explanatory answers because immediate personalised feedback accelerates learning, and restricting it is a paternalistic choice that disproportionately harms students who lack access to other support.",
+      "key_insights": [
+        "AI that provides direct explanatory feedback can function as a scalable personalised tutor, which addresses a structural gap in higher education where instructor-to-student ratios make individualised feedback impossible at volume",
+        "Equity implications of AI restrictions are underexamined in policy debates: students with private tutors or strong social networks are insulated from restrictions in ways that first-generation and international students are not",
+        "The absence of evidence of harm from AI explanatory tools is not the same as evidence of safety, but it places the burden of justification on those proposing restrictions rather than those proposing access"
+      ]
+    }
+  ]
+}

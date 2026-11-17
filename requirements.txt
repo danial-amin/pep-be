@@ -22,11 +22,21 @@ langchain-openai==0.0.2
 pinecone-client==3.0.0
 # chromadb==0.4.18  # Optional - kept for backward compatibility
 
+# Reranking (PEP paper methodology)
+cohere==5.0.0
+
 # File Processing
 aiofiles==23.2.1
 aiohttp==3.9.1
 pypdf==3.17.1
 python-docx==1.1.0
+
+# Queue (Redis + ARQ)
+arq==0.25.0
+redis>=4.5.0
+
+# Storage (S3 / Railway Buckets)
+boto3>=1.34.0
 
 # Utilities
 python-multipart==0.0.6
