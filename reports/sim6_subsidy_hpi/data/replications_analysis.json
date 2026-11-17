@@ -1,0 +1,423 @@
+{
+  "n_runs": 10,
+  "simulation_ids": [
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62
+  ],
+  "pre_theme_runs": {
+    "affordability_cost": 10,
+    "rural_charging": 10,
+    "battery_range_maint": 10,
+    "subsidy": 10,
+    "retiree_senior": 5,
+    "inclusive_equity": 6
+  },
+  "post_theme_runs": {
+    "affordability_cost": 9,
+    "rural_charging": 10,
+    "battery_range_maint": 9,
+    "inclusive_equity": 8,
+    "subsidy": 10,
+    "retiree_senior": 1
+  },
+  "post_mentions_subsidy": 10,
+  "post_design_detail": 1,
+  "mean_agree_open_pre": 0.0,
+  "mean_agree_open_post": 0.0,
+  "action_theme_counts": {
+    "rural_charging": 27,
+    "affordability_cost": 8,
+    "subsidy": 17,
+    "battery_range_maint": 5,
+    "inclusive_equity": 1,
+    "retiree_senior": 2
+  },
+  "n_action_items_total": 40,
+  "profile_stats": {
+    "Liisa (65)": {
+      "n_msgs": 30,
+      "hits": {
+        "charging": 16,
+        "rural": 16,
+        "afford": 9,
+        "cost": 10,
+        "retire": 5
+      },
+      "rates": {
+        "retire": 0.16666666666666666,
+        "afford": 0.3,
+        "batter": 0.0,
+        "charging": 0.5333333333333333,
+        "rural": 0.5333333333333333,
+        "senior": 0.0,
+        "maintenance": 0.0,
+        "cost": 0.3333333333333333
+      }
+    },
+    "Juho (67)": {
+      "n_msgs": 30,
+      "hits": {
+        "rural": 30,
+        "farm": 12,
+        "practical": 13,
+        "charging": 24,
+        "infrastructure": 28,
+        "range": 28,
+        "cost": 1
+      },
+      "rates": {
+        "rural": 1.0,
+        "farm": 0.4,
+        "practical": 0.43333333333333335,
+        "cost": 0.03333333333333333,
+        "charging": 0.8,
+        "infrastructure": 0.9333333333333333,
+        "range": 0.9333333333333333
+      }
+    },
+    "Aino (66)": {
+      "n_msgs": 30,
+      "hits": {
+        "sustain": 12,
+        "urban": 8,
+        "polic": 21,
+        "inclusi": 1,
+        "green": 4
+      },
+      "rates": {
+        "sustain": 0.4,
+        "inclusi": 0.03333333333333333,
+        "urban": 0.26666666666666666,
+        "green": 0.13333333333333333,
+        "polic": 0.7,
+        "community": 0.0
+      }
+    },
+    "Mikko (64)": {
+      "n_msgs": 30,
+      "hits": {
+        "infrastruct": 29,
+        "adop": 23,
+        "sustain": 7
+      },
+      "rates": {
+        "technolog": 0.0,
+        "green": 0.0,
+        "infrastruct": 0.9666666666666667,
+        "batter": 0.0,
+        "sustain": 0.23333333333333334,
+        "community": 0.0,
+        "adop": 0.7666666666666667
+      }
+    }
+  },
+  "all_actions": [
+    {
+      "run": 1,
+      "action": "Conduct a comprehensive study to identify key infrastructure gaps in both urban and rural areas."
+    },
+    {
+      "run": 1,
+      "action": "Develop a subsidy policy that balances incentives for both vehicle affordability and infrastructure expansion."
+    },
+    {
+      "run": 1,
+      "action": "Initiate a pilot program focusing on rural areas to test longer-range EVs and expanded charging networks."
+    },
+    {
+      "run": 1,
+      "action": "Engage with EV manufacturers to explore the development of simpler, user-friendly models to address concerns about technology complexity."
+    },
+    {
+      "run": 1,
+      "action": "Set up a task force to evaluate the impact of luxury EV subsidies on overall adoption and sustainability goals."
+    },
+    {
+      "run": 2,
+      "action": "Develop a subsidy policy that equally prioritizes EV purchase incentives and charging infrastructure expansion."
+    },
+    {
+      "run": 2,
+      "action": "Focus initial infrastructure development efforts on rural areas to ensure broader accessibility."
+    },
+    {
+      "run": 2,
+      "action": "Consider interim solutions like hybrid vehicle subsidies while infrastructure and EV technology improve."
+    },
+    {
+      "run": 2,
+      "action": "Conduct a feasibility study on the impact of reallocating funds from other renewable energy projects to EV subsidies."
+    },
+    {
+      "run": 3,
+      "action": "Develop a policy package that includes both electric vehicle subsidies and investments in charging infrastructure."
+    },
+    {
+      "run": 3,
+      "action": "Conduct a feasibility study on integrating solar-powered charging stations in rural areas."
+    },
+    {
+      "run": 3,
+      "action": "Initiate a research project to advance battery technology, focusing on increasing range for rural applications."
+    },
+    {
+      "run": 4,
+      "action": "Develop a dual subsidy policy that addresses both EV purchases and infrastructure development simultaneously."
+    },
+    {
+      "run": 4,
+      "action": "Prioritize substantial investment in rural charging stations to address range limitations."
+    },
+    {
+      "run": 4,
+      "action": "Include educational programs in the subsidy policy to assist less tech-savvy individuals in understanding EV technology."
+    },
+    {
+      "run": 4,
+      "action": "Accelerate governmental support to ensure timely implementation of subsidy policies."
+    },
+    {
+      "run": 5,
+      "action": "Conduct a comprehensive analysis to identify strategic locations for new charging stations, focusing on rural and underserved areas."
+    },
+    {
+      "run": 5,
+      "action": "Develop a dual subsidy policy that addresses both EV purchase cost reduction and infrastructure expansion."
+    },
+    {
+      "run": 5,
+      "action": "Implement educational workshops and consultations tailored for older adults to facilitate the transition to electric vehicles."
+    },
+    {
+      "run": 6,
+      "action": "Conduct a study to evaluate the impact of electric vehicle range and infrastructure on rural adoption rates."
+    },
+    {
+      "run": 6,
+      "action": "Develop educational programs that simplify electric vehicle technology for potential users."
+    },
+    {
+      "run": 6,
+      "action": "Design a subsidy policy that integrates both vehicle affordability and infrastructure expansion."
+    },
+    {
+      "run": 7,
+      "action": "Develop a strategic plan for expanding charging infrastructure, with a focus on both urban and rural areas."
+    },
+    {
+      "run": 7,
+      "action": "Create a simplified subsidy application process to minimize bureaucratic barriers for potential EV users."
+    },
+    {
+      "run": 7,
+      "action": "Initiate a pilot program to test the impact of combined vehicle and infrastructure subsidies in select regions."
+    },
+    {
+      "run": 7,
+      "action": "Conduct a stakeholder analysis to better understand the specific needs of different user groups, including rural communities and older adults."
+    },
+    {
+      "run": 8,
+      "action": "Develop a comprehensive plan to expand charging infrastructure, with a focus on rural areas."
+    },
+    {
+      "run": 8,
+      "action": "Conduct an assessment of current EV technology to identify improvements needed for rural applicability."
+    },
+    {
+      "run": 8,
+      "action": "Design subsidy programs that include components for both reducing vehicle costs and infrastructure expansion."
+    },
+    {
+      "run": 8,
+      "action": "Create educational programs to support the adoption of new EV technology and reduce the learning curve for new users."
+    },
+    {
+      "run": 9,
+      "action": "Develop a comprehensive subsidy policy that balances vehicle affordability with infrastructure development."
+    },
+    {
+      "run": 9,
+      "action": "Initiate pilot programs focusing on expanding rural charging infrastructure as a priority."
+    },
+    {
+      "run": 9,
+      "action": "Create educational programs to simplify the transition to EVs for everyday users."
+    },
+    {
+      "run": 9,
+      "action": "Conduct a needs assessment to identify specific rural areas where infrastructure is most lacking."
+    },
+    {
+      "run": 9,
+      "action": "Establish a timeline for policy implementation that addresses both immediate and long-term goals."
+    },
+    {
+      "run": 10,
+      "action": "Develop a detailed subsidy policy proposal that includes both vehicle affordability and infrastructure expansion components."
+    },
+    {
+      "run": 10,
+      "action": "Conduct a needs assessment to identify specific rural areas that require infrastructure development."
+    },
+    {
+      "run": 10,
+      "action": "Propose a phased implementation plan that prioritizes infrastructure in underserved areas."
+    },
+    {
+      "run": 10,
+      "action": "Evaluate potential partnerships with EV manufacturers to address vehicle range limitations."
+    },
+    {
+      "run": 10,
+      "action": "Organize a follow-up meeting to refine the subsidy policy based on identified priorities and regional needs."
+    }
+  ],
+  "unresolved": [
+    {
+      "run": 1,
+      "item": "The necessity of prioritizing subsidies for longer-range EVs versus expanding charging infrastructure."
+    },
+    {
+      "run": 1,
+      "item": "The focus on simplifying EV technology versus expanding infrastructure and affordability."
+    },
+    {
+      "run": 1,
+      "item": "The role of subsidies in incentivizing luxury EVs versus addressing broader accessibility issues."
+    },
+    {
+      "run": 2,
+      "item": "Whether subsidies should prioritize reducing EV purchase prices or expanding charging infrastructure."
+    },
+    {
+      "run": 2,
+      "item": "The practicality of EVs in rural areas given current range limitations."
+    },
+    {
+      "run": 2,
+      "item": "The role of hybrid vehicles as an interim solution in subsidy policies."
+    },
+    {
+      "run": 2,
+      "item": "The potential impact of diverting funds from other renewable energy projects to EV subsidies."
+    },
+    {
+      "run": 3,
+      "item": "The extent to which subsidies should be geographically targeted versus universally applied."
+    },
+    {
+      "run": 3,
+      "item": "The balance between investing in vehicle subsidies versus charging infrastructure."
+    },
+    {
+      "run": 3,
+      "item": "How to prioritize between immediate subsidy implementation and long-term technological advancements like battery improvement."
+    },
+    {
+      "run": 4,
+      "item": "The prioritization of subsidies for EV purchases versus infrastructure development."
+    },
+    {
+      "run": 4,
+      "item": "The complexity of subsidy policies, particularly concerning technology adoption for retirees."
+    },
+    {
+      "run": 4,
+      "item": "The approach to addressing the unique needs of rural areas versus urban areas in subsidy policies."
+    },
+    {
+      "run": 5,
+      "item": "The extent to which subsidies should focus on reducing EV purchase prices versus improving infrastructure."
+    },
+    {
+      "run": 5,
+      "item": "Whether subsidies should also cover hybrids or focus solely on fully electric vehicles."
+    },
+    {
+      "run": 5,
+      "item": "The prioritization of educational support for older adults versus immediate infrastructure development."
+    },
+    {
+      "run": 6,
+      "item": "The balance between focusing on vehicle affordability versus infrastructure development."
+    },
+    {
+      "run": 6,
+      "item": "Whether subsidies should prioritize expanding vehicle range or charging infrastructure."
+    },
+    {
+      "run": 6,
+      "item": "The degree to which technology complexity should influence subsidy allocation."
+    },
+    {
+      "run": 7,
+      "item": "The balance between focusing subsidies on vehicle affordability versus infrastructure development."
+    },
+    {
+      "run": 7,
+      "item": "The priority of addressing rural versus urban charging infrastructure needs."
+    },
+    {
+      "run": 7,
+      "item": "The complexity of the subsidy application process and its impact on adoption."
+    },
+    {
+      "run": 7,
+      "item": "Whether subsidies should address vehicle technology complexity directly or focus on infrastructure."
+    },
+    {
+      "run": 8,
+      "item": "The priority between reducing EV purchase prices versus expanding charging infrastructure."
+    },
+    {
+      "run": 8,
+      "item": "The adequacy of current EV technology, particularly regarding vehicle range, for rural areas."
+    },
+    {
+      "run": 8,
+      "item": "The balance of investment between urban and rural infrastructure needs."
+    },
+    {
+      "run": 8,
+      "item": "The role of educational programs in facilitating EV adoption."
+    },
+    {
+      "run": 9,
+      "item": "Whether subsidies should prioritize vehicle affordability or infrastructure development."
+    },
+    {
+      "run": 9,
+      "item": "The extent to which educational initiatives should be integrated into subsidy policies."
+    },
+    {
+      "run": 9,
+      "item": "The urgency and pace at which subsidy policies should be rolled out."
+    },
+    {
+      "run": 10,
+      "item": "The prioritization of subsidies for vehicle affordability versus infrastructure development."
+    },
+    {
+      "run": 10,
+      "item": "The approach to addressing rural versus urban needs in subsidy policies."
+    },
+    {
+      "run": 10,
+      "item": "The role of vehicle technology improvements in the subsidy policy."
+    },
+    {
+      "run": 10,
+      "item": "The potential risks of implementing blanket subsidies without regional considerations."
+    }
+  ],
+  "shared": []
+}

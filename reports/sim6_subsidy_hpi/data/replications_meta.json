@@ -1,0 +1,31 @@
+{
+  "n_requested": 10,
+  "n_ok": 10,
+  "n_error": 0,
+  "simulation_ids": [
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62
+  ],
+  "protocol": {
+    "goal": "Find a way to implement a subsidy policy for the electronic vehicle acceptance in the country",
+    "intervention": "What about the subsidy",
+    "personas": [
+      65,
+      67,
+      66,
+      64
+    ],
+    "pre_intervention_messages": 6,
+    "max_turns": 3,
+    "engine_note": "Current engine; intervention after 6 persona msgs; 3 rounds x 4 personas = 12 persona msgs + 1 human."
+  },
+  "note": "Summaries generated after path completion. Script next-turn overflow ignored."
+}
